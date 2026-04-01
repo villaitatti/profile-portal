@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+@theme {
+  /* I Tatti brand colors */
+  /* Crimson: #ab192d | Anthracite: #1d252c | Light grey: #e5eaec | Medium grey: #b3bec5 */
+
+  --color-background: #f8f9fa;
+  --color-foreground: #1d252c;
+  --color-card: #ffffff;
+  --color-card-foreground: #1d252c;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #1d252c;
+  --color-primary: #ab192d;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #e5eaec;
+  --color-secondary-foreground: #1d252c;
+  --color-muted: #e5eaec;
+  --color-muted-foreground: #6b7a85;
+  --color-accent: #e5eaec;
+  --color-accent-foreground: #1d252c;
+  --color-destructive: #dc2626;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #e5eaec;
+  --color-input: #b3bec5;
+  --color-ring: #ab192d;
+
+  --color-sidebar: #e5eaec;
+  --color-sidebar-foreground: #1d252c;
+  --color-sidebar-border: #d0d7db;
+  --color-sidebar-accent: #dde2e5;
+  --color-sidebar-accent-foreground: #1d252c;
+  --color-sidebar-primary: #ab192d;
+  --color-sidebar-primary-foreground: #ffffff;
+  --color-sidebar-muted-foreground: #6b7a85;
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: "brandon-grotesque", sans-serif;
+    font-weight: 400;
+    font-style: normal;
+    font-size: 18px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}

@@ -1,0 +1,43 @@
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import pinoHttp from 'pino-http';
+import { logger } from './lib/logger.js';
+import { errorHandler } from './middleware/error.js';
+import { registerRoutes } from './routes/index.js';
+
+const app = express();
+
+// Trust proxy — required behind cloudflared for correct client IP
+app.set('trust proxy', true);
+
+// Global middleware
+app.use(helmet());
+app.use(pinoHttp({ logger, autoLogging: { ignore: (req) => req.url === '/api/health' } }));
+app.use(
+  cors({
+    origin: process.env.NODE_ENV === 'production'
+      ? process.env.CORS_ORIGIN
+      : '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  })
+);
+app.use(express.json());
+
+// Register API routes
+registerRoutes(app);
+
+// In production, serve the built frontend
+if (process.env.NODE_ENV === 'production') {
+  const { resolve } = await import('path');
+  app.use(express.static(resolve(import.meta.dirname, '../../web/dist')));
+  app.get('*', (_req, res) => {
+    res.sendFile(resolve(import.meta.dirname, '../../web/dist/index.html'));
+  });
+}
+
+// Error handler (must be last)
+app.use(errorHandler);
+
+export default app;

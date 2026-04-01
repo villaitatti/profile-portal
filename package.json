@@ -1,0 +1,30 @@
+{
+  "name": "itatti-profile-portal",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter @itatti/server dev & pnpm --filter @itatti/web dev",
+    "dev:server": "pnpm --filter @itatti/server dev",
+    "dev:web": "pnpm --filter @itatti/web dev",
+    "build": "pnpm --filter @itatti/shared build && pnpm --filter @itatti/server build && pnpm --filter @itatti/web build",
+    "build:web": "pnpm --filter @itatti/web build",
+    "build:server": "pnpm --filter @itatti/server build",
+    "db:generate": "pnpm --filter @itatti/server db:generate",
+    "db:migrate": "pnpm --filter @itatti/server db:migrate",
+    "db:studio": "pnpm --filter @itatti/server db:studio",
+    "test": "pnpm --filter @itatti/server test",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma"
+    ]
+  }
+}
