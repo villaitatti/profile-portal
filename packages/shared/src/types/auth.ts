@@ -4,7 +4,7 @@ export const KnownRoles = {
   FELLOWS: 'fellows',
   FELLOWS_CURRENT: 'fellows-current',
   FELLOWS_ADMIN: 'fellows-admin',
-  STAFF_IT: 'staff-it',
+  STAFF_IT: 'staff-IT',
 } as const;
 
 export type KnownRole = (typeof KnownRoles)[keyof typeof KnownRoles];
