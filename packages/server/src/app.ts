@@ -17,8 +17,8 @@ app.use(helmet({
     directives: {
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "'unsafe-inline'", "https://challenges.cloudflare.com"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://use.typekit.net"],
-      fontSrc: ["'self'", "https://use.typekit.net"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://use.typekit.net", "https://p.typekit.net"],
+      fontSrc: ["'self'", "https://use.typekit.net", "https://p.typekit.net"],
       imgSrc: ["'self'", "data:", "https:"],
       connectSrc: ["'self'", `https://${process.env.VITE_AUTH0_DOMAIN || 'harvard.eu.auth0.com'}`],
       frameSrc: ["'self'", "https://challenges.cloudflare.com"],
