@@ -17,6 +17,15 @@ COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_module
 COPY --from=deps /app/packages/server/node_modules ./packages/server/node_modules
 COPY --from=deps /app/packages/web/node_modules ./packages/web/node_modules
 COPY . .
+
+# VITE_ vars must be available at build time (baked into the frontend bundle)
+ARG VITE_AUTH0_DOMAIN
+ARG VITE_AUTH0_CLIENT_ID
+ARG VITE_AUTH0_AUDIENCE
+ARG VITE_AUTH0_CALLBACK_URL
+ARG VITE_AUTH0_NAMESPACE
+ARG VITE_API_BASE_URL
+
 # Generate Prisma client inside the container (correct architecture binaries)
 RUN cd packages/server && npx prisma generate
 # Build server and web (shared has no build step, exports raw .ts)
