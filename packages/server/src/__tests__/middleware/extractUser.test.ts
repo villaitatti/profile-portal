@@ -23,15 +23,15 @@ function mockReq(auth?: Record<string, unknown>): Partial<Request> {
 }
 
 describe('extractUser', () => {
-  it('extracts roles from JWT claims', () => {
+  it('extracts roles and civicrm_id from JWT claims', () => {
     const req = mockReq({
       sub: 'auth0|123',
-      [`${NAMESPACE}/roles`]: ['fellows', 'staff-it'],
-      [`${NAMESPACE}/civicrm_id`]: '42',
+      [`${NAMESPACE}/roles`]: ['fellows', 'staff-IT'],
+      [`${NAMESPACE}/app_metadata`]: { civicrm_id: '42' },
     });
     const next = vi.fn();
     extractUser(req as Request, {} as Response, next);
-    expect(req.userRoles).toEqual(['fellows', 'staff-it']);
+    expect(req.userRoles).toEqual(['fellows', 'staff-IT']);
     expect(req.userId).toBe('auth0|123');
     expect(req.civicrmId).toBe('42');
     expect(next).toHaveBeenCalled();

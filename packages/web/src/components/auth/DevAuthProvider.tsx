@@ -18,8 +18,8 @@ const mockUser = {
   given_name: 'Dev',
   family_name: 'User',
   picture: undefined,
-  [`${AUTH0_NAMESPACE}/roles`]: ['fellows', 'fellows-current', 'staff-it'],
-  [`${AUTH0_NAMESPACE}/civicrm_id`]: '99999',
+  [`${AUTH0_NAMESPACE}/roles`]: ['fellows', 'fellows-current', 'staff-IT'],
+  [`${AUTH0_NAMESPACE}/app_metadata`]: { civicrm_id: '99999' },
 };
 
 const mockContextValue = {

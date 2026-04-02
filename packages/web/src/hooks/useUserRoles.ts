@@ -14,5 +14,6 @@ export function useCivicrmId(): string | undefined {
 
   if (!isAuthenticated || !user) return undefined;
 
-  return user[`${auth0Config.namespace}/civicrm_id`] as string | undefined;
+  const appMetadata = user[`${auth0Config.namespace}/app_metadata`] as Record<string, unknown> | undefined;
+  return (appMetadata?.civicrm_id as string) ?? undefined;
 }

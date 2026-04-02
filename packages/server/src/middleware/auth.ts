@@ -5,7 +5,7 @@ import { env, isDevMode } from '../env.js';
 import { AUTH0_NAMESPACE } from '@itatti/shared';
 
 const ROLES_KEY = `${AUTH0_NAMESPACE}/roles`;
-const CIVICRM_KEY = `${AUTH0_NAMESPACE}/civicrm_id`;
+const APP_METADATA_KEY = `${AUTH0_NAMESPACE}/app_metadata`;
 
 // Extend Express Request with our custom fields
 declare global {
@@ -26,8 +26,8 @@ function devAuthMiddleware(req: Request, _res: Response, next: NextFunction) {
     email: 'dev@itatti.harvard.edu',
     given_name: 'Dev',
     family_name: 'User',
-    [ROLES_KEY]: ['fellows', 'fellows-current', 'fellows-admin', 'staff-it'],
-    [CIVICRM_KEY]: '99999',
+    [ROLES_KEY]: ['fellows', 'fellows-current', 'fellows-admin', 'staff-IT'],
+    [APP_METADATA_KEY]: { civicrm_id: '99999' },
   } as Record<string, unknown>;
   next();
 }
@@ -52,6 +52,7 @@ export function extractUser(req: Request, _res: Response, next: NextFunction) {
   const auth = req.auth as Record<string, unknown> | undefined;
   req.userRoles = (auth?.[ROLES_KEY] as string[]) ?? [];
   req.userId = (auth?.sub as string) ?? '';
-  req.civicrmId = auth?.[CIVICRM_KEY] as string | undefined;
+  const appMetadata = auth?.[APP_METADATA_KEY] as Record<string, unknown> | undefined;
+  req.civicrmId = (appMetadata?.civicrm_id as string) ?? undefined;
   next();
 }
