@@ -23,8 +23,8 @@ export function DashboardPage() {
       {/* Profile card */}
       <div className="inline-flex items-center gap-8 border bg-card p-10 mb-12">
         <div className="h-16 w-16 bg-primary/10 flex items-center justify-center flex-shrink-0">
-          {user?.picture ? (
-            <img src={user.picture} alt="" className="h-16 w-16 object-cover" />
+          {profile?.imageUrl || user?.picture ? (
+            <img src={profile?.imageUrl || user?.picture} alt="" className="h-16 w-16 object-cover" />
           ) : (
             <User className="h-8 w-8 text-primary" />
           )}

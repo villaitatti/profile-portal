@@ -30,6 +30,7 @@ router.get('/', async (req, res) => {
           lastName: contact.lastName,
           email: contact.email,
           phone: contact.phone,
+          imageUrl: contact.imageUrl,
           source: 'civicrm',
         };
         res.json(profile);

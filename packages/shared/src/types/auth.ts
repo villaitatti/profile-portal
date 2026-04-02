@@ -20,5 +20,6 @@ export interface UserProfile {
   lastName: string;
   email: string;
   phone?: string;
+  imageUrl?: string;
   source: 'civicrm' | 'auth0';
 }

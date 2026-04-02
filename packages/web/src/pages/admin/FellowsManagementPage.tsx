@@ -212,35 +212,90 @@ function StatusBadge({ status }: { status: FellowStatus }) {
   );
 }
 
+type SortField = 'name' | 'email' | 'fellowshipYear' | 'status';
+type SortDir = 'asc' | 'desc';
+
 function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
+  const [sortField, setSortField] = useState<SortField>('name');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+
+  const sorted = useMemo(() => {
+    return [...fellows].sort((a, b) => {
+      let cmp = 0;
+      switch (sortField) {
+        case 'name':
+          cmp = a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName);
+          break;
+        case 'email':
+          cmp = (a.email || '').localeCompare(b.email || '');
+          break;
+        case 'fellowshipYear':
+          cmp = a.fellowshipYear.localeCompare(b.fellowshipYear);
+          break;
+        case 'status':
+          cmp = a.status.localeCompare(b.status);
+          break;
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [fellows, sortField, sortDir]);
+
+  function toggleSort(field: SortField) {
+    if (sortField === field) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  }
+
+  function SortHeader({ field, label, className }: { field: SortField; label: string; className?: string }) {
+    return (
+      <th
+        className={`px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:text-foreground transition-colors ${className || ''}`}
+        onClick={() => toggleSort(field)}
+      >
+        {label}
+        {sortField === field && (
+          <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>
+        )}
+      </th>
+    );
+  }
+
   return (
     <div className="rounded-xl border bg-card overflow-hidden">
       <table className="w-full">
         <thead>
           <tr className="border-b bg-muted/50">
-            <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Name
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">
-              Email
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell">
-              Fellowship
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              VIT ID Status
-            </th>
+            <SortHeader field="name" label="Name" />
+            <SortHeader field="email" label="Email" className="hidden md:table-cell" />
+            <SortHeader field="fellowshipYear" label="Fellowship" className="hidden sm:table-cell" />
+            <SortHeader field="status" label="VIT ID Status" />
           </tr>
         </thead>
         <tbody className="divide-y">
-          {fellows.map((fellow) => (
+          {sorted.map((fellow) => (
             <tr key={fellow.civicrmId} className="hover:bg-muted/30">
               <td className="px-4 py-3">
-                <div className="font-semibold text-sm">
-                  {fellow.firstName} {fellow.lastName}
-                </div>
-                <div className="text-xs text-muted-foreground md:hidden">
-                  {fellow.email || 'No email'}
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                    {fellow.imageUrl ? (
+                      <img src={fellow.imageUrl} alt="" className="h-8 w-8 rounded-full object-cover" />
+                    ) : (
+                      <span className="text-xs font-medium text-primary">
+                        {fellow.firstName?.[0]}{fellow.lastName?.[0]}
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <div className="font-semibold text-sm">
+                      {fellow.firstName} {fellow.lastName}
+                    </div>
+                    <div className="text-xs text-muted-foreground md:hidden">
+                      {fellow.email || 'No email'}
+                    </div>
+                  </div>
                 </div>
               </td>
               <td className="px-4 py-3 text-sm text-muted-foreground hidden md:table-cell">

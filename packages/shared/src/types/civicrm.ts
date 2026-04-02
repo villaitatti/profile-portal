@@ -4,6 +4,7 @@ export interface CiviCRMContact {
   lastName: string;
   email: string;
   phone?: string;
+  imageUrl?: string;
 }
 
 export interface CiviCRMFellowship {
@@ -28,6 +29,7 @@ export interface FellowDashboardEntry {
   firstName: string;
   lastName: string;
   email: string;
+  imageUrl?: string;
   fellowshipYear: string;
   status: FellowStatus;
 }

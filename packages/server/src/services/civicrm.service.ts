@@ -40,6 +40,7 @@ function parseContact(c: Record<string, unknown>, fallbackEmail?: string): CiviC
     lastName: String(c.last_name || ''),
     email: String(c.email_primary || fallbackEmail || ''),
     phone: c.phone_primary ? String(c.phone_primary) : undefined,
+    imageUrl: c.image_URL ? String(c.image_URL) : undefined,
   };
 }
 
@@ -47,7 +48,7 @@ export async function findContactByPrimaryEmail(
   email: string
 ): Promise<CiviCRMContact | null> {
   const result = await apiCall('Contact', 'get', {
-    select: ['id', 'first_name', 'last_name', 'email_primary', 'phone_primary'],
+    select: ['id', 'first_name', 'last_name', 'email_primary', 'phone_primary', 'image_URL'],
     where: [
       ['email_primary', '=', email],
       ['is_deleted', '=', false],
@@ -63,7 +64,7 @@ export async function findContactByPrimaryEmail(
 
 export async function getContactById(contactId: number): Promise<CiviCRMContact | null> {
   const result = await apiCall('Contact', 'get', {
-    select: ['id', 'first_name', 'last_name', 'email_primary', 'phone_primary'],
+    select: ['id', 'first_name', 'last_name', 'email_primary', 'phone_primary', 'image_URL'],
     where: [
       ['id', '=', contactId],
       ['is_deleted', '=', false],
@@ -82,6 +83,7 @@ export interface CiviCRMFellowWithContact {
   firstName: string;
   lastName: string;
   email: string;
+  imageUrl?: string;
   fellowshipId: number;
   startDate: string;
   endDate: string;
@@ -104,6 +106,7 @@ export async function getFellowsWithContacts(): Promise<CiviCRMFellowWithContact
       'entity_id.first_name',
       'entity_id.last_name',
       'entity_id.email_primary.email',
+      'entity_id.image_URL',
     ],
     where: [['entity_id.is_deleted', '=', false]],
     orderBy: { [startField]: 'DESC' },
@@ -114,6 +117,7 @@ export async function getFellowsWithContacts(): Promise<CiviCRMFellowWithContact
     firstName: String(f['entity_id.first_name'] || ''),
     lastName: String(f['entity_id.last_name'] || ''),
     email: String(f['entity_id.email_primary.email'] || ''),
+    imageUrl: f['entity_id.image_URL'] ? String(f['entity_id.image_URL']) : undefined,
     fellowshipId: Number(f.id),
     startDate: String(f[startField]),
     endDate: String(f[endField]),
