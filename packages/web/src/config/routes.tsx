@@ -1,10 +1,18 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { useAuth0 } from '@auth0/auth0-react';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { AuthenticatedLayout } from '@/components/layout/AuthenticatedLayout';
 import { AuthenticationGuard } from '@/components/auth/AuthenticationGuard';
 import { RoleGuard } from '@/components/auth/RoleGuard';
+import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { KnownRoles } from '@itatti/shared';
+
+function CallbackPage() {
+  const { isLoading } = useAuth0();
+  if (isLoading) return <LoadingSpinner />;
+  return <Navigate to="/dashboard" replace />;
+}
 
 // Pages
 import { ClaimPage } from '@/pages/claim/ClaimPage';
@@ -27,8 +35,8 @@ export const router = createBrowserRouter([
         ],
       },
 
-      // Auth0 callback (handled by Auth0Provider)
-      { path: '/callback', element: <Navigate to="/dashboard" replace /> },
+      // Auth0 callback — wait for token exchange before redirecting
+      { path: '/callback', element: <CallbackPage /> },
 
       // Protected routes
       {
