@@ -38,12 +38,12 @@ const envSchema = z.object({
   CIVICRM_FIELD_END_DATE: z.string().default('Fellowship_End_Date'),
   CIVICRM_FIELD_ACCEPTED: z.string().default('Fellowship_Accepted'),
 
-  // Jira Service Management
-  JIRA_BASE_URL: requiredUrl,
-  JIRA_EMAIL: requiredEmail,
-  JIRA_API_TOKEN: requiredStr,
-  JIRA_SERVICE_DESK_ID: requiredStr,
-  JIRA_REQUEST_TYPE_ID: requiredStr,
+  // Jira Service Management (optional — help form disabled if not configured)
+  JIRA_BASE_URL: z.string().url().optional(),
+  JIRA_EMAIL: z.string().email().optional(),
+  JIRA_API_TOKEN: z.string().optional(),
+  JIRA_SERVICE_DESK_ID: z.string().optional(),
+  JIRA_REQUEST_TYPE_ID: z.string().optional(),
 });
 
 function loadEnv() {

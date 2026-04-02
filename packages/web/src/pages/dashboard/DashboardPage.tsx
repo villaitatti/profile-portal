@@ -59,7 +59,7 @@ export function DashboardPage() {
         </p>
         <div className="mt-5 inline-grid grid-cols-[auto_1fr] gap-x-8 gap-y-3 text-base">
           <span className="font-semibold text-foreground">VIT ID</span>
-          <span className="text-muted-foreground">Your Villa I Tatti identity, used for internal tools and services managed by I Tatti.</span>
+          <span className="text-muted-foreground">Your I Tatti identity, used for internal tools and services managed by I Tatti.</span>
           <span className="font-semibold text-foreground">Harvard Key</span>
           <span className="text-muted-foreground">Your Harvard University credential, providing access to university-wide resources and platforms.</span>
         </div>

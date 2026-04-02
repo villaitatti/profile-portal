@@ -1,9 +1,19 @@
 import { env } from '../env.js';
+import { logger } from '../lib/logger.js';
 import type { HelpTicketInput, HelpTicketResult } from '@itatti/shared';
+
+export function isJiraConfigured(): boolean {
+  return !!(env.JIRA_BASE_URL && env.JIRA_EMAIL && env.JIRA_API_TOKEN && env.JIRA_SERVICE_DESK_ID && env.JIRA_REQUEST_TYPE_ID);
+}
 
 export async function createHelpTicket(
   input: HelpTicketInput
 ): Promise<HelpTicketResult> {
+  if (!isJiraConfigured()) {
+    logger.warn('Jira not configured, skipping help ticket creation');
+    return { issueKey: 'JIRA-NOT-CONFIGURED' };
+  }
+
   const authToken = Buffer.from(`${env.JIRA_EMAIL}:${env.JIRA_API_TOKEN}`).toString(
     'base64'
   );
