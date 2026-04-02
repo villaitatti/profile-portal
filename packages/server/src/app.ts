@@ -31,9 +31,10 @@ registerRoutes(app);
 // In production, serve the built frontend
 if (process.env.NODE_ENV === 'production') {
   const { resolve } = await import('path');
-  app.use(express.static(resolve(import.meta.dirname, '../../web/dist')));
+  const webDist = resolve(process.cwd(), 'packages/web/dist');
+  app.use(express.static(webDist));
   app.get('*', (_req, res) => {
-    res.sendFile(resolve(import.meta.dirname, '../../web/dist/index.html'));
+    res.sendFile(resolve(webDist, 'index.html'));
   });
 }
 
