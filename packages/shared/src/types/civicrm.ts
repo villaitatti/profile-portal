@@ -30,6 +30,8 @@ export interface FellowDashboardEntry {
   lastName: string;
   email: string;
   imageUrl?: string;
+  appointment?: string;
+  fellowship?: string;
   fellowshipYear: string;
   status: FellowStatus;
 }

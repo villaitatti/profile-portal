@@ -212,7 +212,12 @@ function StatusBadge({ status }: { status: FellowStatus }) {
   );
 }
 
-type SortField = 'name' | 'email' | 'fellowshipYear' | 'status';
+function formatLabel(value?: string): string {
+  if (!value) return '';
+  return value.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+type SortField = 'name' | 'email' | 'appointment' | 'fellowship' | 'fellowshipYear' | 'status';
 type SortDir = 'asc' | 'desc';
 
 function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
@@ -228,6 +233,12 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
           break;
         case 'email':
           cmp = (a.email || '').localeCompare(b.email || '');
+          break;
+        case 'appointment':
+          cmp = (a.appointment || '').localeCompare(b.appointment || '');
+          break;
+        case 'fellowship':
+          cmp = (a.fellowship || '').localeCompare(b.fellowship || '');
           break;
         case 'fellowshipYear':
           cmp = a.fellowshipYear.localeCompare(b.fellowshipYear);
@@ -270,7 +281,9 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
           <tr className="border-b bg-muted/50">
             <SortHeader field="name" label="Name" />
             <SortHeader field="email" label="Email" className="hidden md:table-cell" />
-            <SortHeader field="fellowshipYear" label="Fellowship" className="hidden sm:table-cell" />
+            <SortHeader field="appointment" label="Appointment" className="hidden lg:table-cell" />
+            <SortHeader field="fellowship" label="Fellowship Type" className="hidden lg:table-cell" />
+            <SortHeader field="fellowshipYear" label="Year" className="hidden sm:table-cell" />
             <SortHeader field="status" label="VIT ID Status" />
           </tr>
         </thead>
@@ -302,6 +315,12 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
                 {fellow.email || (
                   <span className="italic text-muted-foreground/60">No email in CiviCRM</span>
                 )}
+              </td>
+              <td className="px-4 py-3 text-sm text-muted-foreground hidden lg:table-cell">
+                {formatLabel(fellow.appointment)}
+              </td>
+              <td className="px-4 py-3 text-sm text-muted-foreground hidden lg:table-cell">
+                {formatLabel(fellow.fellowship)}
               </td>
               <td className="px-4 py-3 text-sm text-muted-foreground hidden sm:table-cell">
                 {fellow.fellowshipYear}

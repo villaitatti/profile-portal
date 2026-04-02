@@ -84,6 +84,8 @@ export interface CiviCRMFellowWithContact {
   lastName: string;
   email: string;
   imageUrl?: string;
+  appointment?: string;
+  fellowship?: string;
   fellowshipId: number;
   startDate: string;
   endDate: string;
@@ -95,6 +97,8 @@ export async function getFellowsWithContacts(): Promise<CiviCRMFellowWithContact
   const startField = env.CIVICRM_FIELD_START_DATE;
   const endField = env.CIVICRM_FIELD_END_DATE;
   const acceptedField = env.CIVICRM_FIELD_ACCEPTED;
+  const appointmentField = env.CIVICRM_FIELD_APPOINTMENT;
+  const fellowshipField = env.CIVICRM_FIELD_FELLOWSHIP;
 
   const result = await apiCall(entity, 'get', {
     select: [
@@ -103,6 +107,8 @@ export async function getFellowsWithContacts(): Promise<CiviCRMFellowWithContact
       startField,
       endField,
       acceptedField,
+      appointmentField,
+      fellowshipField,
       'entity_id.first_name',
       'entity_id.last_name',
       'entity_id.email_primary.email',
@@ -118,6 +124,8 @@ export async function getFellowsWithContacts(): Promise<CiviCRMFellowWithContact
     lastName: String(f['entity_id.last_name'] || ''),
     email: String(f['entity_id.email_primary.email'] || ''),
     imageUrl: f['entity_id.image_URL'] ? String(f['entity_id.image_URL']) : undefined,
+    appointment: f[appointmentField] ? String(f[appointmentField]) : undefined,
+    fellowship: f[fellowshipField] ? String(f[fellowshipField]) : undefined,
     fellowshipId: Number(f.id),
     startDate: String(f[startField]),
     endDate: String(f[endField]),

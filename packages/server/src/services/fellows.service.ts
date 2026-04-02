@@ -62,6 +62,8 @@ export async function getFellowsDashboard(
           lastName: f.lastName,
           email: f.email,
           imageUrl: f.imageUrl,
+          appointment: f.appointment,
+          fellowship: f.fellowship,
           fellowshipYear: yearLabel,
         },
         latestStart: f.startDate,

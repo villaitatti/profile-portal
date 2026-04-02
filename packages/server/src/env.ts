@@ -37,6 +37,8 @@ const envSchema = z.object({
   CIVICRM_FIELD_START_DATE: z.string().default('Fellowship_Start_Date'),
   CIVICRM_FIELD_END_DATE: z.string().default('Fellowship_End_Date'),
   CIVICRM_FIELD_ACCEPTED: z.string().default('Fellowship_Accepted'),
+  CIVICRM_FIELD_APPOINTMENT: z.string().default('Appointment'),
+  CIVICRM_FIELD_FELLOWSHIP: z.string().default('Fellowship'),
 
   // Jira Service Management (optional — help form disabled if not configured)
   JIRA_BASE_URL: z.string().url().optional(),
