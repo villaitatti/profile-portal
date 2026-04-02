@@ -101,15 +101,27 @@ export interface Auth0FellowUser {
 }
 
 export async function listUsersByRole(roleId: string): Promise<Auth0FellowUser[]> {
-  const response = await management.roles.getUsers({
-    id: roleId,
-    per_page: 100,
-    page: 0,
-  });
+  const allUsers: Auth0FellowUser[] = [];
+  let page = 0;
+  const perPage = 100;
 
-  return (response.data || []).map((u) => ({
-    user_id: u.user_id,
-    email: u.email,
-    name: u.name,
-  }));
+  while (true) {
+    const response = await management.roles.getUsers({
+      id: roleId,
+      per_page: perPage,
+      page,
+    });
+
+    const users = response.data || [];
+    allUsers.push(...users.map((u) => ({
+      user_id: u.user_id,
+      email: u.email,
+      name: u.name,
+    })));
+
+    if (users.length < perPage) break;
+    page++;
+  }
+
+  return allUsers;
 }
