@@ -30,7 +30,7 @@ WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/packages/server/node_modules ./packages/server/node_modules
-COPY --from=build /app/packages/shared/dist ./packages/shared/dist
+COPY --from=build /app/packages/shared/src ./packages/shared/src
 COPY --from=build /app/packages/server/dist ./packages/server/dist
 COPY --from=build /app/packages/server/prisma ./packages/server/prisma
 COPY --from=build /app/packages/web/dist ./packages/web/dist
