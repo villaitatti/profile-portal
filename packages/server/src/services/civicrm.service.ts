@@ -38,8 +38,8 @@ function parseContact(c: Record<string, unknown>, fallbackEmail?: string): CiviC
     id: Number(c.id),
     firstName: String(c.first_name || ''),
     lastName: String(c.last_name || ''),
-    email: String(c.email_primary || fallbackEmail || ''),
-    phone: c.phone_primary ? String(c.phone_primary) : undefined,
+    email: String(c['email_primary.email'] || fallbackEmail || ''),
+    phone: c['phone_primary.phone'] ? String(c['phone_primary.phone']) : undefined,
     imageUrl: c.image_URL ? String(c.image_URL) : undefined,
   };
 }
@@ -48,9 +48,9 @@ export async function findContactByPrimaryEmail(
   email: string
 ): Promise<CiviCRMContact | null> {
   const result = await apiCall('Contact', 'get', {
-    select: ['id', 'first_name', 'last_name', 'email_primary', 'phone_primary', 'image_URL'],
+    select: ['id', 'first_name', 'last_name', 'email_primary.email', 'phone_primary.phone', 'image_URL'],
     where: [
-      ['email_primary', '=', email],
+      ['email_primary.email', '=', email],
       ['is_deleted', '=', false],
     ],
     limit: 1,
@@ -64,7 +64,7 @@ export async function findContactByPrimaryEmail(
 
 export async function getContactById(contactId: number): Promise<CiviCRMContact | null> {
   const result = await apiCall('Contact', 'get', {
-    select: ['id', 'first_name', 'last_name', 'email_primary', 'phone_primary', 'image_URL'],
+    select: ['id', 'first_name', 'last_name', 'email_primary.email', 'phone_primary.phone', 'image_URL'],
     where: [
       ['id', '=', contactId],
       ['is_deleted', '=', false],
