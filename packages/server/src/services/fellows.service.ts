@@ -43,7 +43,7 @@ export async function getFellowsDashboard(
   const academicYearsSet = new Set<string>();
   const fellowsByContact = new Map<
     number,
-    { entry: Omit<FellowDashboardEntry, 'status' | 'accountCreatedAt'>; latestStart: string }
+    { entry: Omit<FellowDashboardEntry, 'status' | 'accountCreatedAt' | 'civicrmIdStatus'>; latestStart: string }
   >();
 
   for (const f of civicrmFellows) {
