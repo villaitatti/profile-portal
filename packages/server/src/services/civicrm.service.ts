@@ -11,12 +11,10 @@ async function apiCall(entity: string, action: string, params: Record<string, un
   const response = await fetch(url, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${env.CIVICRM_API_KEY}`,
-      'X-Civi-Key': env.CIVICRM_SITE_KEY,
-      'X-Requested-With': 'XMLHttpRequest',
-      'Content-Type': 'application/json',
+      'X-Civi-Auth': `Bearer ${env.CIVICRM_API_KEY}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
     },
-    body: JSON.stringify({ params }),
+    body: `params=${encodeURIComponent(JSON.stringify(params))}`,
     signal: AbortSignal.timeout(10_000),
   });
 
@@ -32,8 +30,8 @@ function parseContact(c: Record<string, unknown>, fallbackEmail?: string): CiviC
     id: Number(c.id),
     firstName: String(c.first_name || ''),
     lastName: String(c.last_name || ''),
-    email: String(c['email_primary.email'] || fallbackEmail || ''),
-    phone: c['phone_primary.phone'] ? String(c['phone_primary.phone']) : undefined,
+    email: String(c.email_primary || fallbackEmail || ''),
+    phone: c.phone_primary ? String(c.phone_primary) : undefined,
   };
 }
 
@@ -41,9 +39,9 @@ export async function findContactByPrimaryEmail(
   email: string
 ): Promise<CiviCRMContact | null> {
   const result = await apiCall('Contact', 'get', {
-    select: ['id', 'first_name', 'last_name', 'email_primary.email', 'phone_primary.phone'],
+    select: ['id', 'first_name', 'last_name', 'email_primary', 'phone_primary'],
     where: [
-      ['email_primary.email', '=', email],
+      ['email_primary', '=', email],
       ['is_deleted', '=', false],
     ],
     limit: 1,
@@ -57,7 +55,7 @@ export async function findContactByPrimaryEmail(
 
 export async function getContactById(contactId: number): Promise<CiviCRMContact | null> {
   const result = await apiCall('Contact', 'get', {
-    select: ['id', 'first_name', 'last_name', 'email_primary.email', 'phone_primary.phone'],
+    select: ['id', 'first_name', 'last_name', 'email_primary', 'phone_primary'],
     where: [
       ['id', '=', contactId],
       ['is_deleted', '=', false],
@@ -97,7 +95,7 @@ export async function getFellowsWithContacts(): Promise<CiviCRMFellowWithContact
       acceptedField,
       'entity_id.first_name',
       'entity_id.last_name',
-      'entity_id.email_primary.email',
+      'entity_id.email_primary',
     ],
     where: [['entity_id.is_deleted', '=', false]],
     orderBy: { [startField]: 'DESC' },
@@ -107,7 +105,7 @@ export async function getFellowsWithContacts(): Promise<CiviCRMFellowWithContact
     contactId: Number(f.entity_id),
     firstName: String(f['entity_id.first_name'] || ''),
     lastName: String(f['entity_id.last_name'] || ''),
-    email: String(f['entity_id.email_primary.email'] || ''),
+    email: String(f['entity_id.email_primary'] || ''),
     fellowshipId: Number(f.id),
     startDate: String(f[startField]),
     endDate: String(f[endField]),

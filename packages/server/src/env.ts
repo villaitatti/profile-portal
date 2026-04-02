@@ -30,7 +30,7 @@ const envSchema = z.object({
   // CiviCRM
   CIVICRM_BASE_URL: requiredUrl,
   CIVICRM_API_KEY: requiredStr,
-  CIVICRM_SITE_KEY: requiredStr,
+  CIVICRM_SITE_KEY: z.string().optional(),
 
   // CiviCRM field mapping
   CIVICRM_FELLOWSHIP_ENTITY: z.string().default('Custom_Fellowships'),
