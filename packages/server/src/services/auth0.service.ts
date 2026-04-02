@@ -98,10 +98,12 @@ export interface Auth0FellowUser {
   user_id: string;
   email: string;
   name?: string;
+  civicrmId?: string;
 }
 
 export async function listUsersByRole(roleId: string): Promise<Auth0FellowUser[]> {
-  const allUsers: Auth0FellowUser[] = [];
+  // Step 1: get user IDs from the role
+  const roleUsers: { user_id: string; email: string; name?: string }[] = [];
   let page = 0;
   const perPage = 100;
 
@@ -113,7 +115,7 @@ export async function listUsersByRole(roleId: string): Promise<Auth0FellowUser[]
     });
 
     const users = response.data || [];
-    allUsers.push(...users.map((u) => ({
+    roleUsers.push(...users.map((u) => ({
       user_id: u.user_id,
       email: u.email,
       name: u.name,
@@ -123,5 +125,28 @@ export async function listUsersByRole(roleId: string): Promise<Auth0FellowUser[]
     page++;
   }
 
-  return allUsers;
+  // Step 2: fetch app_metadata for these users in batches
+  const appMetadataMap = new Map<string, string | undefined>();
+
+  for (let i = 0; i < roleUsers.length; i += 50) {
+    const batch = roleUsers.slice(i, i + 50);
+    const userIds = batch.map((u) => `"${u.user_id}"`).join(' OR ');
+    const response = await management.users.getAll({
+      q: `user_id:(${userIds})`,
+      fields: 'user_id,app_metadata',
+      include_fields: true,
+      per_page: 50,
+      page: 0,
+    });
+
+    for (const u of response.data || []) {
+      const meta = u.app_metadata as Record<string, unknown> | undefined;
+      appMetadataMap.set(u.user_id!, meta?.civicrm_id ? String(meta.civicrm_id) : undefined);
+    }
+  }
+
+  return roleUsers.map((u) => ({
+    ...u,
+    civicrmId: appMetadataMap.get(u.user_id),
+  }));
 }

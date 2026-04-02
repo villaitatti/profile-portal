@@ -71,13 +71,20 @@ export async function getFellowsDashboard(
     }
   }
 
-  // Merge with Auth0 data to determine status
+  // Merge with Auth0 data to determine status and civicrm_id check
   const fellows: FellowDashboardEntry[] = [];
   for (const { entry } of fellowsByContact.values()) {
     const auth0User = entry.email ? auth0ByEmail.get(entry.email.toLowerCase()) : undefined;
+    const status = auth0User ? 'active' : 'no-account';
+    const civicrmIdStatus = !auth0User
+      ? 'n/a' as const
+      : auth0User.civicrmId
+        ? 'ok' as const
+        : 'missing' as const;
     fellows.push({
       ...entry,
-      status: auth0User ? 'active' : 'no-account',
+      status,
+      civicrmIdStatus,
     });
   }
 

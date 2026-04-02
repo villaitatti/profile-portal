@@ -4,8 +4,10 @@ import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useFellowsDashboard } from '@/api/fellows';
 import { getCurrentAcademicYear } from './utils/academic-year';
-import { Users, UserX, UserCheck, Search, AlertCircle } from 'lucide-react';
-import type { FellowDashboardEntry, FellowStatus } from '@itatti/shared';
+import { Users, UserX, UserCheck, Search, AlertCircle, ExternalLink, AlertTriangle } from 'lucide-react';
+import type { FellowDashboardEntry, FellowStatus, CivicrmIdStatus } from '@itatti/shared';
+
+const CIVICRM_URL = import.meta.env.VITE_CIVICRM_URL || '';
 
 type FilterTab = 'all' | FellowStatus;
 
@@ -285,6 +287,9 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
             <SortHeader field="fellowship" label="Fellowship Type" className="hidden lg:table-cell" />
             <SortHeader field="fellowshipYear" label="Year" className="hidden sm:table-cell" />
             <SortHeader field="status" label="VIT ID Status" />
+            <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              Actions
+            </th>
           </tr>
         </thead>
         <tbody className="divide-y">
@@ -326,7 +331,26 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
                 {fellow.fellowshipYear}
               </td>
               <td className="px-4 py-3">
-                <StatusBadge status={fellow.status} />
+                <div className="flex items-center gap-2">
+                  <StatusBadge status={fellow.status} />
+                  {fellow.civicrmIdStatus === 'missing' && (
+                    <span title="Auth0 account exists but civicrm_id is missing from app_metadata">
+                      <AlertTriangle className="h-4 w-4 text-amber-500" />
+                    </span>
+                  )}
+                </div>
+              </td>
+              <td className="px-4 py-3">
+                {CIVICRM_URL && (
+                  <a
+                    href={`${CIVICRM_URL}/civicrm/contact/view?reset=1&cid=${fellow.civicrmId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                  >
+                    CiviCRM <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
               </td>
             </tr>
           ))}

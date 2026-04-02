@@ -9,6 +9,7 @@ interface ImportMetaEnv {
   readonly VITE_AUTH0_CALLBACK_URL: string;
   readonly VITE_AUTH0_NAMESPACE: string;
   readonly VITE_API_BASE_URL: string;
+  readonly VITE_CIVICRM_URL: string;
   readonly VITE_DEV_SKIP_AUTH: string;
 }
 

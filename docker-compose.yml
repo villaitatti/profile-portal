@@ -15,6 +15,7 @@ services:
         VITE_AUTH0_CALLBACK_URL: ${VITE_AUTH0_CALLBACK_URL}
         VITE_AUTH0_NAMESPACE: ${VITE_AUTH0_NAMESPACE}
         VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+        VITE_CIVICRM_URL: ${VITE_CIVICRM_URL}
     env_file: .env
     depends_on:
       db:

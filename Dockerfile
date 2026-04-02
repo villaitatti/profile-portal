@@ -25,6 +25,7 @@ ARG VITE_AUTH0_AUDIENCE
 ARG VITE_AUTH0_CALLBACK_URL
 ARG VITE_AUTH0_NAMESPACE
 ARG VITE_API_BASE_URL
+ARG VITE_CIVICRM_URL
 
 # Generate Prisma client inside the container (correct architecture binaries)
 RUN cd packages/server && npx prisma generate
