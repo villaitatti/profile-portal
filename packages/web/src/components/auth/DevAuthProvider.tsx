@@ -9,7 +9,7 @@ import { Auth0Context } from '@auth0/auth0-react';
  * work seamlessly throughout the app.
  */
 
-const AUTH0_NAMESPACE = import.meta.env.VITE_AUTH0_NAMESPACE || 'https://itatti.harvard.edu';
+const AUTH0_NAMESPACE = import.meta.env.VITE_AUTH0_NAMESPACE || 'https://auth0.itatti.harvard.edu';
 
 const mockUser = {
   sub: 'dev|12345',

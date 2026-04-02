@@ -16,7 +16,7 @@ vi.mock('../../env.js', () => ({
 
 import { extractUser } from '../../middleware/auth.js';
 
-const NAMESPACE = 'https://itatti.harvard.edu';
+const NAMESPACE = 'https://auth0.itatti.harvard.edu';
 
 function mockReq(auth?: Record<string, unknown>): Partial<Request> {
   return { auth };

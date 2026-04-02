@@ -1,4 +1,4 @@
-export const AUTH0_NAMESPACE = 'https://itatti.harvard.edu';
+export const AUTH0_NAMESPACE = 'https://auth0.itatti.harvard.edu';
 
 export const KnownRoles = {
   FELLOWS: 'fellows',
