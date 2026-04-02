@@ -19,8 +19,8 @@ COPY --from=deps /app/packages/web/node_modules ./packages/web/node_modules
 COPY . .
 # Generate Prisma client inside the container (correct architecture binaries)
 RUN cd packages/server && npx prisma generate
-# Build all packages
-RUN pnpm build
+# Build server and web (shared has no build step, exports raw .ts)
+RUN pnpm build:server && pnpm build:web
 
 # ── Stage 3: Production runtime ──
 FROM node:22-alpine AS runtime
