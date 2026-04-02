@@ -98,13 +98,18 @@ The server serves both the API and the built frontend static files.
 
 ```bash
 # Build and start (requires .env file with production values)
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose up -d --build
 
 # View logs
-docker compose -f docker-compose.prod.yml logs -f portal
+docker compose logs -f portal
 
 # Stop
-docker compose -f docker-compose.prod.yml down
+docker compose down
+```
+
+For local development, use the dev compose file (Postgres only):
+```bash
+docker compose -f docker-compose.dev.yml up -d
 ```
 
 The Docker setup includes:
