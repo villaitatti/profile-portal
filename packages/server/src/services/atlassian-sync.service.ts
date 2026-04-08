@@ -155,21 +155,24 @@ export function computeDiff(
   // detect it and mark for re-creation. Deduplicate by group name.
   const seenGroupCreates = new Set<string>();
   const staleMappingIds: string[] = [];
+  const missingGroupNames = new Set<string>(); // groups not in SCIM
   for (const m of mappings) {
     const existsInScim = current.groups.has(m.atlassianGroupName);
-    if (!existsInScim && !seenGroupCreates.has(m.atlassianGroupName)) {
-      seenGroupCreates.add(m.atlassianGroupName);
-      diff.groupsToCreate.push({
-        name: m.atlassianGroupName,
-        mappedFromRole: m.auth0RoleName,
-      });
-      // If mapping had an ID but group no longer exists in SCIM, it's stale
+    if (!existsInScim) {
+      missingGroupNames.add(m.atlassianGroupName);
+      // Collect ALL stale mapping IDs, not just the first per group
       if (m.atlassianGroupId) {
         staleMappingIds.push(m.id);
       }
+      if (!seenGroupCreates.has(m.atlassianGroupName)) {
+        seenGroupCreates.add(m.atlassianGroupName);
+        diff.groupsToCreate.push({
+          name: m.atlassianGroupName,
+          mappedFromRole: m.auth0RoleName,
+        });
+      }
     }
   }
-  // Clear stale group IDs so membership ops don't reuse dead IDs
   if (staleMappingIds.length > 0) {
     (diff as SyncDiff & { _staleMappingIds?: string[] })._staleMappingIds = staleMappingIds;
   }
@@ -198,7 +201,7 @@ export function computeDiff(
             action: 'add',
             userEmail: email,
             groupName: mapping.atlassianGroupName,
-            groupId: group?.id || mapping.atlassianGroupId,
+            groupId: group?.id || (missingGroupNames.has(mapping.atlassianGroupName) ? null : mapping.atlassianGroupId),
             userScimId: null, // will be set after creation
             reason: `User added to Auth0 role ${mapping.auth0RoleName}`,
           });
@@ -253,7 +256,7 @@ export function computeDiff(
               action: 'add',
               userEmail: email,
               groupName: mapping.atlassianGroupName,
-              groupId: group?.id || mapping.atlassianGroupId,
+              groupId: group?.id || (missingGroupNames.has(mapping.atlassianGroupName) ? null : mapping.atlassianGroupId),
               userScimId: existingUser.id,
               reason: `User added to Auth0 role ${mapping.auth0RoleName}`,
             });
