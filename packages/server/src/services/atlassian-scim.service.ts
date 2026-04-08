@@ -124,6 +124,7 @@ export async function getUsers(): Promise<ScimUser[]> {
   const all: ScimUser[] = [];
   let startIndex = 1;
   const count = 100;
+  let reachedEnd = false;
 
   for (let page = 0; page < MAX_PAGES; page++) {
     const result = await scimJson<ScimListResponse<ScimUser>>(
@@ -131,13 +132,15 @@ export async function getUsers(): Promise<ScimUser[]> {
     );
     all.push(...(result.Resources || []));
     const pageSize = result.itemsPerPage || count;
-    if (startIndex + pageSize > result.totalResults) break;
+    if (startIndex + pageSize > result.totalResults) {
+      reachedEnd = true;
+      break;
+    }
     startIndex += pageSize;
   }
 
-  // If we exhausted MAX_PAGES, the directory is truncated — fail fast
-  if (all.length > 0 && all.length % 100 === 0 && all.length >= MAX_PAGES * 100) {
-    throw new Error(`SCIM user fetch exceeded ${MAX_PAGES} pages — directory may be truncated (${all.length} users fetched)`);
+  if (!reachedEnd) {
+    throw new Error(`SCIM user fetch exceeded ${MAX_PAGES} pages — directory truncated (${all.length} users fetched)`);
   }
 
   return all;
@@ -233,6 +236,7 @@ export async function getGroups(): Promise<ScimGroup[]> {
   const all: ScimGroup[] = [];
   let startIndex = 1;
   const count = 100;
+  let reachedEnd = false;
 
   for (let page = 0; page < MAX_PAGES; page++) {
     const result = await scimJson<ScimListResponse<ScimGroup>>(
@@ -240,12 +244,15 @@ export async function getGroups(): Promise<ScimGroup[]> {
     );
     all.push(...(result.Resources || []));
     const pageSize = result.itemsPerPage || count;
-    if (startIndex + pageSize > result.totalResults) break;
+    if (startIndex + pageSize > result.totalResults) {
+      reachedEnd = true;
+      break;
+    }
     startIndex += pageSize;
   }
 
-  if (all.length > 0 && all.length % 100 === 0 && all.length >= MAX_PAGES * 100) {
-    throw new Error(`SCIM group fetch exceeded ${MAX_PAGES} pages — directory may be truncated (${all.length} groups fetched)`);
+  if (!reachedEnd) {
+    throw new Error(`SCIM group fetch exceeded ${MAX_PAGES} pages — directory truncated (${all.length} groups fetched)`);
   }
 
   return all;

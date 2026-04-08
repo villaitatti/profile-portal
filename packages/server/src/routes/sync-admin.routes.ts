@@ -121,77 +121,7 @@ router.post('/sse-token', (req, res) => {
   res.json({ token });
 });
 
-// ── SSE progress stream ────────────────────────────────────────────
-// Uses short-lived SSE token from ?sse_token= (NOT the full JWT).
-// The SSE token is issued by POST /sse-token above and expires in 5 minutes.
-
-router.get('/runs/:runId/stream', async (req, res) => {
-  const sseToken = req.query.sse_token as string | undefined;
-  if (!isDevMode) {
-    if (!sseToken) {
-      res.status(401).json({ error: 'Missing sse_token query parameter' });
-      return;
-    }
-    const { valid } = verifySseToken(sseToken);
-    if (!valid) {
-      res.status(401).json({ error: 'Invalid or expired SSE token' });
-      return;
-    }
-  }
-
-  const { runId } = req.params;
-
-  // Check if the run exists
-  const run = await prisma.syncRun.findUnique({ where: { id: runId } });
-  if (!run) {
-    res.status(404).json({ error: 'Run not found' });
-    return;
-  }
-
-  // If run already completed, send final state immediately
-  if (['completed', 'failed', 'partial'].includes(run.status)) {
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache, no-transform');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no');
-    res.write(`data: ${JSON.stringify({ phase: 'done', step: 1, totalSteps: 1, percentage: 100, description: `Run ${run.status}`, status: run.status })}\n\n`);
-    res.end();
-    return;
-  }
-
-  // Set SSE headers
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache, no-transform');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no');
-  res.flushHeaders();
-
-  const emitter = getEmitter(runId);
-  if (!emitter) {
-    res.write(`data: ${JSON.stringify({ phase: 'error', description: 'No active sync for this run' })}\n\n`);
-    res.end();
-    return;
-  }
-
-  const onProgress = (progress: SyncProgress) => {
-    res.write(`data: ${JSON.stringify(progress)}\n\n`);
-    // Flush for compression middleware compatibility
-    if (typeof (res as unknown as { flush?: () => void }).flush === 'function') {
-      (res as unknown as { flush: () => void }).flush();
-    }
-    if (progress.phase === 'done' || progress.phase === 'error') {
-      cleanup();
-    }
-  };
-
-  const cleanup = () => {
-    emitter.removeListener('progress', onProgress);
-    res.end();
-  };
-
-  emitter.on('progress', onProgress);
-  req.on('close', cleanup);
-});
+// ── SSE stream is mounted separately via syncSseRoutes (outside JWT chain) ──
 
 // ── Sync run history ───────────────────────────────────────────────
 
@@ -249,4 +179,73 @@ router.get('/status', (_req, res) => {
   });
 });
 
+// SSE stream route — mounted OUTSIDE the JWT middleware chain in index.ts.
+// Auth is handled by the short-lived SSE token validated inline.
+const sseRouter = Router();
+
+sseRouter.get('/runs/:runId/stream', async (req, res) => {
+  const sseToken = req.query.sse_token as string | undefined;
+  if (!isDevMode) {
+    if (!sseToken) {
+      res.status(401).json({ error: 'Missing sse_token query parameter' });
+      return;
+    }
+    const { valid } = verifySseToken(sseToken);
+    if (!valid) {
+      res.status(401).json({ error: 'Invalid or expired SSE token' });
+      return;
+    }
+  }
+
+  const { runId } = req.params;
+
+  const run = await prisma.syncRun.findUnique({ where: { id: runId } });
+  if (!run) {
+    res.status(404).json({ error: 'Run not found' });
+    return;
+  }
+
+  if (['completed', 'failed', 'partial'].includes(run.status)) {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.write(`data: ${JSON.stringify({ phase: 'done', step: 1, totalSteps: 1, percentage: 100, description: `Run ${run.status}`, status: run.status })}\n\n`);
+    res.end();
+    return;
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  const emitter = getEmitter(runId);
+  if (!emitter) {
+    res.write(`data: ${JSON.stringify({ phase: 'error', description: 'No active sync for this run' })}\n\n`);
+    res.end();
+    return;
+  }
+
+  const onProgress = (progress: SyncProgress) => {
+    res.write(`data: ${JSON.stringify(progress)}\n\n`);
+    if (typeof (res as unknown as { flush?: () => void }).flush === 'function') {
+      (res as unknown as { flush: () => void }).flush();
+    }
+    if (progress.phase === 'done' || progress.phase === 'error') {
+      cleanup();
+    }
+  };
+
+  const cleanup = () => {
+    emitter.removeListener('progress', onProgress);
+    res.end();
+  };
+
+  emitter.on('progress', onProgress);
+  req.on('close', cleanup);
+});
+
 export const syncAdminRoutes = router;
+export const syncSseRoutes = sseRouter;

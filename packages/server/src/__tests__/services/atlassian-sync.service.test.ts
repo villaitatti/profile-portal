@@ -110,7 +110,9 @@ function makeCurrentState(users: ScimUser[] = [], groups: ScimGroup[] = []) {
 describe('computeDiff', () => {
   it('returns empty diff when both sides are empty', () => {
     const desired = new Map();
-    const current = makeCurrentState();
+    // Provide the mapped group in current state so it's not detected as "needs creation"
+    const group = makeScimGroup({ displayName: 'itatti-all' });
+    const current = makeCurrentState([], [group]);
     const diff = computeDiff(desired, current, [makeMapping()]);
 
     expect(diff.usersToCreate).toHaveLength(0);

@@ -1,9 +1,12 @@
 import { randomBytes, createHmac, timingSafeEqual } from 'crypto';
 
 // Short-lived SSE tokens avoid putting the full JWT in query strings.
-// Tokens are HMAC-signed with a server-generated secret and expire after 5 minutes.
+// Tokens are HMAC-signed and expire after 5 minutes.
+// Secret is from env (survives restarts) or auto-generated (single-instance fallback).
 
-const SSE_SECRET = randomBytes(32);
+const SSE_SECRET = process.env.SSE_SECRET
+  ? Buffer.from(process.env.SSE_SECRET, 'base64')
+  : randomBytes(32);
 const SSE_TOKEN_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 export function createSseToken(userId: string): string {

@@ -7,7 +7,7 @@ import { rolesRoutes } from './roles.routes.js';
 import { claimRoutes } from './claim.routes.js';
 import { helpRoutes } from './help.routes.js';
 import { fellowsAdminRoutes } from './fellows-admin.routes.js';
-import { syncAdminRoutes } from './sync-admin.routes.js';
+import { syncAdminRoutes, syncSseRoutes } from './sync-admin.routes.js';
 import { authMiddleware, extractUser } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
 
@@ -32,9 +32,7 @@ export function registerRoutes(app: Express) {
   );
 
   // Admin routes: Atlassian sync (staff-it only)
-  // Note: The SSE stream endpoint (/runs/:runId/stream) uses short-lived SSE tokens
-  // instead of the full JWT. Tokens are issued via POST /sse-token (auth-protected)
-  // and validated inline by the SSE handler. This avoids exposing JWTs in query strings.
+  // JWT-protected routes (CRUD, dry-run, execute, history, sse-token issuance)
   app.use(
     '/api/admin/sync',
     authMiddleware,
@@ -42,4 +40,8 @@ export function registerRoutes(app: Express) {
     requireRole(KnownRoles.STAFF_IT),
     syncAdminRoutes
   );
+
+  // SSE stream — mounted OUTSIDE JWT chain. Auth via short-lived SSE token in query param.
+  // Tokens are issued by POST /api/admin/sync/sse-token (JWT-protected above).
+  app.use('/api/admin/sync', syncSseRoutes);
 }

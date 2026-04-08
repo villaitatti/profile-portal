@@ -150,16 +150,28 @@ export function computeDiff(
     roleToGroups.set(m.auth0RoleId, existing);
   }
 
-  // Groups to create (mapping exists, SCIM group doesn't) — deduplicate by group name
+  // Groups to create: base on live SCIM snapshot, not stored atlassianGroupId.
+  // If a mapping has a stale atlassianGroupId (group was deleted in Atlassian),
+  // detect it and mark for re-creation. Deduplicate by group name.
   const seenGroupCreates = new Set<string>();
+  const staleMappingIds: string[] = [];
   for (const m of mappings) {
-    if (!m.atlassianGroupId && !current.groups.has(m.atlassianGroupName) && !seenGroupCreates.has(m.atlassianGroupName)) {
+    const existsInScim = current.groups.has(m.atlassianGroupName);
+    if (!existsInScim && !seenGroupCreates.has(m.atlassianGroupName)) {
       seenGroupCreates.add(m.atlassianGroupName);
       diff.groupsToCreate.push({
         name: m.atlassianGroupName,
         mappedFromRole: m.auth0RoleName,
       });
+      // If mapping had an ID but group no longer exists in SCIM, it's stale
+      if (m.atlassianGroupId) {
+        staleMappingIds.push(m.id);
+      }
     }
+  }
+  // Clear stale group IDs so membership ops don't reuse dead IDs
+  if (staleMappingIds.length > 0) {
+    (diff as SyncDiff & { _staleMappingIds?: string[] })._staleMappingIds = staleMappingIds;
   }
 
   // Users: create, update, membership changes
@@ -211,6 +223,15 @@ export function computeDiff(
         changes.familyName = {
           from: existingUser.name?.familyName || '',
           to: desiredUser.familyName,
+        };
+      }
+      if (
+        existingUser.displayName !== desiredUser.name &&
+        desiredUser.name
+      ) {
+        changes.displayName = {
+          from: existingUser.displayName || '',
+          to: desiredUser.name,
         };
       }
       if (Object.keys(changes).length > 0) {
@@ -327,6 +348,15 @@ async function executeDiff(
 
   // Track newly created user SCIM IDs for membership resolution
   const newUserScimIds = new Map<string, string>();
+
+  // Clear stale atlassianGroupId entries detected during diff computation
+  const staleMappingIds = (diff as SyncDiff & { _staleMappingIds?: string[] })._staleMappingIds;
+  if (staleMappingIds?.length) {
+    await prisma.roleGroupMapping.updateMany({
+      where: { id: { in: staleMappingIds } },
+      data: { atlassianGroupId: null },
+    });
+  }
 
   // 1. Create groups first (needed for membership ops)
   for (const group of diff.groupsToCreate) {
@@ -544,6 +574,9 @@ async function executeDiff(
 
 // ── Public API ─────────────────────────────────────────────────────
 
+// If a sync run has been in dry_run/executing for longer than this, treat it as crashed
+const LEASE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
 export async function runDrySync(triggeredBy: string): Promise<{ runId: string; emitter: EventEmitter }> {
   // Atomic check-and-create inside a serializable transaction to prevent TOCTOU race
   const run = await prisma.$transaction(async (tx) => {
@@ -553,10 +586,19 @@ export async function runDrySync(triggeredBy: string): Promise<{ runId: string; 
       orderBy: { startedAt: 'desc' },
     });
     if (active) {
-      throw Object.assign(new Error(`Sync already running by ${active.triggeredBy}`), {
-        status: 409,
-        activeRun: active,
-      });
+      const age = Date.now() - active.startedAt.getTime();
+      if (age > LEASE_TTL_MS) {
+        // Stale run from a crashed process — expire it
+        await tx.syncRun.update({
+          where: { id: active.id },
+          data: { status: 'failed', completedAt: new Date() },
+        });
+      } else {
+        throw Object.assign(new Error(`Sync already running by ${active.triggeredBy}`), {
+          status: 409,
+          activeRun: active,
+        });
+      }
     }
     return tx.syncRun.create({
       data: { status: 'dry_run', triggeredBy, diff: {} },
@@ -641,10 +683,18 @@ export async function executeSync(
       orderBy: { startedAt: 'desc' },
     });
     if (active) {
-      throw Object.assign(new Error(`Sync already running by ${active.triggeredBy}`), {
-        status: 409,
-        activeRun: active,
-      });
+      const activeAge = Date.now() - active.startedAt.getTime();
+      if (activeAge > LEASE_TTL_MS) {
+        await tx.syncRun.update({
+          where: { id: active.id },
+          data: { status: 'failed', completedAt: new Date() },
+        });
+      } else {
+        throw Object.assign(new Error(`Sync already running by ${active.triggeredBy}`), {
+          status: 409,
+          activeRun: active,
+        });
+      }
     }
 
     const dr = await tx.syncRun.findUnique({ where: { id: dryRunId } });
