@@ -21,7 +21,7 @@ app.use(helmet({
       fontSrc: ["'self'", "https://use.typekit.net", "https://p.typekit.net"],
       imgSrc: ["'self'", "data:", "https:"],
       connectSrc: ["'self'", `https://${process.env.VITE_AUTH0_DOMAIN || 'harvard.eu.auth0.com'}`],
-      frameSrc: ["'self'", "https://challenges.cloudflare.com"],
+      frameSrc: ["'self'", "https://challenges.cloudflare.com", `https://${process.env.VITE_AUTH0_DOMAIN || 'harvard.eu.auth0.com'}`],
     },
   },
 }));
