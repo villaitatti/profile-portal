@@ -128,7 +128,7 @@ export async function getUsers(): Promise<ScimUser[]> {
 
   for (let page = 0; page < MAX_PAGES; page++) {
     const result = await scimJson<ScimListResponse<ScimUser>>(
-      `/scim/v2/Users?startIndex=${startIndex}&count=${count}`
+      `/Users?startIndex=${startIndex}&count=${count}`
     );
     all.push(...(result.Resources || []));
     const pageSize = result.itemsPerPage || count;
@@ -163,7 +163,7 @@ export async function createUser(params: {
     };
   }
 
-  return scimJson<ScimUser>('/scim/v2/Users', {
+  return scimJson<ScimUser>('/Users', {
     method: 'POST',
     body: JSON.stringify({
       schemas: ['urn:ietf:params:scim:schemas:core:2.0:User'],
@@ -204,7 +204,7 @@ export async function updateUser(
     });
   }
 
-  return scimJson<ScimUser>(`/scim/v2/Users/${scimId}`, {
+  return scimJson<ScimUser>(`/Users/${scimId}`, {
     method: 'PATCH',
     body: JSON.stringify({
       schemas: ['urn:ietf:params:scim:api:messages:2.0:PatchOp'],
@@ -219,7 +219,7 @@ export async function reactivateUser(scimId: string): Promise<ScimUser> {
     return { ...user!, active: true };
   }
 
-  return scimJson<ScimUser>(`/scim/v2/Users/${scimId}`, {
+  return scimJson<ScimUser>(`/Users/${scimId}`, {
     method: 'PATCH',
     body: JSON.stringify({
       schemas: ['urn:ietf:params:scim:api:messages:2.0:PatchOp'],
@@ -234,7 +234,7 @@ export async function deactivateUser(scimId: string): Promise<ScimUser> {
     return { ...user!, active: false };
   }
 
-  return scimJson<ScimUser>(`/scim/v2/Users/${scimId}`, {
+  return scimJson<ScimUser>(`/Users/${scimId}`, {
     method: 'PATCH',
     body: JSON.stringify({
       schemas: ['urn:ietf:params:scim:api:messages:2.0:PatchOp'],
@@ -255,7 +255,7 @@ export async function getGroups(): Promise<ScimGroup[]> {
 
   for (let page = 0; page < MAX_PAGES; page++) {
     const result = await scimJson<ScimListResponse<ScimGroup>>(
-      `/scim/v2/Groups?startIndex=${startIndex}&count=${count}`
+      `/Groups?startIndex=${startIndex}&count=${count}`
     );
     all.push(...(result.Resources || []));
     const pageSize = result.itemsPerPage || count;
@@ -282,7 +282,7 @@ export async function createGroup(displayName: string): Promise<ScimGroup> {
     };
   }
 
-  return scimJson<ScimGroup>('/scim/v2/Groups', {
+  return scimJson<ScimGroup>('/Groups', {
     method: 'POST',
     body: JSON.stringify({
       schemas: ['urn:ietf:params:scim:schemas:core:2.0:Group'],
@@ -297,7 +297,7 @@ export async function addGroupMember(
 ): Promise<void> {
   if (isDevMode) return;
 
-  const response = await scimFetch(`/scim/v2/Groups/${groupId}`, {
+  const response = await scimFetch(`/Groups/${groupId}`, {
     method: 'PATCH',
     body: JSON.stringify({
       schemas: ['urn:ietf:params:scim:api:messages:2.0:PatchOp'],
@@ -319,7 +319,7 @@ export async function removeGroupMember(
 ): Promise<void> {
   if (isDevMode) return;
 
-  const response = await scimFetch(`/scim/v2/Groups/${groupId}`, {
+  const response = await scimFetch(`/Groups/${groupId}`, {
     method: 'PATCH',
     body: JSON.stringify({
       schemas: ['urn:ietf:params:scim:api:messages:2.0:PatchOp'],

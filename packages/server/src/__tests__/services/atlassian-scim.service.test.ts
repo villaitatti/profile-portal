@@ -71,7 +71,7 @@ describe('getUsers', () => {
     const users = await getUsers();
     expect(users).toHaveLength(2);
     expect(mockFetch).toHaveBeenCalledTimes(1);
-    expect(mockFetch.mock.calls[0][0]).toContain('/scim/v2/Users?startIndex=1&count=100');
+    expect(mockFetch.mock.calls[0][0]).toContain('/Users?startIndex=1&count=100');
   });
 
   it('paginates through multiple pages', async () => {
