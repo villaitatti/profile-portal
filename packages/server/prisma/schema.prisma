@@ -22,3 +22,35 @@ model Application {
 
   @@map("applications")
 }
+
+model SyncRun {
+  id          String    @id @default(uuid())
+  status      String    // dry_run | executing | completed | failed | partial
+  triggeredBy String    @map("triggered_by")
+  dryRunId    String?   @map("dry_run_id")
+  startedAt   DateTime  @default(now()) @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  diff        Json      // full diff payload
+  result      Json?     // per-operation execution log
+  stats       Json?     // summary stats
+
+  dryRun     SyncRun?  @relation("DryRunExecution", fields: [dryRunId], references: [id])
+  executions SyncRun[] @relation("DryRunExecution")
+
+  @@index([status, startedAt(sort: Desc)])
+  @@map("sync_runs")
+}
+
+model RoleGroupMapping {
+  id                 String   @id @default(uuid())
+  auth0RoleId        String   @map("auth0_role_id")
+  auth0RoleName      String   @map("auth0_role_name")
+  atlassianGroupId   String?  @map("atlassian_group_id")
+  atlassianGroupName String   @map("atlassian_group_name")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@unique([auth0RoleId, atlassianGroupId])
+  @@index([auth0RoleId])
+  @@map("role_group_mappings")
+}

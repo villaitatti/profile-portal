@@ -22,6 +22,7 @@ import { AdminPage } from '@/pages/admin/AdminPage';
 import { AppCatalogPage } from '@/pages/admin/AppCatalogPage';
 import { AppFormPage } from '@/pages/admin/AppFormPage';
 import { FellowsManagementPage } from '@/pages/admin/FellowsManagementPage';
+import { SyncDashboardPage } from '@/pages/admin/SyncDashboardPage';
 
 export const router = createBrowserRouter([
   {
@@ -68,6 +69,7 @@ export const router = createBrowserRouter([
                   { path: '/admin/apps', element: <AppCatalogPage /> },
                   { path: '/admin/apps/new', element: <AppFormPage /> },
                   { path: '/admin/apps/:id/edit', element: <AppFormPage /> },
+                  { path: '/admin/sync', element: <SyncDashboardPage /> },
                 ],
               },
             ],

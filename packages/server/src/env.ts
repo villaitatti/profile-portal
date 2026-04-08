@@ -46,6 +46,11 @@ const envSchema = z.object({
   JIRA_API_TOKEN: z.string().optional(),
   JIRA_SERVICE_DESK_ID: z.string().optional(),
   JIRA_REQUEST_TYPE_ID: z.string().optional(),
+
+  // Atlassian SCIM provisioning (optional — sync disabled if not configured)
+  ATLASSIAN_SCIM_BASE_URL: z.string().url().optional(),
+  ATLASSIAN_SCIM_DIRECTORY_ID: z.string().optional(),
+  ATLASSIAN_SCIM_BEARER_TOKEN: z.string().optional(),
 });
 
 function loadEnv() {

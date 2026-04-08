@@ -2,7 +2,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { Link } from 'react-router-dom';
 import { useUserRoles } from '@/hooks/useUserRoles';
 import { hasAnyRole, KnownRoles } from '@itatti/shared';
-import { Grid3X3, Users, ArrowRight } from 'lucide-react';
+import { Grid3X3, Users, ArrowRight, RefreshCw } from 'lucide-react';
 
 interface AdminCard {
   title: string;
@@ -25,6 +25,13 @@ const adminCards: AdminCard[] = [
     description: 'Manage internal applications shown to users',
     path: '/admin/apps',
     icon: Grid3X3,
+    requiredRoles: [KnownRoles.STAFF_IT],
+  },
+  {
+    title: 'Atlassian Sync',
+    description: 'Sync users and groups from Auth0 to Atlassian Cloud',
+    path: '/admin/sync',
+    icon: RefreshCw,
     requiredRoles: [KnownRoles.STAFF_IT],
   },
 ];
