@@ -4,13 +4,13 @@ import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'path';
 import { readFileSync } from 'fs';
 
-const rootPkg = JSON.parse(readFileSync(resolve(__dirname, '../../package.json'), 'utf-8'));
+const version = readFileSync(resolve(__dirname, '../../VERSION'), 'utf-8').trim();
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   envDir: resolve(__dirname, '../..'),  // Read .env from monorepo root
   define: {
-    __APP_VERSION__: JSON.stringify(rootPkg.version),
+    __APP_VERSION__: JSON.stringify(version),
   },
   resolve: {
     alias: {
