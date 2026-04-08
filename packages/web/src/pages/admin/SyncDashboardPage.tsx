@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { useRoles } from '@/api/roles';
+import { useApiToken } from '@/api/client';
 import {
   useMappings,
   useCreateMapping,
@@ -391,6 +392,7 @@ export function SyncDashboardPage() {
   const startDryRun = useStartDryRun();
   const executeSyncMutation = useExecuteSync();
   const queryClient = useQueryClient();
+  const getToken = useApiToken();
 
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [progress, setProgress] = useState<SyncProgress | null>(null);
@@ -412,7 +414,8 @@ export function SyncDashboardPage() {
     return () => clearInterval(interval);
   }, [dryRunDetail?.completedAt]);
 
-  const handleDryRun = useCallback(() => {
+  const handleDryRun = useCallback(async () => {
+    const token = await getToken();
     startDryRun.mutate(undefined, {
       onSuccess: ({ runId }) => {
         setActiveRunId(runId);
@@ -420,6 +423,7 @@ export function SyncDashboardPage() {
         setProgress({ phase: 'starting', step: 0, totalSteps: 0, percentage: 0, description: 'Starting dry run...' });
         const unsub = subscribeSyncProgress(
           runId,
+          token,
           (p) => setProgress(p),
           () => {
             setLastDryRunId(runId);
@@ -435,10 +439,11 @@ export function SyncDashboardPage() {
         return () => unsub();
       },
     });
-  }, [startDryRun, queryClient]);
+  }, [startDryRun, queryClient, getToken]);
 
-  const handleExecute = useCallback(() => {
+  const handleExecute = useCallback(async () => {
     if (!lastDryRunId) return;
+    const token = await getToken();
     executeSyncMutation.mutate(lastDryRunId, {
       onSuccess: ({ runId }) => {
         setActiveRunId(runId);
@@ -446,6 +451,7 @@ export function SyncDashboardPage() {
         setProgress({ phase: 'starting', step: 0, totalSteps: 0, percentage: 0, description: 'Starting execution...' });
         const unsub = subscribeSyncProgress(
           runId,
+          token,
           (p) => setProgress(p),
           () => {
             setLastDryRunId(null);
@@ -460,7 +466,7 @@ export function SyncDashboardPage() {
         return () => unsub();
       },
     });
-  }, [lastDryRunId, executeSyncMutation, queryClient]);
+  }, [lastDryRunId, executeSyncMutation, queryClient, getToken]);
 
   if (statusLoading) return <LoadingSpinner />;
 

@@ -175,11 +175,12 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 
 export function subscribeSyncProgress(
   runId: string,
+  token: string,
   onProgress: (progress: SyncProgress) => void,
   onDone: () => void,
   onError: (err: string) => void
 ): () => void {
-  const url = `${API_BASE}/api/admin/sync/runs/${runId}/stream`;
+  const url = `${API_BASE}/api/admin/sync/runs/${runId}/stream?token=${encodeURIComponent(token)}`;
   const source = new EventSource(url);
 
   source.onmessage = (event) => {

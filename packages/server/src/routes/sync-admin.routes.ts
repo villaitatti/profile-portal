@@ -111,6 +111,8 @@ router.post('/execute/:runId', async (req, res, next) => {
 });
 
 // ── SSE progress stream ────────────────────────────────────────────
+// Auth is handled by tokenFromQueryMiddleware in routes/index.ts
+// which copies ?token= into Authorization header before JWT middleware
 
 router.get('/runs/:runId/stream', async (req, res) => {
   const { runId } = req.params;

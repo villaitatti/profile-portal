@@ -1,4 +1,4 @@
-import type { Express } from 'express';
+import type { Express, Request, Response, NextFunction } from 'express';
 import { KnownRoles } from '@itatti/shared';
 import { healthRoutes } from './health.routes.js';
 import { applicationsRoutes } from './applications.routes.js';
@@ -7,6 +7,7 @@ import { rolesRoutes } from './roles.routes.js';
 import { claimRoutes } from './claim.routes.js';
 import { helpRoutes } from './help.routes.js';
 import { fellowsAdminRoutes } from './fellows-admin.routes.js';
+import { syncAdminRoutes } from './sync-admin.routes.js';
 import { authMiddleware, extractUser } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
 
@@ -28,5 +29,23 @@ export function registerRoutes(app: Express) {
     extractUser,
     requireRole(KnownRoles.FELLOWS_ADMIN, KnownRoles.STAFF_IT),
     fellowsAdminRoutes
+  );
+
+  // Admin routes: Atlassian sync (staff-it only)
+  // SSE endpoints use EventSource which can't send Authorization headers,
+  // so we accept the JWT via ?token= query param and inject it into the header
+  function tokenFromQuery(req: Request, _res: Response, next: NextFunction) {
+    if (!req.headers.authorization && req.query.token) {
+      req.headers.authorization = `Bearer ${req.query.token}`;
+    }
+    next();
+  }
+  app.use(
+    '/api/admin/sync',
+    tokenFromQuery,
+    authMiddleware,
+    extractUser,
+    requireRole(KnownRoles.STAFF_IT),
+    syncAdminRoutes
   );
 }

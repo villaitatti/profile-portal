@@ -116,6 +116,8 @@ const MOCK_GROUPS: ScimGroup[] = [
 
 // ── Users ──────────────────────────────────────────────────────────
 
+const MAX_PAGES = 100;
+
 export async function getUsers(): Promise<ScimUser[]> {
   if (isDevMode) return MOCK_USERS;
 
@@ -123,12 +125,12 @@ export async function getUsers(): Promise<ScimUser[]> {
   let startIndex = 1;
   const count = 100;
 
-  while (true) {
-    const page = await scimJson<ScimListResponse<ScimUser>>(
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const result = await scimJson<ScimListResponse<ScimUser>>(
       `/scim/v2/Users?startIndex=${startIndex}&count=${count}`
     );
-    all.push(...(page.Resources || []));
-    if (startIndex + count > page.totalResults) break;
+    all.push(...(result.Resources || []));
+    if (startIndex + count > result.totalResults) break;
     startIndex += count;
   }
 
@@ -182,10 +184,14 @@ export async function updateUser(
     operations.push({ op: 'replace', path: 'displayName', value: params.displayName });
   }
   if (params.givenName || params.familyName) {
+    // Only include fields that are defined to avoid nulling out unchanged fields
+    const nameValue: Record<string, string> = {};
+    if (params.givenName) nameValue.givenName = params.givenName;
+    if (params.familyName) nameValue.familyName = params.familyName;
     operations.push({
       op: 'replace',
       path: 'name',
-      value: { givenName: params.givenName, familyName: params.familyName },
+      value: nameValue,
     });
   }
 
@@ -222,12 +228,12 @@ export async function getGroups(): Promise<ScimGroup[]> {
   let startIndex = 1;
   const count = 100;
 
-  while (true) {
-    const page = await scimJson<ScimListResponse<ScimGroup>>(
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const result = await scimJson<ScimListResponse<ScimGroup>>(
       `/scim/v2/Groups?startIndex=${startIndex}&count=${count}`
     );
-    all.push(...(page.Resources || []));
-    if (startIndex + count > page.totalResults) break;
+    all.push(...(result.Resources || []));
+    if (startIndex + count > result.totalResults) break;
     startIndex += count;
   }
 
@@ -258,7 +264,7 @@ export async function addGroupMember(
 ): Promise<void> {
   if (isDevMode) return;
 
-  await scimFetch(`/scim/v2/Groups/${groupId}`, {
+  const response = await scimFetch(`/scim/v2/Groups/${groupId}`, {
     method: 'PATCH',
     body: JSON.stringify({
       schemas: ['urn:ietf:params:scim:api:messages:2.0:PatchOp'],
@@ -267,6 +273,11 @@ export async function addGroupMember(
       ],
     }),
   });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`SCIM add member error ${response.status}: ${body}`);
+  }
 }
 
 export async function removeGroupMember(
@@ -275,7 +286,7 @@ export async function removeGroupMember(
 ): Promise<void> {
   if (isDevMode) return;
 
-  await scimFetch(`/scim/v2/Groups/${groupId}`, {
+  const response = await scimFetch(`/scim/v2/Groups/${groupId}`, {
     method: 'PATCH',
     body: JSON.stringify({
       schemas: ['urn:ietf:params:scim:api:messages:2.0:PatchOp'],
@@ -284,4 +295,9 @@ export async function removeGroupMember(
       ],
     }),
   });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`SCIM remove member error ${response.status}: ${body}`);
+  }
 }

@@ -36,17 +36,6 @@ export interface SyncProgress {
   status?: string;
 }
 
-// ── Concurrency guard ──────────────────────────────────────────────
-
-async function isAnySyncRunning(): Promise<{ running: boolean; run?: { id: string; triggeredBy: string; startedAt: Date } }> {
-  const active = await prisma.syncRun.findFirst({
-    where: { status: { in: ['dry_run', 'executing'] } },
-    select: { id: true, triggeredBy: true, startedAt: true },
-    orderBy: { startedAt: 'desc' },
-  });
-  return active ? { running: true, run: active } : { running: false };
-}
-
 // ── Desired state (Auth0) ──────────────────────────────────────────
 
 interface DesiredUser {
@@ -78,11 +67,12 @@ async function fetchDesiredState(
     const roleUsers = await listUsersByRole(mapping.auth0RoleId);
 
     for (const u of roleUsers) {
-      const existing = users.get(u.email);
+      const emailKey = u.email.toLowerCase();
+      const existing = users.get(emailKey);
       if (existing) {
         existing.roles.push(mapping.auth0RoleId);
       } else {
-        users.set(u.email, {
+        users.set(emailKey, {
           auth0UserId: u.user_id,
           email: u.email,
           name: u.name || u.email,
@@ -152,10 +142,12 @@ export function computeDiff(
     membershipChanges: [],
   };
 
-  // Build role→group lookup
-  const roleToGroup = new Map<string, RoleGroupMapping>();
+  // Build role→groups lookup (one role can map to multiple groups)
+  const roleToGroups = new Map<string, RoleGroupMapping[]>();
   for (const m of mappings) {
-    roleToGroup.set(m.auth0RoleId, m);
+    const existing = roleToGroups.get(m.auth0RoleId) || [];
+    existing.push(m);
+    roleToGroups.set(m.auth0RoleId, existing);
   }
 
   // Groups to create (mapping exists, SCIM group doesn't)
@@ -185,17 +177,18 @@ export function computeDiff(
 
       // Membership additions for new user (will be resolved after user creation)
       for (const roleId of desiredUser.roles) {
-        const mapping = roleToGroup.get(roleId);
-        if (!mapping) continue;
-        const group = current.groups.get(mapping.atlassianGroupName);
-        diff.membershipChanges.push({
-          action: 'add',
-          userEmail: email,
-          groupName: mapping.atlassianGroupName,
-          groupId: group?.id || mapping.atlassianGroupId,
-          userScimId: null, // will be set after creation
-          reason: `User added to Auth0 role ${mapping.auth0RoleName}`,
-        });
+        const roleMappings = roleToGroups.get(roleId) || [];
+        for (const mapping of roleMappings) {
+          const group = current.groups.get(mapping.atlassianGroupName);
+          diff.membershipChanges.push({
+            action: 'add',
+            userEmail: email,
+            groupName: mapping.atlassianGroupName,
+            groupId: group?.id || mapping.atlassianGroupId,
+            userScimId: null, // will be set after creation
+            reason: `User added to Auth0 role ${mapping.auth0RoleName}`,
+          });
+        }
       }
     } else {
       // Existing user — check for updates
@@ -228,19 +221,20 @@ export function computeDiff(
 
       // Membership: check each mapped role
       for (const roleId of desiredUser.roles) {
-        const mapping = roleToGroup.get(roleId);
-        if (!mapping) continue;
-        const group = current.groups.get(mapping.atlassianGroupName);
-        const isMember = group?.members?.some((m) => m.value === existingUser.id);
-        if (!isMember) {
-          diff.membershipChanges.push({
-            action: 'add',
-            userEmail: email,
-            groupName: mapping.atlassianGroupName,
-            groupId: group?.id || mapping.atlassianGroupId,
-            userScimId: existingUser.id,
-            reason: `User added to Auth0 role ${mapping.auth0RoleName}`,
-          });
+        const roleMappings = roleToGroups.get(roleId) || [];
+        for (const mapping of roleMappings) {
+          const group = current.groups.get(mapping.atlassianGroupName);
+          const isMember = group?.members?.some((m) => m.value === existingUser.id);
+          if (!isMember) {
+            diff.membershipChanges.push({
+              action: 'add',
+              userEmail: email,
+              groupName: mapping.atlassianGroupName,
+              groupId: group?.id || mapping.atlassianGroupId,
+              userScimId: existingUser.id,
+              reason: `User added to Auth0 role ${mapping.auth0RoleName}`,
+            });
+          }
         }
       }
     }
@@ -527,17 +521,23 @@ async function executeDiff(
 // ── Public API ─────────────────────────────────────────────────────
 
 export async function runDrySync(triggeredBy: string): Promise<{ runId: string; emitter: EventEmitter }> {
-  const guard = await isAnySyncRunning();
-  if (guard.running) {
-    throw Object.assign(new Error(`Sync already running by ${guard.run!.triggeredBy}`), {
-      status: 409,
-      activeRun: guard.run,
+  // Atomic check-and-create inside a serializable transaction to prevent TOCTOU race
+  const run = await prisma.$transaction(async (tx) => {
+    const active = await tx.syncRun.findFirst({
+      where: { status: { in: ['dry_run', 'executing'] } },
+      select: { id: true, triggeredBy: true, startedAt: true },
+      orderBy: { startedAt: 'desc' },
     });
-  }
-
-  const run = await prisma.syncRun.create({
-    data: { status: 'dry_run', triggeredBy, diff: {} },
-  });
+    if (active) {
+      throw Object.assign(new Error(`Sync already running by ${active.triggeredBy}`), {
+        status: 409,
+        activeRun: active,
+      });
+    }
+    return tx.syncRun.create({
+      data: { status: 'dry_run', triggeredBy, diff: {} },
+    });
+  }, { isolationLevel: 'Serializable' });
 
   const emitter = new EventEmitter();
 
@@ -609,27 +609,36 @@ export async function executeSync(
   dryRunId: string,
   triggeredBy: string
 ): Promise<{ runId: string; emitter: EventEmitter }> {
-  const guard = await isAnySyncRunning();
-  if (guard.running) {
-    throw Object.assign(new Error(`Sync already running by ${guard.run!.triggeredBy}`), {
-      status: 409,
-      activeRun: guard.run,
+  // Atomic check-validate-create inside a serializable transaction
+  const { run, dryRun } = await prisma.$transaction(async (tx) => {
+    const active = await tx.syncRun.findFirst({
+      where: { status: { in: ['dry_run', 'executing'] } },
+      select: { id: true, triggeredBy: true, startedAt: true },
+      orderBy: { startedAt: 'desc' },
     });
-  }
+    if (active) {
+      throw Object.assign(new Error(`Sync already running by ${active.triggeredBy}`), {
+        status: 409,
+        activeRun: active,
+      });
+    }
 
-  const dryRun = await prisma.syncRun.findUnique({ where: { id: dryRunId } });
-  if (!dryRun) throw Object.assign(new Error('Dry run not found'), { status: 404 });
-  if (dryRun.status !== 'completed') throw Object.assign(new Error('Can only execute a completed dry run'), { status: 400 });
-  if (!dryRun.completedAt) throw Object.assign(new Error('Dry run has no completion timestamp'), { status: 400 });
+    const dr = await tx.syncRun.findUnique({ where: { id: dryRunId } });
+    if (!dr) throw Object.assign(new Error('Dry run not found'), { status: 404 });
+    if (dr.status !== 'completed') throw Object.assign(new Error('Can only execute a completed dry run'), { status: 400 });
+    if (!dr.completedAt) throw Object.assign(new Error('Dry run has no completion timestamp'), { status: 400 });
 
-  const age = Date.now() - dryRun.completedAt.getTime();
-  if (age > DRY_RUN_TTL_MS) {
-    throw Object.assign(new Error(`Dry run expired (${Math.round(age / 60_000)} minutes old, max 60)`), { status: 400 });
-  }
+    const age = Date.now() - dr.completedAt.getTime();
+    if (age > DRY_RUN_TTL_MS) {
+      throw Object.assign(new Error(`Dry run expired (${Math.round(age / 60_000)} minutes old, max 60)`), { status: 400 });
+    }
 
-  const run = await prisma.syncRun.create({
-    data: { status: 'executing', triggeredBy, dryRunId, diff: dryRun.diff as object },
-  });
+    const created = await tx.syncRun.create({
+      data: { status: 'executing', triggeredBy, dryRunId, diff: dr.diff as object },
+    });
+
+    return { run: created, dryRun: dr };
+  }, { isolationLevel: 'Serializable' });
 
   const emitter = new EventEmitter();
 
@@ -689,13 +698,6 @@ const activeEmitters = new Map<string, EventEmitter>();
 
 export function storeEmitter(runId: string, emitter: EventEmitter): void {
   activeEmitters.set(runId, emitter);
-  emitter.once('progress', (p: SyncProgress) => {
-    if (p.phase === 'done' || p.phase === 'error') {
-      // Clean up after a short delay to allow final event delivery
-      setTimeout(() => activeEmitters.delete(runId), 5000);
-    }
-  });
-  // Also clean up via a separate listener that checks all events
   const cleanup = (p: SyncProgress) => {
     if (p.phase === 'done' || p.phase === 'error') {
       setTimeout(() => activeEmitters.delete(runId), 5000);
