@@ -11,6 +11,7 @@ import type { RoleGroupMapping } from '@prisma/client';
 export interface SyncDiff {
   usersToCreate: { email: string; name: string; givenName: string; familyName: string; auth0UserId: string }[];
   usersToUpdate: { email: string; atlassianId: string; changes: Record<string, { from: string; to: string }> }[];
+  usersToReactivate: { email: string; name: string; atlassianId: string }[];
   usersToDeactivate: { email: string; name: string; atlassianId: string }[];
   groupsToCreate: { name: string; mappedFromRole: string }[];
   membershipChanges: { action: 'add' | 'remove'; userEmail: string; groupName: string; groupId: string | null; userScimId: string | null; reason: string }[];
@@ -52,25 +53,35 @@ async function fetchDesiredState(
   emitter: EventEmitter
 ): Promise<Map<string, DesiredUser>> {
   const users = new Map<string, DesiredUser>();
-  const totalRoles = mappings.length;
 
-  for (let i = 0; i < mappings.length; i++) {
-    const mapping = mappings[i];
+  // Dedupe by auth0RoleId — multiple mappings can share a role (one role → many groups)
+  const uniqueRoles = new Map<string, string>(); // roleId → roleName
+  for (const m of mappings) {
+    if (!uniqueRoles.has(m.auth0RoleId)) {
+      uniqueRoles.set(m.auth0RoleId, m.auth0RoleName);
+    }
+  }
+
+  const roleEntries = [...uniqueRoles.entries()];
+  for (let i = 0; i < roleEntries.length; i++) {
+    const [roleId, roleName] = roleEntries[i];
     emitter.emit('progress', {
       phase: 'fetch_auth0',
       step: i + 1,
-      totalSteps: totalRoles,
-      percentage: Math.round(((i + 1) / totalRoles) * 30),
-      description: `Fetching Auth0 role: ${mapping.auth0RoleName}`,
+      totalSteps: roleEntries.length,
+      percentage: Math.round(((i + 1) / roleEntries.length) * 30),
+      description: `Fetching Auth0 role: ${roleName}`,
     } satisfies SyncProgress);
 
-    const roleUsers = await listUsersByRole(mapping.auth0RoleId);
+    const roleUsers = await listUsersByRole(roleId);
 
     for (const u of roleUsers) {
       const emailKey = u.email.toLowerCase();
       const existing = users.get(emailKey);
       if (existing) {
-        existing.roles.push(mapping.auth0RoleId);
+        if (!existing.roles.includes(roleId)) {
+          existing.roles.push(roleId);
+        }
       } else {
         users.set(emailKey, {
           auth0UserId: u.user_id,
@@ -78,7 +89,7 @@ async function fetchDesiredState(
           name: u.name || u.email,
           givenName: u.name?.split(' ')[0] || '',
           familyName: u.name?.split(' ').slice(1).join(' ') || '',
-          roles: [mapping.auth0RoleId],
+          roles: [roleId],
         });
       }
     }
@@ -137,6 +148,7 @@ export function computeDiff(
   const diff: SyncDiff = {
     usersToCreate: [],
     usersToUpdate: [],
+    usersToReactivate: [],
     usersToDeactivate: [],
     groupsToCreate: [],
     membershipChanges: [],
@@ -208,6 +220,15 @@ export function computeDiff(
         }
       }
     } else {
+      // Existing but inactive user — needs reactivation before updates/membership
+      if (!existingUser.active) {
+        diff.usersToReactivate.push({
+          email: desiredUser.email,
+          name: desiredUser.name || existingUser.displayName,
+          atlassianId: existingUser.id,
+        });
+      }
+
       // Existing user — check for updates
       const changes: Record<string, { from: string; to: string }> = {};
       if (
@@ -344,6 +365,7 @@ async function executeDiff(
 
   const totalOps =
     diff.groupsToCreate.length +
+    diff.usersToReactivate.length +
     diff.usersToCreate.length +
     diff.usersToUpdate.length +
     diff.usersToDeactivate.length +
@@ -401,7 +423,40 @@ async function executeDiff(
     }
   }
 
-  // 2. Create users
+  // 2. Reactivate inactive users (before membership changes can reference them)
+  for (const user of diff.usersToReactivate) {
+    seq++;
+    emitter.emit('progress', {
+      phase: 'execute',
+      step: seq,
+      totalSteps: totalOps,
+      percentage: Math.round((seq / totalOps) * 100),
+      description: `Reactivating user ${user.email}...`,
+    } satisfies SyncProgress);
+
+    try {
+      await scim.reactivateUser(user.atlassianId);
+      operations.push({
+        seq,
+        type: 'user_reactivate',
+        target: user.email,
+        status: 'success',
+        description: `Reactivated user ${user.name} (${user.email})`,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      operations.push({
+        seq,
+        type: 'user_reactivate',
+        target: user.email,
+        status: 'error',
+        error: message,
+        description: `Failed to reactivate user ${user.email}: ${message}`,
+      });
+    }
+  }
+
+  // 3. Create users
   for (const user of diff.usersToCreate) {
     seq++;
     emitter.emit('progress', {
@@ -620,8 +675,8 @@ export async function runDrySync(triggeredBy: string): Promise<{ runId: string; 
           data: {
             status: 'completed',
             completedAt: new Date(),
-            diff: { usersToCreate: [], usersToUpdate: [], usersToDeactivate: [], groupsToCreate: [], membershipChanges: [] },
-            stats: { created: 0, updated: 0, deactivated: 0, groupsAdded: 0, groupsRemoved: 0, groupsCreated: 0, errors: 0, duration_ms: 0 },
+            diff: { usersToCreate: [], usersToUpdate: [], usersToReactivate: [], usersToDeactivate: [], groupsToCreate: [], membershipChanges: [] },
+            stats: { created: 0, updated: 0, reactivated: 0, deactivated: 0, groupsAdded: 0, groupsRemoved: 0, groupsCreated: 0, errors: 0, duration_ms: 0 },
           },
         });
         emitter.emit('progress', { phase: 'done', step: 0, totalSteps: 0, percentage: 100, description: 'No mappings configured' });
@@ -639,6 +694,7 @@ export async function runDrySync(triggeredBy: string): Promise<{ runId: string; 
       const stats = {
         created: diff.usersToCreate.length,
         updated: diff.usersToUpdate.length,
+        reactivated: diff.usersToReactivate.length,
         deactivated: diff.usersToDeactivate.length,
         groupsCreated: diff.groupsToCreate.length,
         groupsAdded: diff.membershipChanges.filter((c) => c.action === 'add').length,
@@ -705,6 +761,14 @@ export async function executeSync(
     if (dr.status !== 'completed') throw Object.assign(new Error('Can only execute a completed dry run'), { status: 400 });
     if (!dr.completedAt) throw Object.assign(new Error('Dry run has no completion timestamp'), { status: 400 });
 
+    // Prevent replay: check if this dry run was already executed
+    const priorExecution = await tx.syncRun.findFirst({
+      where: { dryRunId, status: { not: 'failed' } },
+    });
+    if (priorExecution) {
+      throw Object.assign(new Error('This dry run has already been executed'), { status: 409 });
+    }
+
     const age = Date.now() - dr.completedAt.getTime();
     if (age > DRY_RUN_TTL_MS) {
       throw Object.assign(new Error(`Dry run expired (${Math.round(age / 60_000)} minutes old, max 60)`), { status: 400 });
@@ -732,6 +796,7 @@ export async function executeSync(
       const stats = {
         created: operations.filter((o) => o.type === 'user_create' && o.status === 'success').length,
         updated: operations.filter((o) => o.type === 'user_update' && o.status === 'success').length,
+        reactivated: operations.filter((o) => o.type === 'user_reactivate' && o.status === 'success').length,
         deactivated: operations.filter((o) => o.type === 'user_deactivate' && o.status === 'success').length,
         groupsCreated: operations.filter((o) => o.type === 'group_create' && o.status === 'success').length,
         groupsAdded: operations.filter((o) => o.type === 'membership_add' && o.status === 'success').length,

@@ -213,6 +213,21 @@ export async function updateUser(
   });
 }
 
+export async function reactivateUser(scimId: string): Promise<ScimUser> {
+  if (isDevMode) {
+    const user = MOCK_USERS.find((u) => u.id === scimId);
+    return { ...user!, active: true };
+  }
+
+  return scimJson<ScimUser>(`/scim/v2/Users/${scimId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      schemas: ['urn:ietf:params:scim:api:messages:2.0:PatchOp'],
+      Operations: [{ op: 'replace', path: 'active', value: true }],
+    }),
+  });
+}
+
 export async function deactivateUser(scimId: string): Promise<ScimUser> {
   if (isDevMode) {
     const user = MOCK_USERS.find((u) => u.id === scimId);
