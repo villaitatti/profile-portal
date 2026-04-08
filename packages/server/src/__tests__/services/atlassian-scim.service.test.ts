@@ -29,7 +29,15 @@ import {
 // ── Fetch mock ─────────────────────────────────────────────────────
 
 const mockFetch = vi.fn();
-globalThis.fetch = mockFetch;
+
+beforeEach(() => {
+  vi.stubGlobal('fetch', mockFetch);
+  mockFetch.mockReset();
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 function jsonResponse(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -37,10 +45,6 @@ function jsonResponse(data: unknown, status = 200) {
     headers: { 'Content-Type': 'application/json' },
   });
 }
-
-beforeEach(() => {
-  mockFetch.mockReset();
-});
 
 // ── Tests ──────────────────────────────────────────────────────────
 
@@ -222,4 +226,30 @@ describe('error handling', () => {
 
     await expect(getUsers()).rejects.toThrow('SCIM API error 404');
   });
+
+  it('retries on 429 and succeeds after backoff', async () => {
+    mockFetch
+      .mockResolvedValueOnce(new Response('Rate limited', { status: 429 }))
+      .mockResolvedValueOnce(
+        jsonResponse({ totalResults: 1, startIndex: 1, itemsPerPage: 100, Resources: [
+          { id: '1', userName: 'a@test.com', displayName: 'A', name: { givenName: 'A', familyName: 'B' }, emails: [{ value: 'a@test.com', primary: true }], active: true },
+        ]})
+      );
+
+    const users = await getUsers();
+    expect(users).toHaveLength(1);
+    // First call got 429, second succeeded
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  }, 10_000);
+
+  it('throws after exhausting retries on repeated 429', async () => {
+    // maxRetries is 3, so 4 total attempts (0,1,2,3). Each needs a fresh Response.
+    mockFetch.mockImplementation(() =>
+      Promise.resolve(new Response('Rate limited', { status: 429 }))
+    );
+
+    // After all retries, the 429 response is returned and scimJson throws
+    await expect(getUsers()).rejects.toThrow('SCIM API error 429');
+    expect(mockFetch).toHaveBeenCalledTimes(4); // initial + 3 retries
+  }, 30_000);
 });

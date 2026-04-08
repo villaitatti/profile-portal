@@ -169,18 +169,26 @@ export function useSyncRunDetail(runId: string | null) {
   });
 }
 
-// ── SSE helper ─────────────────────────────────────────────────────
+// ── SSE token + stream helper ──────────────────────────────────────
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 
+// Fetch a short-lived SSE token (5 min expiry) so we never put the full JWT in a URL.
+export async function fetchSseToken(getToken: () => Promise<string>): Promise<string> {
+  const jwt = await getToken();
+  const res = await apiFetch('/api/admin/sync/sse-token', { method: 'POST', token: jwt });
+  const data = await res.json() as { token: string };
+  return data.token;
+}
+
 export function subscribeSyncProgress(
   runId: string,
-  token: string,
+  sseToken: string,
   onProgress: (progress: SyncProgress) => void,
   onDone: () => void,
   onError: (err: string) => void
 ): () => void {
-  const url = `${API_BASE}/api/admin/sync/runs/${runId}/stream?token=${encodeURIComponent(token)}`;
+  const url = `${API_BASE}/api/admin/sync/runs/${runId}/stream?sse_token=${encodeURIComponent(sseToken)}`;
   const source = new EventSource(url);
 
   source.onmessage = (event) => {

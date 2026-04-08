@@ -9,9 +9,5 @@
 - **Context:** App deployed via Docker + cloudflared. SSE endpoint at `GET /api/admin/sync/runs/:runId/stream`
 - **Blocked by:** Atlassian sync feature implementation
 
-### Verify Prisma migration strategy
-- **What:** Confirm whether the project uses `prisma migrate dev` (migration files) or `prisma db push` (direct schema push) for schema changes
-- **Why:** Adding SyncRun + RoleGroupMapping tables doubles the schema surface. Need to know the deployment workflow before writing the migration.
-- **How:** Check if `packages/server/prisma/migrations/` directory exists. Check Dockerfile and docker-compose for Prisma commands.
-- **Context:** Current schema has 1 model (Application). No migrations directory visible in repo.
-- **Blocked by:** Nothing — can verify immediately
+### ~~Verify Prisma migration strategy~~ (RESOLVED)
+- **Resolved:** Project uses `prisma migrate dev`. Migration `20260407150519_add_sync_tables` has been created and applied successfully.

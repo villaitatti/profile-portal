@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { createSseToken, verifySseToken } from '../lib/sse-token.js';
 import { isScimConfigured } from '../services/atlassian-scim.service.js';
 import {
   runDrySync,
@@ -110,11 +111,34 @@ router.post('/execute/:runId', async (req, res, next) => {
   }
 });
 
+// ── SSE token issuance ─────────────────────────────────────────────
+// Issue a short-lived SSE token (5 min) so the full JWT is never in a query string.
+// The SSE stream endpoint below validates this token instead of the JWT.
+
+router.post('/sse-token', (req, res) => {
+  const userId = req.userId || 'unknown';
+  const token = createSseToken(userId);
+  res.json({ token });
+});
+
 // ── SSE progress stream ────────────────────────────────────────────
-// Auth is handled by tokenFromQueryMiddleware in routes/index.ts
-// which copies ?token= into Authorization header before JWT middleware
+// Uses short-lived SSE token from ?sse_token= (NOT the full JWT).
+// The SSE token is issued by POST /sse-token above and expires in 5 minutes.
 
 router.get('/runs/:runId/stream', async (req, res) => {
+  const sseToken = req.query.sse_token as string | undefined;
+  if (!isDevMode) {
+    if (!sseToken) {
+      res.status(401).json({ error: 'Missing sse_token query parameter' });
+      return;
+    }
+    const { valid } = verifySseToken(sseToken);
+    if (!valid) {
+      res.status(401).json({ error: 'Invalid or expired SSE token' });
+      return;
+    }
+  }
+
   const { runId } = req.params;
 
   // Check if the run exists

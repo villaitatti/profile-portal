@@ -37,6 +37,7 @@ model SyncRun {
   dryRun     SyncRun?  @relation("DryRunExecution", fields: [dryRunId], references: [id])
   executions SyncRun[] @relation("DryRunExecution")
 
+  @@index([status, startedAt(sort: Desc)])
   @@map("sync_runs")
 }
 
@@ -50,5 +51,6 @@ model RoleGroupMapping {
   updatedAt          DateTime @updatedAt @map("updated_at")
 
   @@unique([auth0RoleId, atlassianGroupId])
+  @@index([auth0RoleId])
   @@map("role_group_mappings")
 }

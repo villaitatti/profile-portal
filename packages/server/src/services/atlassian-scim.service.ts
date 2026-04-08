@@ -130,8 +130,14 @@ export async function getUsers(): Promise<ScimUser[]> {
       `/scim/v2/Users?startIndex=${startIndex}&count=${count}`
     );
     all.push(...(result.Resources || []));
-    if (startIndex + count > result.totalResults) break;
-    startIndex += count;
+    const pageSize = result.itemsPerPage || count;
+    if (startIndex + pageSize > result.totalResults) break;
+    startIndex += pageSize;
+  }
+
+  // If we exhausted MAX_PAGES, the directory is truncated — fail fast
+  if (all.length > 0 && all.length % 100 === 0 && all.length >= MAX_PAGES * 100) {
+    throw new Error(`SCIM user fetch exceeded ${MAX_PAGES} pages — directory may be truncated (${all.length} users fetched)`);
   }
 
   return all;
@@ -233,8 +239,13 @@ export async function getGroups(): Promise<ScimGroup[]> {
       `/scim/v2/Groups?startIndex=${startIndex}&count=${count}`
     );
     all.push(...(result.Resources || []));
-    if (startIndex + count > result.totalResults) break;
-    startIndex += count;
+    const pageSize = result.itemsPerPage || count;
+    if (startIndex + pageSize > result.totalResults) break;
+    startIndex += pageSize;
+  }
+
+  if (all.length > 0 && all.length % 100 === 0 && all.length >= MAX_PAGES * 100) {
+    throw new Error(`SCIM group fetch exceeded ${MAX_PAGES} pages — directory may be truncated (${all.length} groups fetched)`);
   }
 
   return all;

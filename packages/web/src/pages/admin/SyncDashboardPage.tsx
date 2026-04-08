@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { useRoles } from '@/api/roles';
@@ -13,6 +13,7 @@ import {
   useSyncRunDetail,
   useSyncStatus,
   subscribeSyncProgress,
+  fetchSseToken,
 } from '@/api/sync';
 import type { SyncProgress, SyncRunDetail } from '@/api/sync';
 import { useQueryClient } from '@tanstack/react-query';
@@ -414,59 +415,65 @@ export function SyncDashboardPage() {
     return () => clearInterval(interval);
   }, [dryRunDetail?.completedAt]);
 
+  // Track active SSE subscription for cleanup on unmount or new run
+  const activeUnsubRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => { activeUnsubRef.current?.(); };
+  }, []);
+
+  const startSseSubscription = useCallback(
+    (runId: string, sseToken: string, onDone: () => void) => {
+      activeUnsubRef.current?.(); // close any prior subscription
+      const unsub = subscribeSyncProgress(
+        runId,
+        sseToken,
+        (p) => setProgress(p),
+        () => { activeUnsubRef.current = null; onDone(); },
+        (err) => {
+          activeUnsubRef.current = null;
+          setProgress({ phase: 'error', step: 0, totalSteps: 0, percentage: 0, description: err });
+          setActiveRunId(null);
+        }
+      );
+      activeUnsubRef.current = unsub;
+    },
+    []
+  );
+
   const handleDryRun = useCallback(async () => {
-    const token = await getToken();
+    const sseToken = await fetchSseToken(getToken);
     startDryRun.mutate(undefined, {
       onSuccess: ({ runId }) => {
         setActiveRunId(runId);
         setStartTime(Date.now());
         setProgress({ phase: 'starting', step: 0, totalSteps: 0, percentage: 0, description: 'Starting dry run...' });
-        const unsub = subscribeSyncProgress(
-          runId,
-          token,
-          (p) => setProgress(p),
-          () => {
-            setLastDryRunId(runId);
-            setActiveRunId(null);
-            queryClient.invalidateQueries({ queryKey: ['sync-runs'] });
-            queryClient.invalidateQueries({ queryKey: ['sync-run', runId] });
-          },
-          (err) => {
-            setProgress({ phase: 'error', step: 0, totalSteps: 0, percentage: 0, description: err });
-            setActiveRunId(null);
-          }
-        );
-        return () => unsub();
+        startSseSubscription(runId, sseToken, () => {
+          setLastDryRunId(runId);
+          setActiveRunId(null);
+          queryClient.invalidateQueries({ queryKey: ['sync-runs'] });
+          queryClient.invalidateQueries({ queryKey: ['sync-run', runId] });
+        });
       },
     });
-  }, [startDryRun, queryClient, getToken]);
+  }, [startDryRun, queryClient, getToken, startSseSubscription]);
 
   const handleExecute = useCallback(async () => {
     if (!lastDryRunId) return;
-    const token = await getToken();
+    const sseToken = await fetchSseToken(getToken);
     executeSyncMutation.mutate(lastDryRunId, {
       onSuccess: ({ runId }) => {
         setActiveRunId(runId);
         setStartTime(Date.now());
         setProgress({ phase: 'starting', step: 0, totalSteps: 0, percentage: 0, description: 'Starting execution...' });
-        const unsub = subscribeSyncProgress(
-          runId,
-          token,
-          (p) => setProgress(p),
-          () => {
-            setLastDryRunId(null);
-            setActiveRunId(null);
-            queryClient.invalidateQueries({ queryKey: ['sync-runs'] });
-          },
-          (err) => {
-            setProgress({ phase: 'error', step: 0, totalSteps: 0, percentage: 0, description: err });
-            setActiveRunId(null);
-          }
-        );
-        return () => unsub();
+        startSseSubscription(runId, sseToken, () => {
+          setLastDryRunId(null);
+          setActiveRunId(null);
+          queryClient.invalidateQueries({ queryKey: ['sync-runs'] });
+        });
       },
     });
-  }, [lastDryRunId, executeSyncMutation, queryClient, getToken]);
+  }, [lastDryRunId, executeSyncMutation, queryClient, getToken, startSseSubscription]);
 
   if (statusLoading) return <LoadingSpinner />;
 

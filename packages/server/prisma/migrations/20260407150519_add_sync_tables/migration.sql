@@ -29,5 +29,11 @@ CREATE TABLE "role_group_mappings" (
 -- CreateIndex
 CREATE UNIQUE INDEX "role_group_mappings_auth0_role_id_atlassian_group_id_key" ON "role_group_mappings"("auth0_role_id", "atlassian_group_id");
 
+-- CreateIndex (speed up sync lookups by auth0_role_id)
+CREATE INDEX "role_group_mappings_auth0_role_id_idx" ON "role_group_mappings"("auth0_role_id");
+
+-- CreateIndex (speed up history/filter queries by status + most recent)
+CREATE INDEX "sync_runs_status_started_at_idx" ON "sync_runs"("status", "started_at" DESC);
+
 -- AddForeignKey
 ALTER TABLE "sync_runs" ADD CONSTRAINT "sync_runs_dry_run_id_fkey" FOREIGN KEY ("dry_run_id") REFERENCES "sync_runs"("id") ON DELETE SET NULL ON UPDATE CASCADE;

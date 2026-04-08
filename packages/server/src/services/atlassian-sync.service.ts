@@ -150,9 +150,11 @@ export function computeDiff(
     roleToGroups.set(m.auth0RoleId, existing);
   }
 
-  // Groups to create (mapping exists, SCIM group doesn't)
+  // Groups to create (mapping exists, SCIM group doesn't) — deduplicate by group name
+  const seenGroupCreates = new Set<string>();
   for (const m of mappings) {
-    if (!m.atlassianGroupId && !current.groups.has(m.atlassianGroupName)) {
+    if (!m.atlassianGroupId && !current.groups.has(m.atlassianGroupName) && !seenGroupCreates.has(m.atlassianGroupName)) {
+      seenGroupCreates.add(m.atlassianGroupName);
       diff.groupsToCreate.push({
         name: m.atlassianGroupName,
         mappedFromRole: m.auth0RoleName,
@@ -240,6 +242,15 @@ export function computeDiff(
     }
   }
 
+  // Deduplicate membership changes by (action, email, groupName)
+  const seenMembership = new Set<string>();
+  diff.membershipChanges = diff.membershipChanges.filter((c) => {
+    const key = `${c.action}:${c.userEmail.toLowerCase()}:${c.groupName}`;
+    if (seenMembership.has(key)) return false;
+    seenMembership.add(key);
+    return true;
+  });
+
   // Build lowercase desired email set for deactivation check
   const desiredEmails = new Set([...desired.keys()].map((e) => e.toLowerCase()));
 
@@ -255,12 +266,23 @@ export function computeDiff(
     }
   }
 
-  // Membership removals: user is in a SCIM group but no longer in the mapped Auth0 role
+  // Build group→roles lookup: all Auth0 roles that grant membership to each group
+  const groupToRoleIds = new Map<string, Set<string>>();
   for (const m of mappings) {
+    const roles = groupToRoleIds.get(m.atlassianGroupName) || new Set();
+    roles.add(m.auth0RoleId);
+    groupToRoleIds.set(m.atlassianGroupName, roles);
+  }
+
+  // Membership removals: user is in a SCIM group but no longer in ANY mapped Auth0 role for that group
+  const seenRemovalGroups = new Set<string>(); // avoid processing same group twice
+  for (const m of mappings) {
+    if (seenRemovalGroups.has(m.atlassianGroupName)) continue;
+    seenRemovalGroups.add(m.atlassianGroupName);
     const group = current.groups.get(m.atlassianGroupName);
     if (!group) continue;
+    const grantingRoles = groupToRoleIds.get(m.atlassianGroupName) || new Set();
     for (const member of group.members || []) {
-      // Find the user email for this SCIM member
       const memberUser = [...current.users.values()].find(
         (u) => u.id === member.value
       );
@@ -268,14 +290,16 @@ export function computeDiff(
       const memberEmail =
         memberUser.emails?.find((e) => e.primary)?.value || memberUser.userName;
       const desiredUser = desired.get(memberEmail?.toLowerCase());
-      if (!desiredUser || !desiredUser.roles.includes(m.auth0RoleId)) {
+      // Only remove if user has NONE of the roles that grant access to this group
+      const hasAnyGrantingRole = desiredUser?.roles.some((r) => grantingRoles.has(r));
+      if (!desiredUser || !hasAnyGrantingRole) {
         diff.membershipChanges.push({
           action: 'remove',
           userEmail: memberEmail,
           groupName: m.atlassianGroupName,
           groupId: group.id,
           userScimId: member.value,
-          reason: `User no longer in Auth0 role ${m.auth0RoleName}`,
+          reason: `User no longer in any Auth0 role granting access to ${m.atlassianGroupName}`,
         });
       }
     }
@@ -362,7 +386,7 @@ async function executeDiff(
         familyName: user.familyName,
         displayName: user.name,
       });
-      newUserScimIds.set(user.email, created.id);
+      newUserScimIds.set(user.email.toLowerCase(), created.id);
       operations.push({
         seq,
         type: 'user_create',
@@ -465,7 +489,7 @@ async function executeDiff(
   for (const change of diff.membershipChanges) {
     seq++;
     const groupId = change.groupId || groupIdByName.get(change.groupName);
-    const userScimId = change.userScimId || newUserScimIds.get(change.userEmail);
+    const userScimId = change.userScimId || newUserScimIds.get(change.userEmail.toLowerCase());
 
     emitter.emit('progress', {
       phase: 'execute',
@@ -650,7 +674,7 @@ export async function executeSync(
       const operations = await executeDiff(diff, mappings, emitter);
 
       const errors = operations.filter((o) => o.status === 'error').length;
-      const status = errors === operations.length ? 'failed' : errors > 0 ? 'partial' : 'completed';
+      const status = operations.length === 0 ? 'completed' : errors === operations.length ? 'failed' : errors > 0 ? 'partial' : 'completed';
 
       const stats = {
         created: operations.filter((o) => o.type === 'user_create' && o.status === 'success').length,

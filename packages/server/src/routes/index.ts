@@ -1,4 +1,4 @@
-import type { Express, Request, Response, NextFunction } from 'express';
+import type { Express } from 'express';
 import { KnownRoles } from '@itatti/shared';
 import { healthRoutes } from './health.routes.js';
 import { applicationsRoutes } from './applications.routes.js';
@@ -32,17 +32,11 @@ export function registerRoutes(app: Express) {
   );
 
   // Admin routes: Atlassian sync (staff-it only)
-  // SSE endpoints use EventSource which can't send Authorization headers,
-  // so we accept the JWT via ?token= query param and inject it into the header
-  function tokenFromQuery(req: Request, _res: Response, next: NextFunction) {
-    if (!req.headers.authorization && req.query.token) {
-      req.headers.authorization = `Bearer ${req.query.token}`;
-    }
-    next();
-  }
+  // Note: The SSE stream endpoint (/runs/:runId/stream) uses short-lived SSE tokens
+  // instead of the full JWT. Tokens are issued via POST /sse-token (auth-protected)
+  // and validated inline by the SSE handler. This avoids exposing JWTs in query strings.
   app.use(
     '/api/admin/sync',
-    tokenFromQuery,
     authMiddleware,
     extractUser,
     requireRole(KnownRoles.STAFF_IT),
