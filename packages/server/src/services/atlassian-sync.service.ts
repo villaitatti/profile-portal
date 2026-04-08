@@ -319,6 +319,12 @@ export function computeDiff(
     groupToRoleIds.set(m.atlassianGroupName, roles);
   }
 
+  // Build a one-time ID→user lookup for O(1) member resolution
+  const userById = new Map<string, ScimUser>();
+  for (const u of current.users.values()) {
+    userById.set(u.id, u);
+  }
+
   // Membership removals: user is in a SCIM group but no longer in ANY mapped Auth0 role for that group
   const seenRemovalGroups = new Set<string>(); // avoid processing same group twice
   for (const m of mappings) {
@@ -328,9 +334,7 @@ export function computeDiff(
     if (!group) continue;
     const grantingRoles = groupToRoleIds.get(m.atlassianGroupName) || new Set();
     for (const member of group.members || []) {
-      const memberUser = [...current.users.values()].find(
-        (u) => u.id === member.value
-      );
+      const memberUser = userById.get(member.value);
       if (!memberUser) continue;
       const memberEmail =
         memberUser.emails?.find((e) => e.primary)?.value || memberUser.userName;
