@@ -1,12 +1,10 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
-import { useRoles } from '@/api/roles';
 import { useApiToken } from '@/api/client';
 import {
   useMappings,
-  useCreateMapping,
-  useDeleteMapping,
   useStartDryRun,
   useExecuteSync,
   useSyncRuns,
@@ -20,8 +18,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   RefreshCw,
   Play,
-  Trash2,
-  Plus,
   AlertCircle,
   CheckCircle2,
   XCircle,
@@ -30,111 +26,6 @@ import {
   ChevronRight,
   Download,
 } from 'lucide-react';
-
-// ── Mapping Table ──────────────────────────────────────────────────
-
-function MappingSection() {
-  const { data: mappings, isLoading } = useMappings();
-  const { data: roles } = useRoles();
-  const createMapping = useCreateMapping();
-  const deleteMapping = useDeleteMapping();
-
-  const [newRoleId, setNewRoleId] = useState('');
-  const [newGroupName, setNewGroupName] = useState('');
-
-  const handleAdd = () => {
-    const role = roles?.find((r) => r.id === newRoleId);
-    if (!role || !newGroupName.trim()) return;
-    createMapping.mutate({
-      auth0RoleId: role.id,
-      auth0RoleName: role.name,
-      atlassianGroupName: newGroupName.trim(),
-    });
-    setNewRoleId('');
-    setNewGroupName('');
-  };
-
-  if (isLoading) return <LoadingSpinner />;
-
-  return (
-    <div className="rounded-xl border bg-card p-6">
-      <h2 className="text-lg font-semibold mb-4">Role-Group Mappings</h2>
-      <p className="text-sm text-muted-foreground mb-4">
-        Map Auth0 roles to Atlassian managed groups. Only mapped roles will be synced.
-      </p>
-
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b text-left">
-              <th className="pb-2 font-medium">Auth0 Role</th>
-              <th className="pb-2 font-medium">Atlassian Group</th>
-              <th className="pb-2 font-medium">Group ID</th>
-              <th className="pb-2 font-medium w-16"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {mappings?.map((m) => (
-              <tr key={m.id} className="border-b">
-                <td className="py-2">{m.auth0RoleName}</td>
-                <td className="py-2">{m.atlassianGroupName}</td>
-                <td className="py-2 text-muted-foreground text-xs font-mono">
-                  {m.atlassianGroupId || <span className="italic">new (will be created)</span>}
-                </td>
-                <td className="py-2">
-                  <button
-                    onClick={() => deleteMapping.mutate(m.id)}
-                    className="p-1 text-muted-foreground hover:text-destructive transition-colors"
-                    title="Remove mapping"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {(!mappings || mappings.length === 0) && (
-              <tr>
-                <td colSpan={4} className="py-4 text-center text-muted-foreground">
-                  No mappings configured. Add a mapping to start syncing.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="mt-4 flex items-center gap-2">
-        <select
-          value={newRoleId}
-          onChange={(e) => setNewRoleId(e.target.value)}
-          className="rounded-md border bg-background px-3 py-1.5 text-sm"
-        >
-          <option value="">Select Auth0 role...</option>
-          {roles?.map((r) => (
-            <option key={r.id} value={r.id}>
-              {r.name}
-            </option>
-          ))}
-        </select>
-        <input
-          type="text"
-          value={newGroupName}
-          onChange={(e) => setNewGroupName(e.target.value)}
-          placeholder="Atlassian group name"
-          className="rounded-md border bg-background px-3 py-1.5 text-sm flex-1"
-        />
-        <button
-          onClick={handleAdd}
-          disabled={!newRoleId || !newGroupName.trim() || createMapping.isPending}
-          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-        >
-          <Plus className="h-4 w-4" />
-          Add
-        </button>
-      </div>
-    </div>
-  );
-}
 
 // ── Progress Bar ───────────────────────────────────────────────────
 
@@ -388,8 +279,9 @@ function SyncHistory() {
 
 // ── Main Page ──────────────────────────────────────────────────────
 
-export function SyncDashboardPage() {
+export function AtlassianSyncPage() {
   const { data: status, isLoading: statusLoading } = useSyncStatus();
+  const { data: mappings, isLoading: mappingsLoading } = useMappings();
   const startDryRun = useStartDryRun();
   const executeSyncMutation = useExecuteSync();
   const queryClient = useQueryClient();
@@ -424,7 +316,7 @@ export function SyncDashboardPage() {
 
   const startSseSubscription = useCallback(
     (runId: string, sseToken: string, onDone: () => void) => {
-      activeUnsubRef.current?.(); // close any prior subscription
+      activeUnsubRef.current?.();
       const unsub = subscribeSyncProgress(
         runId,
         sseToken,
@@ -475,15 +367,16 @@ export function SyncDashboardPage() {
     });
   }, [lastDryRunId, executeSyncMutation, queryClient, getToken, startSseSubscription]);
 
-  if (statusLoading) return <LoadingSpinner />;
+  if (statusLoading || mappingsLoading) return <LoadingSpinner />;
 
+  const hasMappings = mappings && mappings.length > 0;
   const isRunning = !!activeRunId;
   const canExecute = lastDryRunId && dryRunDetail?.status === 'completed' && (ttlRemaining === null || ttlRemaining > 0);
 
   return (
     <div>
       <PageHeader
-        title="Atlassian Sync"
+        title="Sync Users to Atlassian Cloud"
         description="Sync users and groups from Auth0 to Atlassian Cloud via SCIM"
       />
 
@@ -498,14 +391,26 @@ export function SyncDashboardPage() {
         </div>
       )}
 
-      <div className="space-y-6">
-        <MappingSection />
+      {!hasMappings && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 mb-6">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 text-amber-600" />
+            <p className="text-sm text-amber-800">
+              No group mappings configured.{' '}
+              <Link to="/admin/atlassian/mappings" className="font-medium underline hover:no-underline">
+                Configure Group Mappings →
+              </Link>
+            </p>
+          </div>
+        </div>
+      )}
 
+      <div className="space-y-6">
         {/* Sync actions */}
         <div className="flex items-center gap-3">
           <button
             onClick={handleDryRun}
-            disabled={isRunning || !status?.configured}
+            disabled={isRunning || !status?.configured || !hasMappings}
             className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             <RefreshCw className={`h-4 w-4 ${isRunning ? 'animate-spin' : ''}`} />
@@ -528,6 +433,12 @@ export function SyncDashboardPage() {
                 </span>
               )}
             </>
+          )}
+
+          {hasMappings && !isRunning && !lastDryRunId && (
+            <span className="text-sm text-muted-foreground">
+              Run a dry sync to preview changes
+            </span>
           )}
         </div>
 
