@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.4.0] - 2026-04-09
+
+### Added
+- **Searchable combobox component.** Modern dropdown with type-to-search, keyboard navigation, and "create new" option. Used for both Auth0 roles and Atlassian groups on the mapping page.
+- **Confirmation dialog component.** Reusable Radix Dialog for destructive actions with danger variant styling.
+- **Atlassian groups endpoint** (`GET /api/admin/sync/groups`). Returns SCIM managed groups for the searchable dropdown with dev mode mock.
+- **"Added By" audit trail.** New `createdBy` column on role-group mappings, populated from the admin's JWT email. Prisma migration included.
+- 16 new frontend tests (SearchableCombobox, ConfirmDialog, mappings page) and 5 new backend tests (groups endpoint, createdBy, atlassianGroupId).
+
+### Changed
+- **Manage Group Mapping page** (`/admin/atlassian/mappings`) completely redesigned: two-card layout (add form + mappings table), searchable comboboxes replace native dropdowns, table now shows 6 data columns (Auth0 Role, Atlassian Group, Auth0 Role ID, Atlassian Group ID, Added By, Added On).
+- Selecting an existing Atlassian group now resolves the group ID immediately. "new (will be created)" only appears for genuinely new groups.
+- Delete mapping now requires confirmation dialog.
+- Add form is compact (max-w-xl) instead of full-width stretching.
+
+### Fixed
+- **Bug: "new (will be created)" on existing groups.** Previously, typing an existing group name (e.g., "staff-it") always showed "new (will be created)" because the frontend never looked up existing SCIM groups. Now the dropdown fetches and resolves group IDs on selection.
+
 ## [0.3.0] - 2026-04-09
 
 ### Added

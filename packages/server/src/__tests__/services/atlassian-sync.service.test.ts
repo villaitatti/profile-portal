@@ -87,6 +87,7 @@ function makeMapping(overrides: Partial<RoleGroupMapping> = {}): RoleGroupMappin
     auth0RoleName: overrides.auth0RoleName || 'staff-IT',
     atlassianGroupId: 'atlassianGroupId' in overrides ? (overrides.atlassianGroupId as string | null) : 'group-1',
     atlassianGroupName: overrides.atlassianGroupName || 'itatti-all',
+    createdBy: overrides.createdBy || null,
     createdAt: overrides.createdAt || new Date(),
     updatedAt: overrides.updatedAt || new Date(),
   };

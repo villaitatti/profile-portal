@@ -9,8 +9,14 @@ export interface RoleGroupMapping {
   auth0RoleName: string;
   atlassianGroupId: string | null;
   atlassianGroupName: string;
+  createdBy: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AtlassianGroup {
+  id: string;
+  displayName: string;
 }
 
 export interface SyncRunSummary {
@@ -93,6 +99,19 @@ export function useMappings() {
   });
 }
 
+export function useAtlassianGroups() {
+  const getToken = useApiToken();
+  return useQuery({
+    queryKey: ['sync-groups'],
+    queryFn: async () => {
+      const token = await getToken();
+      const res = await apiFetch('/api/admin/sync/groups', { token });
+      return res.json() as Promise<AtlassianGroup[]>;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export function useCreateMapping() {
   const getToken = useApiToken();
   const queryClient = useQueryClient();
@@ -106,7 +125,10 @@ export function useCreateMapping() {
       });
       return res.json() as Promise<RoleGroupMapping>;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['sync-mappings'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sync-mappings'] });
+      queryClient.invalidateQueries({ queryKey: ['sync-groups'] });
+    },
   });
 }
 
