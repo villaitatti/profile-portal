@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AppSidebar } from '@/components/layout/AppSidebar';
@@ -87,5 +87,19 @@ describe('AppSidebar', () => {
 
     const nav = screen.getByRole('navigation', { name: 'Main navigation' });
     expect(nav).toBeInTheDocument();
+  });
+
+  it('calls onNavigate when a link is clicked', () => {
+    setUserRoles(['fellows']);
+    const mockOnNavigate = vi.fn();
+    render(
+      <MemoryRouter>
+        <AppSidebar onNavigate={mockOnNavigate} />
+      </MemoryRouter>
+    );
+
+    const dashboardLink = screen.getByRole('link', { name: /dashboard/i });
+    fireEvent.click(dashboardLink);
+    expect(mockOnNavigate).toHaveBeenCalled();
   });
 });

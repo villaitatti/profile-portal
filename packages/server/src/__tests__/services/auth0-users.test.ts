@@ -83,6 +83,29 @@ describe('listAllUsers', () => {
     expect(mockGetAll).toHaveBeenNthCalledWith(2, expect.objectContaining({ page: 1 }));
   });
 
+  it('stops at maxPages safety cap', async () => {
+    // Simulate every page returning a full 100 users (never terminates naturally)
+    mockGetAll.mockImplementation(() =>
+      Promise.resolve({
+        data: Array.from({ length: 100 }, (_, i) => ({
+          user_id: `u${i}`,
+          email: `user${i}@test.com`,
+          name: `User ${i}`,
+          email_verified: true,
+          last_login: '2026-04-01',
+          created_at: '2025-01-01',
+        })),
+      })
+    );
+
+    const result = await listAllUsers();
+
+    // maxPages is 50, so at most 50 * 100 = 5000 users
+    expect(result).toHaveLength(50 * 100);
+    expect(mockGetAll).toHaveBeenCalledTimes(50);
+    expect(mockGetAll).toHaveBeenNthCalledWith(50, expect.objectContaining({ page: 49 }));
+  });
+
   it('returns correct fields', async () => {
     mockGetAll.mockResolvedValueOnce({
       data: [{

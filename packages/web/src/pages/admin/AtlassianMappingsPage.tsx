@@ -12,7 +12,7 @@ import { Trash2, Plus, ArrowRight } from 'lucide-react';
 
 export function AtlassianMappingsPage() {
   const { data: mappings, isLoading } = useMappings();
-  const { data: roles } = useRoles();
+  const { data: roles, isLoading: rolesLoading } = useRoles();
   const createMapping = useCreateMapping();
   const deleteMapping = useDeleteMapping();
 
@@ -22,16 +22,22 @@ export function AtlassianMappingsPage() {
   const handleAdd = () => {
     const role = roles?.find((r) => r.id === newRoleId);
     if (!role || !newGroupName.trim()) return;
-    createMapping.mutate({
-      auth0RoleId: role.id,
-      auth0RoleName: role.name,
-      atlassianGroupName: newGroupName.trim(),
-    });
-    setNewRoleId('');
-    setNewGroupName('');
+    createMapping.mutate(
+      {
+        auth0RoleId: role.id,
+        auth0RoleName: role.name,
+        atlassianGroupName: newGroupName.trim(),
+      },
+      {
+        onSuccess: () => {
+          setNewRoleId('');
+          setNewGroupName('');
+        },
+      }
+    );
   };
 
-  if (isLoading) return <LoadingSpinner />;
+  if (isLoading || rolesLoading) return <LoadingSpinner />;
 
   const hasMappings = mappings && mappings.length > 0;
 
@@ -66,6 +72,7 @@ export function AtlassianMappingsPage() {
                       onClick={() => deleteMapping.mutate(m.id)}
                       className="p-1 text-muted-foreground hover:text-destructive transition-colors"
                       title="Remove mapping"
+                      aria-label="Remove mapping"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>

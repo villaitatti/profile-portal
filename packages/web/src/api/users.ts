@@ -1,14 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch, useApiToken } from './client';
+import type { Auth0UserListItem } from '@itatti/shared';
 
-export interface Auth0UserListItem {
-  user_id: string;
-  email: string;
-  name?: string;
-  email_verified: boolean;
-  last_login?: string;
-  created_at: string;
-}
+export type { Auth0UserListItem };
 
 export function useAllUsers(enabled: boolean) {
   const getToken = useApiToken();

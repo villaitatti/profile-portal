@@ -18,7 +18,7 @@ export const useUIStore = create<UIState>()(
       sidebarCollapsed: false,
       toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
-      isMobile: false,
+      isMobile: typeof window !== 'undefined' ? window.matchMedia('(max-width: 767px)').matches : false,
       setIsMobile: (mobile) => set({ isMobile: mobile }),
       mobileMenuOpen: false,
       toggleMobileMenu: () => set((state) => ({ mobileMenuOpen: !state.mobileMenuOpen })),

@@ -1,6 +1,7 @@
 import { ManagementClient, AuthenticationClient } from 'auth0';
 import { env } from '../env.js';
 import { randomBytes } from 'crypto';
+import type { Auth0UserListItem } from '@itatti/shared';
 
 const management = new ManagementClient({
   domain: env.AUTH0_DOMAIN,
@@ -94,14 +95,7 @@ export async function listRoles(): Promise<Auth0Role[]> {
   }));
 }
 
-export interface Auth0UserListItem {
-  user_id: string;
-  email: string;
-  name?: string;
-  email_verified: boolean;
-  last_login?: string;
-  created_at: string;
-}
+export type { Auth0UserListItem };
 
 export async function listAllUsers(): Promise<Auth0UserListItem[]> {
   const allUsers: Auth0UserListItem[] = [];

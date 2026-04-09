@@ -15,7 +15,16 @@ export function AuthenticatedLayout() {
     };
     handleChange(mql);
     mql.addEventListener('change', handleChange);
-    return () => mql.removeEventListener('change', handleChange);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeMobileMenu();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      mql.removeEventListener('change', handleChange);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, [setIsMobile, closeMobileMenu]);
 
   return (

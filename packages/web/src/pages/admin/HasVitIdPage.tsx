@@ -59,10 +59,11 @@ function UserTable({ users, query }: { users: Auth0UserListItem[]; query: string
                 <td className="py-2 px-1">{user.email}</td>
                 <td className="py-2 px-1">
                   {user.email_verified ? (
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    <CheckCircle2 className="h-4 w-4 text-green-500" aria-hidden="true" />
                   ) : (
-                    <XCircle className="h-4 w-4 text-muted-foreground" />
+                    <XCircle className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                   )}
+                  <span className="sr-only">{user.email_verified ? 'Email verified' : 'Email not verified'}</span>
                 </td>
                 <td className="py-2 px-1 text-muted-foreground">
                   {user.last_login ? new Date(user.last_login).toLocaleDateString() : 'Never'}
@@ -129,6 +130,7 @@ export function HasVitIdPage() {
             value={searchQuery}
             onChange={handleSearchChange}
             placeholder="Search by name or email..."
+            aria-label="Search by name or email"
             className="w-full rounded-md border bg-background pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
           />
         </div>
@@ -185,13 +187,15 @@ export function HasVitIdPage() {
         <button
           onClick={handleShowAll}
           className="flex items-center gap-2 text-sm font-medium text-primary hover:underline"
+          aria-expanded={showTable}
+          aria-controls="all-users-table"
         >
           {showTable ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           {showTable ? 'Hide all users' : 'Show all users'}
         </button>
 
         {showTable && (
-          <div className="mt-4">
+          <div className="mt-4" id="all-users-table">
             {isLoading ? (
               <table className="w-full text-sm">
                 <thead>

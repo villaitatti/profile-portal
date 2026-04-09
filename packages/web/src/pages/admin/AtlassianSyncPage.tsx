@@ -369,7 +369,8 @@ export function AtlassianSyncPage() {
 
   if (statusLoading || mappingsLoading) return <LoadingSpinner />;
 
-  const hasMappings = mappings && mappings.length > 0;
+  const hasMappings = Array.isArray(mappings) && mappings.length > 0;
+  const mappingsEmpty = Array.isArray(mappings) && mappings.length === 0;
   const isRunning = !!activeRunId;
   const canExecute = lastDryRunId && dryRunDetail?.status === 'completed' && (ttlRemaining === null || ttlRemaining > 0);
 
@@ -391,7 +392,7 @@ export function AtlassianSyncPage() {
         </div>
       )}
 
-      {!hasMappings && (
+      {mappingsEmpty && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 mb-6">
           <div className="flex items-center gap-2">
             <AlertCircle className="h-5 w-5 text-amber-600" />
@@ -410,7 +411,7 @@ export function AtlassianSyncPage() {
         <div className="flex items-center gap-3">
           <button
             onClick={handleDryRun}
-            disabled={isRunning || !status?.configured || !hasMappings}
+            disabled={isRunning || !status?.configured || mappingsEmpty}
             className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             <RefreshCw className={`h-4 w-4 ${isRunning ? 'animate-spin' : ''}`} />

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { isDevMode } from '../env.js';
 import { listAllUsers } from '../services/auth0.service.js';
-import type { Auth0UserListItem } from '../services/auth0.service.js';
+import type { Auth0UserListItem } from '@itatti/shared';
 
 const router = Router();
 
@@ -23,6 +23,8 @@ function getDevMockUsers(): Auth0UserListItem[] {
 // GET /api/admin/users
 router.get('/', async (_req, res, next) => {
   try {
+    res.set('Cache-Control', 'private, max-age=300, stale-while-revalidate=60');
+
     if (isDevMode) {
       res.json(getDevMockUsers());
       return;
