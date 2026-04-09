@@ -18,11 +18,12 @@ function CallbackPage() {
 import { ClaimPage } from '@/pages/claim/ClaimPage';
 import { DashboardPage } from '@/pages/dashboard/DashboardPage';
 import { ProfilePage } from '@/pages/profile/ProfilePage';
-import { AdminPage } from '@/pages/admin/AdminPage';
 import { AppCatalogPage } from '@/pages/admin/AppCatalogPage';
 import { AppFormPage } from '@/pages/admin/AppFormPage';
 import { FellowsManagementPage } from '@/pages/admin/FellowsManagementPage';
-import { SyncDashboardPage } from '@/pages/admin/SyncDashboardPage';
+import { HasVitIdPage } from '@/pages/admin/HasVitIdPage';
+import { AtlassianMappingsPage } from '@/pages/admin/AtlassianMappingsPage';
+import { AtlassianSyncPage } from '@/pages/admin/AtlassianSyncPage';
 
 export const router = createBrowserRouter([
   {
@@ -49,7 +50,7 @@ export const router = createBrowserRouter([
               { path: '/dashboard', element: <DashboardPage /> },
               { path: '/profile', element: <ProfilePage /> },
 
-              // Admin routes: Fellows management (fellows-admin OR staff-it)
+              // VIT ID Administration (fellows-admin OR staff-it)
               {
                 element: (
                   <RoleGuard
@@ -57,19 +58,20 @@ export const router = createBrowserRouter([
                   />
                 ),
                 children: [
-                  { path: '/admin', element: <AdminPage /> },
                   { path: '/admin/fellows', element: <FellowsManagementPage /> },
+                  { path: '/admin/has-vitid', element: <HasVitIdPage /> },
                 ],
               },
 
-              // Admin routes: IT admin (staff-it only)
+              // Portal Settings + Atlassian Cloud (staff-it only)
               {
                 element: <RoleGuard requiredRoles={[KnownRoles.STAFF_IT]} />,
                 children: [
                   { path: '/admin/apps', element: <AppCatalogPage /> },
                   { path: '/admin/apps/new', element: <AppFormPage /> },
                   { path: '/admin/apps/:id/edit', element: <AppFormPage /> },
-                  { path: '/admin/sync', element: <SyncDashboardPage /> },
+                  { path: '/admin/atlassian/mappings', element: <AtlassianMappingsPage /> },
+                  { path: '/admin/atlassian/sync', element: <AtlassianSyncPage /> },
                 ],
               },
             ],

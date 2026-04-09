@@ -7,7 +7,10 @@ import {
   LayoutDashboard,
   User,
   Users,
-  Settings,
+  Search,
+  Grid3X3,
+  Link as LinkIcon,
+  RefreshCw,
   ChevronLeft,
   ChevronRight,
   LogOut,
@@ -36,22 +39,35 @@ const navSections: NavSection[] = [
     ],
   },
   {
-    heading: 'VIT ID Admin',
+    heading: 'VIT ID Administration',
     requiredRoles: [KnownRoles.FELLOWS_ADMIN, KnownRoles.STAFF_IT],
     items: [
-      { label: 'Fellows', path: '/admin/fellows', icon: Users },
+      { label: 'Has VIT ID?', path: '/admin/has-vitid', icon: Search },
+      { label: 'Manage Appointees', path: '/admin/fellows', icon: Users },
     ],
   },
   {
-    heading: 'IT Admin',
+    heading: 'Portal Settings',
     requiredRoles: [KnownRoles.STAFF_IT],
     items: [
-      { label: 'Profile Portal Settings', path: '/admin', icon: Settings },
+      { label: 'Applications Catalog', path: '/admin/apps', icon: Grid3X3 },
+    ],
+  },
+  {
+    heading: 'Atlassian Cloud',
+    requiredRoles: [KnownRoles.STAFF_IT],
+    items: [
+      { label: 'Manage Group Mapping', path: '/admin/atlassian/mappings', icon: LinkIcon },
+      { label: 'Sync Users to Atlassian Cloud', path: '/admin/atlassian/sync', icon: RefreshCw },
     ],
   },
 ];
 
-export function AppSidebar() {
+interface AppSidebarProps {
+  onNavigate?: () => void;
+}
+
+export function AppSidebar({ onNavigate }: AppSidebarProps) {
   const { user, logout } = useAuth0();
   const userRoles = useUserRoles();
   const { sidebarCollapsed, toggleSidebar } = useUIStore();
@@ -99,7 +115,7 @@ export function AppSidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 py-4 pr-0 space-y-6 overflow-visible">
+      <nav className="flex-1 py-4 pr-0 space-y-4 overflow-visible" role="navigation" aria-label="Main navigation">
         {visibleSections.map((section, i) => (
           <div key={i}>
             {section.heading && !sidebarCollapsed && (
@@ -118,6 +134,8 @@ export function AppSidebar() {
                   key={item.path}
                   to={item.path}
                   end
+                  onClick={onNavigate}
+                  {...(sidebarCollapsed ? { 'aria-label': item.label } : {})}
                   className={({ isActive }) =>
                     cn(
                       'group relative flex items-center gap-3 text-[17px] font-medium transition-all duration-200 ease-out',

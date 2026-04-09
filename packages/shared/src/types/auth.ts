@@ -15,6 +15,15 @@ export type TokenClaims = {
   [K in `${typeof AUTH0_NAMESPACE}/civicrm_id`]?: string;
 };
 
+export interface Auth0UserListItem {
+  user_id: string;
+  email: string;
+  name?: string;
+  email_verified: boolean;
+  last_login?: string;
+  created_at: string;
+}
+
 export interface UserProfile {
   firstName: string;
   lastName: string;
