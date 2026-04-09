@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.3.0] - 2026-04-09
+
+### Added
+- **Sidebar redesign.** Restructured navigation into 4 clear sections: main nav, VIT ID Administration, Portal Settings, and Atlassian Cloud. All admin pages now accessible directly from the sidebar.
+- **"Has VIT ID?" page** (`/admin/has-vitid`). Quick-lookup search box with yes/no answer, plus expandable full user table. Lazy-loads from Auth0 Management API with 5-minute client-side cache.
+- **Atlassian page split.** "Manage Group Mapping" (`/admin/atlassian/mappings`) and "Sync Users to Atlassian Cloud" (`/admin/atlassian/sync`) are now separate pages with cross-page navigation CTAs.
+- **Mobile responsive sidebar.** Hamburger menu at <768px with drawer overlay, backdrop, and auto-close on navigation.
+- **Frontend test infrastructure.** Vitest + @testing-library/react set up in the web package. 4 sidebar role-visibility tests.
+- Backend `GET /api/admin/users` endpoint with Auth0 pagination and dev mode mock data. 3 new backend tests for `listAllUsers()`.
+- ARIA navigation landmarks, aria-labels on collapsed sidebar, and keyboard accessibility.
+
+### Changed
+- Sidebar section spacing reduced for tighter visual hierarchy.
+- Renamed "VIT ID Admin" to "VIT ID Administration", "Fellows" to "Manage Appointees", "IT Admin" to "Portal Settings".
+- Removed admin hub page (`/admin`). All admin functions now have direct sidebar entries.
+
+### Removed
+- `AdminPage.tsx` (card-based admin hub, replaced by direct sidebar navigation).
+- `SyncDashboardPage.tsx` (split into AtlassianMappingsPage and AtlassianSyncPage).
+
 ## [0.2.0] - 2026-04-08
 
 ### Added
