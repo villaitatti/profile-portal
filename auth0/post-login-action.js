@@ -3,30 +3,33 @@
  *
  * This action enriches the ID token and access token with:
  * - User roles (from Auth0 RBAC)
- * - CiviCRM contact ID (from app_metadata, set during VIT ID claim)
+ * - App metadata (CiviCRM contact ID, set during VIT ID claim)
+ * - User name and email (for audit trail in admin features)
+ *
+ * NOTE: This file is documentation only. The actual Action lives in the
+ * Auth0 Dashboard (Actions > Flows > Login) and must be updated there.
  *
  * Deployment:
  * 1. Go to Auth0 Dashboard > Actions > Flows > Login
- * 2. Create a new Custom Action
+ * 2. Edit the existing Post-Login Action
  * 3. Paste this code
- * 4. Deploy and add to the Login flow
+ * 4. Deploy
  */
 exports.onExecutePostLogin = async (event, api) => {
-  const namespace = 'https://itatti.harvard.edu';
+  const namespace = 'https://auth0.itatti.harvard.edu';
 
-  // Add user roles to tokens
   if (event.authorization) {
+    // Namespaced claims
     api.idToken.setCustomClaim(`${namespace}/roles`, event.authorization.roles);
-    api.accessToken.setCustomClaim(
-      `${namespace}/roles`,
-      event.authorization.roles
-    );
-  }
+    api.accessToken.setCustomClaim(`${namespace}/roles`, event.authorization.roles);
+    api.idToken.setCustomClaim(`${namespace}/app_metadata`, event.user.app_metadata);
+    api.accessToken.setCustomClaim(`${namespace}/app_metadata`, event.user.app_metadata);
+    api.accessToken.setCustomClaim(`${namespace}/name`, event.user.name);
+    api.accessToken.setCustomClaim(`${namespace}/email`, event.user.email);
 
-  // Add CiviCRM contact ID to tokens (if present)
-  const civicrmId = event.user.app_metadata?.civicrm_id;
-  if (civicrmId) {
-    api.idToken.setCustomClaim(`${namespace}/civicrm_id`, civicrmId);
-    api.accessToken.setCustomClaim(`${namespace}/civicrm_id`, civicrmId);
+    // Temporary: keep the old claim for backwards compatibility
+    api.idToken.setCustomClaim(`roles`, event.authorization.roles);
+    api.accessToken.setCustomClaim(`roles`, event.authorization.roles);
+    api.idToken.setCustomClaim(`app_metadata`, event.user.app_metadata);
   }
 };

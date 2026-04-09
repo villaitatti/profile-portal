@@ -28,6 +28,8 @@ function devAuthMiddleware(req: Request, _res: Response, next: NextFunction) {
     family_name: 'User',
     [ROLES_KEY]: ['fellows', 'fellows-current', 'fellows-admin', 'staff-IT'],
     [APP_METADATA_KEY]: { civicrm_id: '99999' },
+    [`${AUTH0_NAMESPACE}/name`]: 'Dev User',
+    [`${AUTH0_NAMESPACE}/email`]: 'dev@itatti.harvard.edu',
   } as Record<string, unknown>;
   next();
 }
