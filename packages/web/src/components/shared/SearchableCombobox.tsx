@@ -13,12 +13,14 @@ export interface ComboboxOption {
 interface SearchableComboboxProps {
   options: ComboboxOption[];
   value: string;
+  displayValue?: string;
   onSelect: (value: string, label: string) => void;
   onClear?: () => void;
   placeholder: string;
   emptyMessage?: string;
   allowCreate?: boolean;
   onCreateNew?: (value: string) => void;
+  disallowChars?: string;
   disabled?: boolean;
   className?: string;
 }
@@ -26,12 +28,14 @@ interface SearchableComboboxProps {
 export function SearchableCombobox({
   options,
   value,
+  displayValue,
   onSelect,
   onClear,
   placeholder,
   emptyMessage = 'No options found.',
   allowCreate = false,
   onCreateNew,
+  disallowChars,
   disabled = false,
   className,
 }: SearchableComboboxProps) {
@@ -82,11 +86,11 @@ export function SearchableCombobox({
             className
           )}
         >
-          <span className={cn(!selectedOption && 'text-muted-foreground')}>
-            {selectedOption ? selectedOption.label : placeholder}
+          <span className={cn(!selectedOption && !displayValue && 'text-muted-foreground')}>
+            {selectedOption ? selectedOption.label : displayValue || placeholder}
           </span>
           <span className="flex items-center gap-1 ml-2 flex-shrink-0">
-            {selectedOption && onClear && (
+            {(selectedOption || displayValue) && onClear && (
               <span
                 role="button"
                 tabIndex={0}
@@ -114,7 +118,14 @@ export function SearchableCombobox({
               <Command.Input
                 ref={inputRef}
                 value={search}
-                onValueChange={setSearch}
+                onValueChange={(val) => {
+                  if (disallowChars) {
+                    const regex = new RegExp(`[${disallowChars.replace(/[-[\]{}()*+?.,\\^$|#]/g, '\\$&')}]`, 'g');
+                    setSearch(val.replace(regex, ''));
+                  } else {
+                    setSearch(val);
+                  }
+                }}
                 placeholder={`Search ${placeholder.toLowerCase()}...`}
                 className="flex h-9 w-full bg-transparent py-2 text-sm outline-none placeholder:text-muted-foreground"
               />

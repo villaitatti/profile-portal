@@ -133,4 +133,50 @@ describe('SearchableCombobox', () => {
     fireEvent.click(clearBtn);
     expect(onClear).toHaveBeenCalled();
   });
+
+  it('shows displayValue when value does not match any option', () => {
+    render(
+      <SearchableCombobox
+        options={options}
+        value=""
+        displayValue="new-custom-group"
+        onSelect={vi.fn()}
+        onClear={vi.fn()}
+        placeholder="Select group"
+      />
+    );
+    expect(screen.getByText('new-custom-group')).toBeInTheDocument();
+    expect(screen.getByLabelText('Clear selection')).toBeInTheDocument();
+  });
+
+  it('strips disallowed characters from search input', () => {
+    render(
+      <SearchableCombobox
+        options={options}
+        value=""
+        onSelect={vi.fn()}
+        placeholder="Select group"
+        disallowChars=" "
+      />
+    );
+    fireEvent.click(screen.getByRole('combobox'));
+    const input = screen.getByPlaceholderText(/search/i);
+    fireEvent.change(input, { target: { value: 'staff it' } });
+    expect((input as HTMLInputElement).value).toBe('staffit');
+  });
+
+  it('allows all characters when disallowChars is not set', () => {
+    render(
+      <SearchableCombobox
+        options={options}
+        value=""
+        onSelect={vi.fn()}
+        placeholder="Select role"
+      />
+    );
+    fireEvent.click(screen.getByRole('combobox'));
+    const input = screen.getByPlaceholderText(/search/i);
+    fireEvent.change(input, { target: { value: 'staff IT' } });
+    expect((input as HTMLInputElement).value).toBe('staff IT');
+  });
 });
