@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 
 // Polyfill ResizeObserver for jsdom (required by cmdk)
-global.ResizeObserver = class ResizeObserver {
+(globalThis as Record<string, unknown>).ResizeObserver = class ResizeObserver {
   observe() {}
   unobserve() {}
   disconnect() {}
