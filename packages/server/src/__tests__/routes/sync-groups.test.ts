@@ -65,7 +65,7 @@ const app = express();
 app.use(express.json());
 // Mock auth middleware
 app.use((req, _res, next) => {
-  (req as Record<string, unknown>).auth = { email: 'test@example.com', sub: 'auth0|test' };
+  (req as unknown as Record<string, unknown>).auth = { email: 'test@example.com', sub: 'auth0|test' };
   next();
 });
 app.use('/api/admin/sync', syncAdminRoutes);
