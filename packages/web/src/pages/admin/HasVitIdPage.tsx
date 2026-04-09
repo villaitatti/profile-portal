@@ -165,7 +165,7 @@ export function HasVitIdPage() {
               <Auth0ErrorPanel onRetry={() => refetch()} />
             ) : quickResult ? (
               <div className="flex items-center gap-2 text-sm">
-                <CheckCircle2 className="h-5 w-5 text-green-500" />
+                <CheckCircle2 className="h-5 w-5 text-green-500" aria-hidden="true" />
                 <span>
                   Yes, <strong>{quickResult.name || quickResult.email}</strong> has a VIT ID
                   {quickResult.last_login && (
@@ -177,7 +177,7 @@ export function HasVitIdPage() {
               </div>
             ) : (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <XCircle className="h-5 w-5" />
+                <XCircle className="h-5 w-5" aria-hidden="true" />
                 <span>
                   No account found for &ldquo;{searchQuery}&rdquo;. They may not have claimed their VIT ID yet.
                 </span>
