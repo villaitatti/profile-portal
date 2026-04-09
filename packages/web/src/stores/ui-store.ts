@@ -5,6 +5,11 @@ interface UIState {
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
+  isMobile: boolean;
+  setIsMobile: (mobile: boolean) => void;
+  mobileMenuOpen: boolean;
+  toggleMobileMenu: () => void;
+  closeMobileMenu: () => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -13,9 +18,15 @@ export const useUIStore = create<UIState>()(
       sidebarCollapsed: false,
       toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
+      isMobile: false,
+      setIsMobile: (mobile) => set({ isMobile: mobile }),
+      mobileMenuOpen: false,
+      toggleMobileMenu: () => set((state) => ({ mobileMenuOpen: !state.mobileMenuOpen })),
+      closeMobileMenu: () => set({ mobileMenuOpen: false }),
     }),
     {
       name: 'itatti-ui-state',
+      partialize: (state) => ({ sidebarCollapsed: state.sidebarCollapsed }),
     }
   )
 );
