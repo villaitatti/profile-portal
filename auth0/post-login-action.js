@@ -27,7 +27,9 @@ exports.onExecutePostLogin = async (event, api) => {
     api.accessToken.setCustomClaim(`${namespace}/name`, event.user.name);
     api.accessToken.setCustomClaim(`${namespace}/email`, event.user.email);
 
-    // Temporary: keep the old claim for backwards compatibility
+    // TODO: remove by 2026-10 — legacy non-namespaced claims for backwards compatibility.
+    // Once all consumers use namespaced claims (AUTH0_NAMESPACE/roles, AUTH0_NAMESPACE/app_metadata),
+    // these can be deleted from both this file and the Auth0 Dashboard Action.
     api.idToken.setCustomClaim(`roles`, event.authorization.roles);
     api.accessToken.setCustomClaim(`roles`, event.authorization.roles);
     api.idToken.setCustomClaim(`app_metadata`, event.user.app_metadata);

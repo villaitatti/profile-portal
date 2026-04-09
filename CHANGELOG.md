@@ -10,7 +10,7 @@
 ### Changed
 - Mapping form now uses horizontal layout with Auth0 and Atlassian dropdowns side by side, connected by a link icon.
 - "Added On" date format changed to `9 Apr 2026, 16:55` (day month year time).
-- "Added By" now reads the admin's full name from the Auth0 JWT access token (requires updated Post-Login Action).
+- "Added By" now reads the admin's full name from the Auth0 JWT access token (requires an updated Post-Login Action).
 
 ### Fixed
 - **"Added By" column blank.** Auth0 access tokens now include the user's name via a new custom claim in the Post-Login Action. The server reads `AUTH0_NAMESPACE/name` from the JWT.
