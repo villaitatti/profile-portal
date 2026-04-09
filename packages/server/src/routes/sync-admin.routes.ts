@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { createSseToken, verifySseToken } from '../lib/sse-token.js';
-import { isScimConfigured } from '../services/atlassian-scim.service.js';
+import { isScimConfigured, getGroups } from '../services/atlassian-scim.service.js';
 import {
   runDrySync,
   executeSync,
@@ -37,15 +37,29 @@ router.get('/mappings', async (_req, res, next) => {
 router.post('/mappings', async (req, res, next) => {
   try {
     const body = createMappingSchema.parse(req.body);
+    const createdBy = (req.auth as Record<string, unknown>)?.email as string || null;
     const mapping = await prisma.roleGroupMapping.create({
       data: {
         auth0RoleId: body.auth0RoleId,
         auth0RoleName: body.auth0RoleName,
         atlassianGroupName: body.atlassianGroupName,
         atlassianGroupId: body.atlassianGroupId || null,
+        createdBy,
       },
     });
     res.status(201).json(mapping);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── Groups ────────────────────────────────────────────────────────
+
+router.get('/groups', async (_req, res, next) => {
+  try {
+    res.set('Cache-Control', 'no-store');
+    const groups = await getGroups();
+    res.json(groups.map((g) => ({ id: g.id, displayName: g.displayName })));
   } catch (err) {
     next(err);
   }
