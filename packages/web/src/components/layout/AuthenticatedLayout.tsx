@@ -5,7 +5,10 @@ import { AppHeader } from './AppHeader';
 import { useUIStore } from '@/stores/ui-store';
 
 export function AuthenticatedLayout() {
-  const { isMobile, setIsMobile, mobileMenuOpen, closeMobileMenu } = useUIStore();
+  const isMobile = useUIStore((s) => s.isMobile);
+  const setIsMobile = useUIStore((s) => s.setIsMobile);
+  const mobileMenuOpen = useUIStore((s) => s.mobileMenuOpen);
+  const closeMobileMenu = useUIStore((s) => s.closeMobileMenu);
 
   useEffect(() => {
     const mql = window.matchMedia('(max-width: 767px)');

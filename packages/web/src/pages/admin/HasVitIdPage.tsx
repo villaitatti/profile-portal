@@ -16,14 +16,33 @@ function SkeletonRow() {
   );
 }
 
+function Auth0ErrorPanel({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+      <div className="flex items-center gap-2">
+        <AlertCircle className="h-5 w-5 text-amber-600" />
+        <p className="text-sm text-amber-800">
+          Unable to load users from Auth0. Try again later.
+        </p>
+      </div>
+      <button
+        onClick={onRetry}
+        className="mt-2 text-sm text-amber-700 underline hover:no-underline"
+      >
+        Retry
+      </button>
+    </div>
+  );
+}
+
 function UserTable({ users, query }: { users: Auth0UserListItem[]; query: string }) {
   const filtered = useMemo(() => {
-    if (!query.trim()) return users;
-    const q = query.toLowerCase();
+    const q = query.trim().toLowerCase();
+    if (!q) return users;
     return users.filter(
       (u) =>
-        (u.name?.toLowerCase().includes(q)) ||
-        u.email.toLowerCase().includes(q)
+        (u.name?.trim().toLowerCase().includes(q)) ||
+        u.email.trim().toLowerCase().includes(q)
     );
   }, [users, query]);
 
@@ -106,12 +125,11 @@ export function HasVitIdPage() {
 
   // Quick lookup result
   const quickResult = useMemo(() => {
-    if (!searchQuery.trim() || !users) return null;
-    const q = searchQuery.toLowerCase();
-    const match = users.find(
-      (u) => u.email.toLowerCase().includes(q) || u.name?.toLowerCase().includes(q)
+    const q = searchQuery.trim().toLowerCase();
+    if (!q || !users) return null;
+    return users.find(
+      (u) => u.email.trim().toLowerCase().includes(q) || u.name?.trim().toLowerCase().includes(q)
     );
-    return match;
   }, [searchQuery, users]);
 
   return (
@@ -144,20 +162,7 @@ export function HasVitIdPage() {
                 Searching...
               </div>
             ) : isError ? (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="h-5 w-5 text-amber-600" />
-                  <p className="text-sm text-amber-800">
-                    Unable to load users from Auth0. Try again later.
-                  </p>
-                </div>
-                <button
-                  onClick={() => refetch()}
-                  className="mt-2 text-sm text-amber-700 underline hover:no-underline"
-                >
-                  Retry
-                </button>
-              </div>
+              <Auth0ErrorPanel onRetry={() => refetch()} />
             ) : quickResult ? (
               <div className="flex items-center gap-2 text-sm">
                 <CheckCircle2 className="h-5 w-5 text-green-500" />
@@ -214,20 +219,7 @@ export function HasVitIdPage() {
                 </tbody>
               </table>
             ) : isError ? (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 mt-2">
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="h-5 w-5 text-amber-600" />
-                  <p className="text-sm text-amber-800">
-                    Unable to load users from Auth0. Try again later.
-                  </p>
-                </div>
-                <button
-                  onClick={() => refetch()}
-                  className="mt-2 text-sm text-amber-700 underline hover:no-underline"
-                >
-                  Retry
-                </button>
-              </div>
+              <Auth0ErrorPanel onRetry={() => refetch()} />
             ) : users ? (
               <UserTable users={users} query={searchQuery} />
             ) : null}

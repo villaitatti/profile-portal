@@ -23,7 +23,7 @@ function getDevMockUsers(): Auth0UserListItem[] {
 // GET /api/admin/users
 router.get('/', async (_req, res, next) => {
   try {
-    res.set('Cache-Control', 'private, max-age=300, stale-while-revalidate=60');
+    res.set('Cache-Control', 'no-store');
 
     if (isDevMode) {
       res.json(getDevMockUsers());
