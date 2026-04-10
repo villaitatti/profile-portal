@@ -188,7 +188,7 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
           </button>
         )}
         {!sidebarCollapsed && (
-          <p className="text-[10px] text-sidebar-muted-foreground mt-3">Profile Portal v{__APP_VERSION__}</p>
+          <p className="text-xs text-sidebar-muted-foreground/70 mt-3">v{__APP_VERSION__}</p>
         )}
       </div>
     </aside>
