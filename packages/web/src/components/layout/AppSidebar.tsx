@@ -120,7 +120,7 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
           <div key={i}>
             {section.heading && !sidebarCollapsed && (
               <div className="mb-1 px-4">
-                <span className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-sidebar-muted-foreground">
+                <span className="text-xs font-semibold uppercase tracking-[0.16em] text-sidebar-muted-foreground">
                   {section.heading}
                 </span>
               </div>
