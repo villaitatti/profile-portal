@@ -41,6 +41,10 @@ export function registerRoutes(app: Express) {
     usersRoutes
   );
 
+  // SSE stream — mounted BEFORE the JWT chain so EventSource requests (which can't
+  // send Authorization headers) reach the SSE token handler instead of being rejected.
+  app.use('/api/admin/sync', syncSseRoutes);
+
   // Admin routes: Atlassian sync (staff-it only)
   // JWT-protected routes (CRUD, dry-run, execute, history, sse-token issuance)
   app.use(
@@ -50,8 +54,4 @@ export function registerRoutes(app: Express) {
     requireRole(KnownRoles.STAFF_IT),
     syncAdminRoutes
   );
-
-  // SSE stream — mounted OUTSIDE JWT chain. Auth via short-lived SSE token in query param.
-  // Tokens are issued by POST /api/admin/sync/sse-token (JWT-protected above).
-  app.use('/api/admin/sync', syncSseRoutes);
 }
