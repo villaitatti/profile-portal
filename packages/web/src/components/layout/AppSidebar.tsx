@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { useAuth0 } from '@auth0/auth0-react';
+import { useProfile } from '@/api/profile';
 import { useUserRoles } from '@/hooks/useUserRoles';
 import { hasAnyRole, KnownRoles } from '@itatti/shared';
 import { useUIStore } from '@/stores/ui-store';
@@ -69,8 +70,10 @@ interface AppSidebarProps {
 
 export function AppSidebar({ onNavigate }: AppSidebarProps) {
   const { user, logout } = useAuth0();
+  const { data: profile } = useProfile();
   const userRoles = useUserRoles();
   const { sidebarCollapsed, toggleSidebar } = useUIStore();
+  const avatarUrl = profile?.imageUrl || user?.picture;
 
   const visibleSections = navSections.filter(
     (section) =>
@@ -161,8 +164,8 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
         {!sidebarCollapsed ? (
           <div className="flex items-center gap-3">
             <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-              {user?.picture ? (
-                <img src={user.picture} alt="" className="h-8 w-8 rounded-full" />
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="" className="h-8 w-8 rounded-full" />
               ) : (
                 <User className="h-4 w-4 text-primary" />
               )}
