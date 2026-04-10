@@ -6,9 +6,9 @@
 
   --color-background: #f8f9fa;
   --color-foreground: #1d252c;
-  --color-card: #ffffff;
+  --color-card: #fefcfb;
   --color-card-foreground: #1d252c;
-  --color-popover: #ffffff;
+  --color-popover: #fefcfb;
   --color-popover-foreground: #1d252c;
   --color-primary: #ab192d;
   --color-primary-foreground: #ffffff;
@@ -51,5 +51,10 @@
     font-size: 18px;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
   }
 }

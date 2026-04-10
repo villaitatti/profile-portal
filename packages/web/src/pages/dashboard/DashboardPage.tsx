@@ -14,55 +14,44 @@ export function DashboardPage() {
 
   const fullName = profile
     ? `${profile.firstName} ${profile.lastName}`
-    : user?.name || '';
+    : user?.name || 'there';
 
   return (
     <div>
       <PageHeader title="Dashboard" />
 
-      {/* Profile card */}
-      <div className="inline-flex items-center gap-8 border bg-card p-10 mb-12">
-        <div className="h-16 w-16 bg-primary/10 flex items-center justify-center flex-shrink-0">
-          {profile?.imageUrl || user?.picture ? (
-            <img src={profile?.imageUrl || user?.picture} alt="" className="h-16 w-16 object-cover" />
-          ) : (
-            <User className="h-8 w-8 text-primary" />
-          )}
-        </div>
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight text-foreground whitespace-nowrap">
-            {fullName}
-          </h2>
-          <p className="text-base text-muted-foreground mt-1">
-            {user?.email || ''}
-          </p>
+      {/* Welcome banner */}
+      <div className="flex items-center justify-between mb-10">
+        <div className="flex items-center gap-4">
+          <div className="h-10 w-10 bg-primary/10 flex items-center justify-center flex-shrink-0">
+            {profile?.imageUrl || user?.picture ? (
+              <img src={profile?.imageUrl || user?.picture} alt="" className="h-10 w-10 object-cover" />
+            ) : (
+              <User className="h-5 w-5 text-primary" />
+            )}
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground">Welcome back,</p>
+            <h2 className="text-lg font-semibold tracking-tight text-foreground">
+              {fullName}
+            </h2>
+          </div>
         </div>
         <Link
           to="/profile"
-          className="group relative inline-flex items-center gap-2 border-2 border-primary bg-primary text-primary-foreground pl-6 pr-5 py-2.5 text-sm font-semibold tracking-wide uppercase overflow-hidden transition-all duration-300 hover:bg-transparent hover:text-primary hover:shadow-[0_0_20px_rgba(171,25,45,0.2)] flex-shrink-0"
+          className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
         >
-          <span className="absolute inset-0 bg-white translate-y-full transition-transform duration-300 ease-out group-hover:translate-y-0" />
-          <span className="relative">View My Profile</span>
-          <ArrowRight className="relative h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
+          View My Profile
+          <ArrowRight className="h-4 w-4" />
         </Link>
       </div>
 
-      {/* Divider */}
-      <hr className="border-border mb-12" />
-
       {/* Applications */}
-      <div className="mb-10">
+      <div className="mb-8">
         <h2 className="text-2xl font-bold">Web Applications</h2>
-        <div className="w-10 h-[3px] bg-primary mt-2.5 mb-4" />
-        <p className="text-base text-muted-foreground max-w-2xl leading-relaxed">
-          These are the web applications and services you can access with your VIT ID or Harvard Key credentials.
+        <p className="text-base text-muted-foreground mt-2 max-w-2xl leading-relaxed">
+          Access your I Tatti web applications and services using your VIT ID or Harvard Key credentials.
         </p>
-        <div className="mt-5 inline-grid grid-cols-[auto_1fr] gap-x-8 gap-y-3 text-base">
-          <span className="font-semibold text-foreground">VIT ID</span>
-          <span className="text-muted-foreground">Your I Tatti identity, used for internal tools and services managed by I Tatti.</span>
-          <span className="font-semibold text-foreground">Harvard Key</span>
-          <span className="text-muted-foreground">Your Harvard University credential, providing access to university-wide resources and platforms.</span>
-        </div>
       </div>
 
       {isLoading ? (

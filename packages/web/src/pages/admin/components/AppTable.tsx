@@ -1,15 +1,20 @@
+import { useState } from 'react';
 import type { Application } from '@itatti/shared';
 import { Pencil, Trash2, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 
 interface AppTableProps {
   applications: Application[];
-  onDelete: (id: number) => void;
+  onDelete: (id: number) => void | Promise<void>;
   isDeleting?: boolean;
 }
 
 export function AppTable({ applications, onDelete, isDeleting }: AppTableProps) {
+  const [deleteTarget, setDeleteTarget] = useState<Application | null>(null);
+
   return (
+    <>
     <div className="rounded-xl border bg-card overflow-hidden">
       <table className="w-full">
         <thead>
@@ -81,11 +86,7 @@ export function AppTable({ applications, onDelete, isDeleting }: AppTableProps) 
                     <Pencil className="h-4 w-4" />
                   </Link>
                   <button
-                    onClick={() => {
-                      if (confirm(`Delete "${app.name}"?`)) {
-                        onDelete(app.id);
-                      }
-                    }}
+                    onClick={() => setDeleteTarget(app)}
                     disabled={isDeleting}
                     className="p-2 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
                     title="Delete"
@@ -99,5 +100,28 @@ export function AppTable({ applications, onDelete, isDeleting }: AppTableProps) 
         </tbody>
       </table>
     </div>
+    <ConfirmDialog
+      open={!!deleteTarget}
+      onConfirm={async () => {
+        if (deleteTarget) {
+          try {
+            await onDelete(deleteTarget.id);
+            setDeleteTarget(null);
+          } catch {
+            // Dialog stays open — error surfaced by parent via toast
+          }
+        }
+      }}
+      onCancel={() => setDeleteTarget(null)}
+      title="Delete Application"
+      description={
+        deleteTarget
+          ? `Delete "${deleteTarget.name}"? This cannot be undone.`
+          : ''
+      }
+      confirmLabel="Delete"
+      variant="danger"
+    />
+    </>
   );
 }
