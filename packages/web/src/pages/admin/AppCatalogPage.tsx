@@ -11,11 +11,14 @@ export function AppCatalogPage() {
   const { data: apps, isLoading } = useApplications();
   const deleteApp = useDeleteApplication();
 
-  const handleDelete = (id: number) => {
-    deleteApp.mutate(id, {
-      onSuccess: () => toast.success('Application deleted'),
-      onError: () => toast.error('Failed to delete application'),
-    });
+  const handleDelete = async (id: number) => {
+    try {
+      await deleteApp.mutateAsync(id);
+      toast.success('Application deleted');
+    } catch (err) {
+      toast.error('Failed to delete application');
+      throw err; // re-throw so dialog stays open
+    }
   };
 
   if (isLoading) return <LoadingSpinner />;

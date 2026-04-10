@@ -5,7 +5,9 @@ export function PublicLayout() {
   return (
     <div className="min-h-screen bg-background">
       <header className="h-16 border-b border-primary/10 bg-card flex items-center px-6">
-        <img src={itattiLogo} alt="I Tatti" className="h-8 object-contain" />
+        <div className="h-8 w-32 flex-shrink-0">
+          <img src={itattiLogo} alt="I Tatti" className="h-full w-full object-contain object-left" />
+        </div>
         <span className="ml-3 text-sm text-muted-foreground">
           Profile Portal
         </span>

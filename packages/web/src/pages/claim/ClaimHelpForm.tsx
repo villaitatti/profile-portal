@@ -134,7 +134,10 @@ export function ClaimHelpForm() {
 
         {submitError && (
           <p className="text-sm text-destructive">
-            Something went wrong. Please try again, or contact IT directly at itatti_it@harvard.edu.
+            Something went wrong. Please try again, or contact IT directly at{' '}
+            <a href="mailto:itatti_it@harvard.edu" className="underline hover:no-underline">
+              itatti_it@harvard.edu
+            </a>.
           </p>
         )}
 

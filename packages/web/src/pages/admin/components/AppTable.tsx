@@ -6,7 +6,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 
 interface AppTableProps {
   applications: Application[];
-  onDelete: (id: number) => void;
+  onDelete: (id: number) => void | Promise<void>;
   isDeleting?: boolean;
 }
 
@@ -102,10 +102,14 @@ export function AppTable({ applications, onDelete, isDeleting }: AppTableProps) 
     </div>
     <ConfirmDialog
       open={!!deleteTarget}
-      onConfirm={() => {
+      onConfirm={async () => {
         if (deleteTarget) {
-          onDelete(deleteTarget.id);
-          setDeleteTarget(null);
+          try {
+            await onDelete(deleteTarget.id);
+            setDeleteTarget(null);
+          } catch {
+            // Dialog stays open — error surfaced by parent via toast
+          }
         }
       }}
       onCancel={() => setDeleteTarget(null)}
