@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.4.2] - 2026-04-10
+
+### Changed
+- Dashboard profile card replaced with a compact welcome banner so the application grid is the visual anchor of the page.
+- Card and popover backgrounds tinted from pure white to warm `#fefcfb` for brand cohesion.
+- Public claim page header now shows the I Tatti logo instead of text-only.
+- AppHeader no longer renders an invisible spacer on desktop.
+- Sidebar version text bumped from 10px to readable size.
+- "Log in with" label renamed to "Authentication" on the app form.
+- Sync page description simplified (removed "via SCIM" jargon).
+
+### Fixed
+- Delete confirmation in Applications Catalog now uses the shared ConfirmDialog instead of the native browser `confirm()`.
+- Help request form now shows an error message on API failure instead of silently displaying success.
+- Fellows table now paginates at 25 rows with Previous/Next controls and a count indicator.
+
+### Added
+- Global `:focus-visible` outline style using the primary crimson color for keyboard navigation.
+- `.impeccable.md` design context file for future design skill runs.
+
 ## [0.4.1] - 2026-04-09
 
 ### Added
