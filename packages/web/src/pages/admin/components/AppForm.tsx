@@ -111,7 +111,7 @@ export function AppForm({
 
       <div>
         <label className="block text-sm font-medium mb-1.5">
-          Log in with
+          Authentication
         </label>
         <div className="flex gap-4">
           <label className="flex items-center gap-2 cursor-pointer">
