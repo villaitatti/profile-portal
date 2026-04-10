@@ -164,6 +164,17 @@ function DiffPreview({ run }: { run: SyncRunDetail }) {
 
 // ── Sync History ───────────────────────────────────────────────────
 
+function isDryRun(run: { dryRunId: string | null }) {
+  return run.dryRunId === null;
+}
+
+function runLabel(run: { status: string; dryRunId: string | null }) {
+  if (isDryRun(run)) {
+    return run.status === 'completed' ? 'Dry run completed' : `Dry run ${run.status}`;
+  }
+  return run.status === 'completed' ? 'Sync completed' : `Sync ${run.status}`;
+}
+
 function SyncHistory() {
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -173,8 +184,11 @@ function SyncHistory() {
   if (isLoading) return <LoadingSpinner variant="panel" rows={5} />;
   if (!data?.runs.length) return null;
 
-  const statusIcon = (status: string) => {
-    switch (status) {
+  const statusIcon = (run: { status: string; dryRunId: string | null }) => {
+    if (isDryRun(run) && run.status === 'completed') {
+      return <CheckCircle2 className="h-4 w-4 text-blue-500" />;
+    }
+    switch (run.status) {
       case 'completed': return <CheckCircle2 className="h-4 w-4 text-green-500" />;
       case 'failed': return <XCircle className="h-4 w-4 text-destructive" />;
       case 'partial': return <AlertCircle className="h-4 w-4 text-amber-500" />;
@@ -193,8 +207,8 @@ function SyncHistory() {
               className="w-full flex items-center gap-3 p-3 text-left hover:bg-muted/50 transition-colors"
             >
               {expandedId === run.id ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-              {statusIcon(run.status)}
-              <span className="text-sm font-medium">{run.status}</span>
+              {statusIcon(run)}
+              <span className="text-sm font-medium">{runLabel(run)}</span>
               <span className="text-xs text-muted-foreground">
                 {new Date(run.startedAt).toLocaleString()}
               </span>
@@ -210,8 +224,14 @@ function SyncHistory() {
 
             {expandedId === run.id && detail && (
               <div className="border-t p-3 text-sm">
+                {isDryRun(run) && run.status === 'completed' && (
+                  <p className="text-xs text-blue-600 font-medium mb-3">
+                    Preview only — no changes were applied to Atlassian Cloud.
+                  </p>
+                )}
+
                 {detail.stats && (
-                  <div className="flex gap-4 mb-3 text-xs">
+                  <div className="flex flex-wrap gap-4 mb-3 text-xs">
                     {detail.stats.created > 0 && <span className="text-green-600">+{detail.stats.created} created</span>}
                     {detail.stats.updated > 0 && <span className="text-amber-600">{detail.stats.updated} updated</span>}
                     {detail.stats.deactivated > 0 && <span className="text-red-600">{detail.stats.deactivated} deactivated</span>}
@@ -221,6 +241,9 @@ function SyncHistory() {
                     {detail.stats.errors > 0 && <span className="text-destructive">{detail.stats.errors} errors</span>}
                   </div>
                 )}
+
+                {/* Diff details — show who is affected */}
+                {detail.diff && <HistoryDiffDetail diff={detail.diff} /> }
 
                 {detail.result?.operations && (
                   <div className="max-h-60 overflow-y-auto space-y-1">
@@ -271,6 +294,73 @@ function SyncHistory() {
           >
             Next
           </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HistoryDiffDetail({ diff }: { diff: SyncRunDetail['diff'] }) {
+  const hasContent =
+    diff.usersToCreate?.length > 0 ||
+    diff.usersToUpdate?.length > 0 ||
+    diff.usersToDeactivate?.length > 0 ||
+    diff.groupsToCreate?.length > 0 ||
+    diff.membershipChanges?.length > 0;
+
+  if (!hasContent) return null;
+
+  return (
+    <div className="space-y-3 mb-3 text-xs">
+      {diff.usersToCreate?.length > 0 && (
+        <div>
+          <h4 className="font-medium text-green-600 mb-1">Users to create ({diff.usersToCreate.length})</h4>
+          {diff.usersToCreate.map((u, i) => (
+            <div key={i} className="py-0.5">{u.name} <span className="text-muted-foreground">({u.email})</span></div>
+          ))}
+        </div>
+      )}
+      {diff.usersToUpdate?.length > 0 && (
+        <div>
+          <h4 className="font-medium text-amber-600 mb-1">Users to update ({diff.usersToUpdate.length})</h4>
+          {diff.usersToUpdate.map((u, i) => (
+            <div key={i} className="py-0.5">
+              {u.email}{' '}
+              <span className="text-muted-foreground">
+                {Object.entries(u.changes).map(([k, v]) => `${k}: ${v.from} → ${v.to}`).join(', ')}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {diff.usersToDeactivate?.length > 0 && (
+        <div>
+          <h4 className="font-medium text-red-600 mb-1">Users to deactivate ({diff.usersToDeactivate.length})</h4>
+          {diff.usersToDeactivate.map((u, i) => (
+            <div key={i} className="py-0.5">{u.name} <span className="text-muted-foreground">({u.email})</span></div>
+          ))}
+        </div>
+      )}
+      {diff.groupsToCreate?.length > 0 && (
+        <div>
+          <h4 className="font-medium text-blue-600 mb-1">Groups to create ({diff.groupsToCreate.length})</h4>
+          {diff.groupsToCreate.map((g, i) => (
+            <div key={i} className="py-0.5"><span className="font-mono">{g.name}</span> <span className="text-muted-foreground">(from role: {g.mappedFromRole})</span></div>
+          ))}
+        </div>
+      )}
+      {diff.membershipChanges?.length > 0 && (
+        <div>
+          <h4 className="font-medium text-purple-600 mb-1">Membership changes ({diff.membershipChanges.length})</h4>
+          {diff.membershipChanges.map((c, i) => (
+            <div key={i} className="py-0.5">
+              <span className={c.action === 'add' ? 'text-green-600' : 'text-red-600'}>
+                {c.action === 'add' ? '+' : '-'}
+              </span>{' '}
+              {c.userEmail} → {c.groupName}
+              <span className="text-muted-foreground ml-1">({c.reason})</span>
+            </div>
+          ))}
         </div>
       )}
     </div>

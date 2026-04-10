@@ -85,7 +85,8 @@ router.post('/dry-run', async (req, res, next) => {
       return;
     }
 
-    const triggeredBy = (req.auth as Record<string, unknown>)?.email as string || req.userId || 'unknown';
+    const auth = req.auth as Record<string, unknown> | undefined;
+    const triggeredBy = (auth?.[`${AUTH0_NAMESPACE}/name`] as string) || (auth?.email as string) || req.userId || 'unknown';
     const { runId, emitter } = await runDrySync(triggeredBy);
     storeEmitter(runId, emitter);
     res.status(202).json({ runId });
@@ -109,7 +110,8 @@ router.post('/execute/:runId', async (req, res, next) => {
       return;
     }
 
-    const triggeredBy = (req.auth as Record<string, unknown>)?.email as string || req.userId || 'unknown';
+    const auth = req.auth as Record<string, unknown> | undefined;
+    const triggeredBy = (auth?.[`${AUTH0_NAMESPACE}/name`] as string) || (auth?.email as string) || req.userId || 'unknown';
     const { runId, emitter } = await executeSync(req.params.runId, triggeredBy);
     storeEmitter(runId, emitter);
     res.status(202).json({ runId });
