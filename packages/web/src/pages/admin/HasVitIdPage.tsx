@@ -48,35 +48,35 @@ function UserTable({ users, query }: { users: Auth0UserListItem[]; query: string
 
   if (filtered.length === 0 && query.trim()) {
     return (
-      <div className="text-center py-8 text-muted-foreground">
+      <div className="py-8 text-center text-muted-foreground">
         <p>No users found matching &ldquo;{query}&rdquo;.</p>
-        <p className="text-sm mt-1">They may not have claimed their VIT ID yet.</p>
+        <p className="mt-1 text-[0.95rem]">They may not have claimed their VIT ID yet.</p>
       </div>
     );
   }
 
   return (
     <>
-      <p className="text-sm text-muted-foreground mb-3">
+      <p className="mb-4 text-[0.95rem] text-muted-foreground">
         {users.length} users total{query.trim() ? `, ${filtered.length} matching '${query}'` : ''}
       </p>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-[0.95rem]">
           <thead>
             <tr className="border-b text-left">
-              <th className="pb-2 font-medium">Name</th>
-              <th className="pb-2 font-medium">Email</th>
-              <th className="pb-2 font-medium">Email Verified</th>
-              <th className="pb-2 font-medium">Last Login</th>
-              <th className="pb-2 font-medium">Signed Up</th>
+              <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Name</th>
+              <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Email</th>
+              <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Email Verified</th>
+              <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Last Login</th>
+              <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Signed Up</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((user) => (
               <tr key={user.user_id} className="border-b">
-                <td className="py-2 px-1">{user.name || '—'}</td>
-                <td className="py-2 px-1">{user.email}</td>
-                <td className="py-2 px-1">
+                <td className="px-1 py-3">{user.name || '—'}</td>
+                <td className="px-1 py-3">{user.email}</td>
+                <td className="px-1 py-3">
                   {user.email_verified ? (
                     <CheckCircle2 className="h-4 w-4 text-green-500" aria-hidden="true" />
                   ) : (
@@ -84,10 +84,10 @@ function UserTable({ users, query }: { users: Auth0UserListItem[]; query: string
                   )}
                   <span className="sr-only">{user.email_verified ? 'Email verified' : 'Email not verified'}</span>
                 </td>
-                <td className="py-2 px-1 text-muted-foreground">
+                <td className="px-1 py-3 text-muted-foreground">
                   {user.last_login ? new Date(user.last_login).toLocaleDateString() : 'Never'}
                 </td>
-                <td className="py-2 px-1 text-muted-foreground">
+                <td className="px-1 py-3 text-muted-foreground">
                   {new Date(user.created_at).toLocaleDateString()}
                 </td>
               </tr>
@@ -140,7 +140,7 @@ export function HasVitIdPage() {
       />
 
       {/* Search box */}
-      <div className="rounded-xl border bg-card p-6 mb-6">
+      <div className="mb-6 rounded-2xl border bg-card p-6">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input
@@ -149,7 +149,7 @@ export function HasVitIdPage() {
             onChange={handleSearchChange}
             placeholder="Search by name or email..."
             aria-label="Search by name or email"
-            className="w-full rounded-md border bg-background pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            className="w-full rounded-md border bg-background py-2.5 pl-10 pr-4 text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
         </div>
 
@@ -157,14 +157,14 @@ export function HasVitIdPage() {
         {fetchTriggered && searchQuery.trim() && (
           <div className="mt-4">
             {isLoading ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2 text-[0.95rem] text-muted-foreground">
                 <div className="h-4 w-4 border-2 border-muted-foreground border-t-transparent rounded-full animate-spin" />
                 Searching...
               </div>
             ) : isError ? (
               <Auth0ErrorPanel onRetry={() => refetch()} />
             ) : quickResult ? (
-              <div className="flex items-center gap-2 text-sm">
+              <div className="flex items-center gap-2 text-[0.95rem]">
                 <CheckCircle2 className="h-5 w-5 text-green-500" aria-hidden="true" />
                 <span>
                   Yes, <strong>{quickResult.name || quickResult.email}</strong> has a VIT ID
@@ -176,7 +176,7 @@ export function HasVitIdPage() {
                 </span>
               </div>
             ) : (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2 text-[0.95rem] text-muted-foreground">
                 <XCircle className="h-5 w-5" aria-hidden="true" />
                 <span>
                   No account found for &ldquo;{searchQuery}&rdquo;. They may not have claimed their VIT ID yet.
@@ -188,10 +188,10 @@ export function HasVitIdPage() {
       </div>
 
       {/* Expandable full table */}
-      <div className="rounded-xl border bg-card p-6">
+      <div className="rounded-2xl border bg-card p-6">
         <button
           onClick={handleShowAll}
-          className="flex items-center gap-2 text-sm font-medium text-primary hover:underline"
+          className="flex items-center gap-2 text-[0.95rem] font-semibold text-primary hover:underline"
           aria-expanded={showTable}
           aria-controls="all-users-table"
         >
@@ -202,14 +202,14 @@ export function HasVitIdPage() {
         {showTable && (
           <div className="mt-4" id="all-users-table">
             {isLoading ? (
-              <table className="w-full text-sm">
+              <table className="w-full text-[0.95rem]">
                 <thead>
                   <tr className="border-b text-left">
-                    <th className="pb-2 font-medium">Name</th>
-                    <th className="pb-2 font-medium">Email</th>
-                    <th className="pb-2 font-medium">Email Verified</th>
-                    <th className="pb-2 font-medium">Last Login</th>
-                    <th className="pb-2 font-medium">Signed Up</th>
+                    <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Name</th>
+                    <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Email</th>
+                    <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Email Verified</th>
+                    <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Last Login</th>
+                    <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Signed Up</th>
                   </tr>
                 </thead>
                 <tbody>

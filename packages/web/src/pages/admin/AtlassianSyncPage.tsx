@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
+import { LoadingSpinner, SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { useApiToken } from '@/api/client';
 import {
   useMappings,
@@ -170,7 +170,7 @@ function SyncHistory() {
   const { data, isLoading } = useSyncRuns(page);
   const { data: detail } = useSyncRunDetail(expandedId);
 
-  if (isLoading) return <LoadingSpinner />;
+  if (isLoading) return <LoadingSpinner variant="panel" rows={5} />;
   if (!data?.runs.length) return null;
 
   const statusIcon = (status: string) => {
@@ -367,7 +367,7 @@ export function AtlassianSyncPage() {
     });
   }, [lastDryRunId, executeSyncMutation, queryClient, getToken, startSseSubscription]);
 
-  if (statusLoading || mappingsLoading) return <LoadingSpinner />;
+  if (statusLoading || mappingsLoading) return <AtlassianSyncPageSkeleton />;
 
   const hasMappings = Array.isArray(mappings) && mappings.length > 0;
   const mappingsEmpty = Array.isArray(mappings) && mappings.length === 0;
@@ -382,7 +382,7 @@ export function AtlassianSyncPage() {
       />
 
       {!status?.configured && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 mb-6">
+        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
           <div className="flex items-center gap-2">
             <AlertCircle className="h-5 w-5 text-amber-600" />
             <p className="text-sm text-amber-800">
@@ -393,7 +393,7 @@ export function AtlassianSyncPage() {
       )}
 
       {mappingsEmpty && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 mb-6">
+        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
           <div className="flex items-center gap-2">
             <AlertCircle className="h-5 w-5 text-amber-600" />
             <p className="text-sm text-amber-800">
@@ -412,7 +412,7 @@ export function AtlassianSyncPage() {
           <button
             onClick={handleDryRun}
             disabled={isRunning || startDryRun.isPending || !status?.configured || mappingsEmpty}
-            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             <RefreshCw className={`h-4 w-4 ${isRunning ? 'animate-spin' : ''}`} />
             Run Dry Sync
@@ -423,13 +423,13 @@ export function AtlassianSyncPage() {
               <button
                 onClick={handleExecute}
                 disabled={isRunning}
-                className="inline-flex items-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-full bg-green-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50"
               >
                 <Play className="h-4 w-4" />
                 Execute Sync
               </button>
               {ttlRemaining !== null && (
-                <span className="text-xs text-muted-foreground">
+                <span className="text-[0.82rem] text-muted-foreground">
                   Valid for {Math.floor(ttlRemaining / 60000)}m {Math.floor((ttlRemaining % 60000) / 1000)}s
                 </span>
               )}
@@ -437,7 +437,7 @@ export function AtlassianSyncPage() {
           )}
 
           {hasMappings && !isRunning && !lastDryRunId && (
-            <span className="text-sm text-muted-foreground">
+            <span className="text-[0.95rem] text-muted-foreground">
               Run a dry sync to preview changes
             </span>
           )}
@@ -451,6 +451,64 @@ export function AtlassianSyncPage() {
 
         {/* Sync history */}
         <SyncHistory />
+      </div>
+    </div>
+  );
+}
+
+function AtlassianSyncPageSkeleton() {
+  return (
+    <div className="space-y-6 motion-safe:animate-pulse">
+      <div className="space-y-3">
+        <SkeletonBlock className="h-10 w-80 rounded-full" />
+        <SkeletonBlock className="h-5 w-[32rem] max-w-full rounded-full" />
+      </div>
+
+      <div className="space-y-6">
+        <div className="flex items-center gap-3">
+          <SkeletonBlock className="h-10 w-32 rounded-full" />
+          <SkeletonBlock className="h-10 w-32 rounded-full" />
+          <SkeletonBlock className="h-4 w-40 rounded-full" />
+        </div>
+
+        <div className="rounded-2xl border bg-card p-6">
+          <div className="mb-3 flex items-center justify-between gap-4">
+            <SkeletonBlock className="h-5 w-52 rounded-full" />
+            <SkeletonBlock className="h-4 w-16 rounded-full" />
+          </div>
+          <SkeletonBlock className="h-2 w-full rounded-full" />
+          <SkeletonBlock className="mt-3 h-4 w-28 rounded-full" />
+        </div>
+
+        <div className="rounded-2xl border bg-card p-6">
+          <SkeletonBlock className="mb-4 h-6 w-48 rounded-full" />
+          <div className="space-y-4">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <div key={index} className="space-y-2">
+                <SkeletonBlock className="h-4 w-44 rounded-full" />
+                <SkeletonBlock className="h-4 w-full rounded-full" />
+                <SkeletonBlock className="h-4 w-5/6 rounded-full" />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border bg-card p-6">
+          <SkeletonBlock className="mb-4 h-6 w-32 rounded-full" />
+          <div className="space-y-3">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="rounded-xl border border-border/80 bg-background/70 px-4 py-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <SkeletonBlock className="h-4 w-4 rounded-full bg-muted/80" />
+                    <SkeletonBlock className="h-4 w-24 rounded-full" />
+                  </div>
+                  <SkeletonBlock className="h-3.5 w-28 rounded-full" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

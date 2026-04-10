@@ -19,7 +19,7 @@ export function RoleMultiSelect({ value, onChange }: RoleMultiSelectProps) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <div className="flex items-center gap-2 text-[0.95rem] text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
         Loading roles...
       </div>
@@ -30,11 +30,11 @@ export function RoleMultiSelect({ value, onChange }: RoleMultiSelectProps) {
     <div>
       {/* Selected roles */}
       {value.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-3">
+        <div className="mb-3 flex flex-wrap gap-1.5">
           {value.map((role) => (
             <span
               key={role}
-              className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2.5 py-0.5 text-xs font-medium"
+              className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-[0.78rem] font-medium text-primary"
             >
               {role}
               <button
@@ -50,11 +50,11 @@ export function RoleMultiSelect({ value, onChange }: RoleMultiSelectProps) {
       )}
 
       {/* Available roles */}
-      <div className="border rounded-md max-h-48 overflow-y-auto">
+      <div className="max-h-48 overflow-y-auto rounded-md border">
         {roles?.map((role) => (
           <label
             key={role.id}
-            className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-pointer"
+            className="flex cursor-pointer items-center gap-3 px-3 py-2.5 hover:bg-muted/50"
           >
             <input
               type="checkbox"
@@ -63,9 +63,9 @@ export function RoleMultiSelect({ value, onChange }: RoleMultiSelectProps) {
               className="rounded border-input"
             />
             <div>
-              <span className="text-sm font-medium">{role.name}</span>
+              <span className="text-[0.95rem] font-medium">{role.name}</span>
               {role.description && (
-                <span className="text-xs text-muted-foreground ml-2">
+                <span className="ml-2 text-[0.78rem] text-muted-foreground">
                   {role.description}
                 </span>
               )}
@@ -73,7 +73,7 @@ export function RoleMultiSelect({ value, onChange }: RoleMultiSelectProps) {
           </label>
         ))}
         {(!roles || roles.length === 0) && (
-          <p className="text-sm text-muted-foreground p-3">No roles available</p>
+          <p className="p-3 text-[0.95rem] text-muted-foreground">No roles available</p>
         )}
       </div>
     </div>

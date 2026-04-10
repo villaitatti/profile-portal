@@ -51,14 +51,14 @@ export function AppForm({
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       <div>
-        <label htmlFor="name" className="block text-sm font-medium mb-1.5">
+        <label htmlFor="name" className="mb-1.5 block text-[0.95rem] font-medium">
           Application name
         </label>
         <input
           {...register('name')}
           type="text"
           id="name"
-          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          className="w-full rounded-md border border-input bg-background px-3.5 py-2.5 text-base shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
         />
         {errors.name && (
           <p className="text-sm text-destructive mt-1">{errors.name.message}</p>
@@ -66,7 +66,7 @@ export function AppForm({
       </div>
 
       <div>
-        <label htmlFor="url" className="block text-sm font-medium mb-1.5">
+        <label htmlFor="url" className="mb-1.5 block text-[0.95rem] font-medium">
           Application URL
         </label>
         <input
@@ -74,7 +74,7 @@ export function AppForm({
           type="url"
           id="url"
           placeholder="https://..."
-          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          className="w-full rounded-md border border-input bg-background px-3.5 py-2.5 text-base shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
         />
         {errors.url && (
           <p className="text-sm text-destructive mt-1">{errors.url.message}</p>
@@ -82,19 +82,19 @@ export function AppForm({
       </div>
 
       <div>
-        <label htmlFor="description" className="block text-sm font-medium mb-1.5">
+        <label htmlFor="description" className="mb-1.5 block text-[0.95rem] font-medium">
           Description <span className="text-muted-foreground">(optional)</span>
         </label>
         <textarea
           {...register('description')}
           id="description"
-          rows={2}
-          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+          rows={3}
+          className="w-full resize-none rounded-md border border-input bg-background px-3.5 py-2.5 text-base shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
         />
       </div>
 
       <div>
-        <label htmlFor="imageUrl" className="block text-sm font-medium mb-1.5">
+        <label htmlFor="imageUrl" className="mb-1.5 block text-[0.95rem] font-medium">
           Preview image URL <span className="text-muted-foreground">(optional — screenshot or homepage image)</span>
         </label>
         <input
@@ -102,7 +102,7 @@ export function AppForm({
           type="url"
           id="imageUrl"
           placeholder="https://..."
-          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          className="w-full rounded-md border border-input bg-background px-3.5 py-2.5 text-base shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
         />
         {errors.imageUrl && (
           <p className="text-sm text-destructive mt-1">{errors.imageUrl.message}</p>
@@ -110,7 +110,7 @@ export function AppForm({
       </div>
 
       <div>
-        <label className="block text-sm font-medium mb-1.5">
+        <label className="mb-1.5 block text-[0.95rem] font-medium">
           Log in with
         </label>
         <div className="flex gap-4">
@@ -121,7 +121,7 @@ export function AppForm({
               value="vit-id"
               className="accent-primary"
             />
-            <span className="text-sm">VIT ID</span>
+            <span className="text-[0.95rem]">VIT ID</span>
           </label>
           <label className="flex items-center gap-2 cursor-pointer">
             <input
@@ -130,25 +130,25 @@ export function AppForm({
               value="harvard-key"
               className="accent-primary"
             />
-            <span className="text-sm">Harvard Key</span>
+            <span className="text-[0.95rem]">Harvard Key</span>
           </label>
         </div>
       </div>
 
       <div>
-        <label htmlFor="sortOrder" className="block text-sm font-medium mb-1.5">
+        <label htmlFor="sortOrder" className="mb-1.5 block text-[0.95rem] font-medium">
           Sort order
         </label>
         <input
           {...register('sortOrder')}
           type="number"
           id="sortOrder"
-          className="w-24 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          className="w-28 rounded-md border border-input bg-background px-3.5 py-2.5 text-base shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium mb-1.5">
+        <label className="mb-1.5 block text-[0.95rem] font-medium">
           Visible to roles
         </label>
         <Controller
@@ -168,7 +168,7 @@ export function AppForm({
       <button
         type="submit"
         disabled={isSubmitting}
-        className="inline-flex items-center justify-center rounded-md bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 transition-colors disabled:opacity-50"
+        className="inline-flex items-center justify-center rounded-full bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50"
       >
         {isSubmitting ? (
           <>

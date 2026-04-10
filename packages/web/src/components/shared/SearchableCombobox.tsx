@@ -79,7 +79,7 @@ export function SearchableCombobox({
           role="combobox"
           aria-expanded={open}
           className={cn(
-            'flex items-center justify-between rounded-md border bg-background px-3 py-2 text-sm w-full text-left',
+            'flex w-full items-center justify-between rounded-md border bg-background px-3.5 py-2.5 text-[0.95rem] text-left',
             'hover:bg-accent/50 transition-colors',
             'focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary',
             disabled && 'opacity-50 cursor-not-allowed',
@@ -127,7 +127,7 @@ export function SearchableCombobox({
                   }
                 }}
                 placeholder={`Search ${placeholder.toLowerCase()}...`}
-                className="flex h-9 w-full bg-transparent py-2 text-sm outline-none placeholder:text-muted-foreground"
+                className="flex h-10 w-full bg-transparent py-2 text-[0.95rem] outline-none placeholder:text-muted-foreground"
               />
             </div>
             <Command.List className="max-h-60 overflow-y-auto p-1">
@@ -140,7 +140,7 @@ export function SearchableCombobox({
                     key={option.value}
                     value={option.value}
                     onSelect={() => handleSelect(option.value, option.label)}
-                    className="relative flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer hover:bg-accent aria-selected:bg-accent outline-none"
+                    className="relative flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-[0.95rem] outline-none hover:bg-accent aria-selected:bg-accent"
                   >
                     <Check
                       className={cn(
@@ -150,7 +150,7 @@ export function SearchableCombobox({
                     />
                     <span className="truncate">{option.label}</span>
                     {option.sublabel && (
-                      <span className="ml-auto text-xs text-muted-foreground truncate">
+                      <span className="ml-auto truncate text-[0.78rem] text-muted-foreground">
                         {option.sublabel}
                       </span>
                     )}
@@ -161,7 +161,7 @@ export function SearchableCombobox({
                 <Command.Item
                   value={`__create__${search.trim()}`}
                   onSelect={handleCreateNew}
-                  className="relative flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer hover:bg-accent aria-selected:bg-accent outline-none border-t mt-1 pt-2 text-primary"
+                  className="relative mt-1 flex cursor-pointer items-center gap-2 rounded-md border-t px-2.5 pt-3 pb-2 text-[0.95rem] text-primary outline-none hover:bg-accent aria-selected:bg-accent"
                 >
                   <Plus className="h-4 w-4 flex-shrink-0" />
                   <span>Create new: &ldquo;{search.trim()}&rdquo;</span>
@@ -171,7 +171,7 @@ export function SearchableCombobox({
               {!showCreateNew &&
                 trimmedSearch &&
                 options.filter((o) => o.label.trim().toLowerCase().includes(trimmedSearch)).length === 0 && (
-                  <div className="py-4 text-center text-sm text-muted-foreground">
+                  <div className="py-4 text-center text-[0.95rem] text-muted-foreground">
                     {emptyMessage}
                   </div>
                 )}

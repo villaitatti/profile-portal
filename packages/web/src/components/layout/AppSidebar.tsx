@@ -80,12 +80,12 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
   return (
     <aside
       className={cn(
-        'relative flex flex-col bg-sidebar transition-all duration-300 h-screen sticky top-0 overflow-visible shadow-[1px_0_3px_rgba(0,0,0,0.06)]',
+        'relative sticky top-0 flex h-screen flex-col overflow-visible border-r border-sidebar-border bg-sidebar transition-all duration-300',
         sidebarCollapsed ? 'w-16' : 'w-64'
       )}
     >
       {/* Logo / Header */}
-      <div className="px-4 pt-5 pb-4 border-b border-sidebar-border">
+      <div className="border-b border-sidebar-border px-4 pb-5 pt-6">
         <div className="flex items-center">
           {!sidebarCollapsed ? (
             <img src={itattiLogo} alt="I Tatti" className="h-8 object-contain" />
@@ -108,27 +108,27 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
           </button>
         </div>
         {!sidebarCollapsed && (
-          <h1 className="text-lg font-bold text-primary tracking-tight mt-3">
+          <h1 className="mt-3 text-[1.05rem] font-semibold tracking-[0.01em] text-primary">
             Profile Portal
           </h1>
         )}
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 py-4 pr-0 space-y-4 overflow-visible" role="navigation" aria-label="Main navigation">
+      <nav className="flex-1 space-y-3 overflow-visible py-5" role="navigation" aria-label="Main navigation">
         {visibleSections.map((section, i) => (
           <div key={i}>
             {section.heading && !sidebarCollapsed && (
-              <div className="px-3 mb-2">
-                <span className="text-xs font-semibold uppercase tracking-wider text-sidebar-muted-foreground">
+              <div className="mb-1 px-4">
+                <span className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-sidebar-muted-foreground">
                   {section.heading}
                 </span>
               </div>
             )}
             {section.heading && sidebarCollapsed && (
-              <div className="border-t border-sidebar-border mx-2 mb-2" />
+              <div className="mx-3 mb-3 border-t border-sidebar-border" />
             )}
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               {section.items.map((item) => (
                 <NavLink
                   key={item.path}
@@ -138,16 +138,16 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
                   {...(sidebarCollapsed ? { 'aria-label': item.label } : {})}
                   className={({ isActive }) =>
                     cn(
-                      'group relative flex items-center gap-3 text-[17px] font-medium transition-all duration-200 ease-out',
+                      'group relative flex items-center gap-2.5 rounded-lg text-[0.95rem] font-medium leading-5 transition-colors duration-150 ease-out',
                       isActive
-                        ? 'bg-[#ab192d] text-white border-l-[4px] border-white mr-[-8px] py-3 pl-3 pr-5 shadow-[0_1px_3px_rgba(0,0,0,0.2)]'
-                        : 'text-sidebar-foreground ml-2 mr-2 py-2.5 px-3 hover:bg-[#d0d7db] hover:translate-x-0.5 hover:shadow-sm',
-                      sidebarCollapsed && isActive && 'justify-center px-2 pr-2 mr-[-6px]',
-                      sidebarCollapsed && !isActive && 'justify-center px-2 ml-0 mr-2'
+                        ? 'mx-2 bg-primary px-3.5 py-2.5 text-white shadow-[0_6px_18px_rgba(171,25,45,0.16)]'
+                        : 'mx-2 px-3.5 py-2 text-sidebar-foreground hover:bg-sidebar-accent',
+                      sidebarCollapsed && isActive && 'justify-center px-2.5 py-2.5',
+                      sidebarCollapsed && !isActive && 'justify-center px-2.5 py-2'
                     )
                   }
                 >
-                  <item.icon className="h-5 w-5 flex-shrink-0 transition-transform duration-200 group-hover:scale-110" />
+                  <item.icon className="h-[18px] w-[18px] flex-shrink-0 transition-transform duration-200 group-hover:scale-105" />
                   {!sidebarCollapsed && <span>{item.label}</span>}
                 </NavLink>
               ))}
@@ -168,7 +168,7 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{user?.name || user?.email}</p>
+              <p className="truncate text-[0.95rem] font-medium">{user?.name || user?.email}</p>
             </div>
             <button
               onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}
@@ -188,7 +188,7 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
           </button>
         )}
         {!sidebarCollapsed && (
-          <p className="text-[10px] text-sidebar-muted-foreground mt-3">Profile Portal v{__APP_VERSION__}</p>
+          <p className="mt-3 text-[0.68rem] tracking-[0.08em] text-sidebar-muted-foreground">Profile Portal v{__APP_VERSION__}</p>
         )}
       </div>
     </aside>

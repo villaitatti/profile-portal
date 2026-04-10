@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
+import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { SearchableCombobox } from '@/components/shared/SearchableCombobox';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useRoles } from '@/api/roles';
@@ -101,7 +101,7 @@ export function AtlassianMappingsPage() {
     });
   };
 
-  if (mappingsLoading || rolesLoading || groupsLoading) return <LoadingSpinner />;
+  if (mappingsLoading || rolesLoading || groupsLoading) return <AtlassianMappingsSkeleton />;
 
   const hasMappings = Array.isArray(mappings) && mappings.length > 0;
 
@@ -125,14 +125,14 @@ export function AtlassianMappingsPage() {
       />
 
       {/* Card 1: Add New Mapping */}
-      <div className="rounded-xl border bg-card p-6 mb-6">
-        <h2 className="text-lg font-semibold mb-4">Add New Mapping</h2>
+      <div className="mb-6 rounded-2xl border bg-card p-6">
+        <h2 className="mb-4 text-xl font-semibold tracking-tight">Add New Mapping</h2>
 
         {/* Instructions */}
-        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 mb-6">
+        <div className="mb-6 rounded-xl border border-border bg-secondary/45 p-5">
           <div className="flex gap-3">
-            <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-blue-800 space-y-2">
+            <Info className="mt-0.5 h-5 w-5 flex-shrink-0 text-primary" />
+            <div className="space-y-2 text-[0.95rem] leading-7 text-muted-foreground">
               <p>
                 Select a role from the Auth0 dropdown and a group from the Atlassian Cloud dropdown.
               </p>
@@ -159,7 +159,7 @@ export function AtlassianMappingsPage() {
         <div className="max-w-2xl">
           <div className="flex items-end gap-3 mb-4">
             <div className="flex-1">
-              <label className="flex items-center text-sm font-medium mb-1.5">
+              <label className="mb-1.5 flex items-center text-[0.95rem] font-medium">
                 <Auth0Logo /> Auth0 Role
               </label>
               <SearchableCombobox
@@ -174,7 +174,7 @@ export function AtlassianMappingsPage() {
             <LinkIcon className="h-5 w-5 text-muted-foreground mb-2.5 flex-shrink-0" />
 
             <div className="flex-1">
-              <label className="flex items-center text-sm font-medium mb-1.5">
+              <label className="mb-1.5 flex items-center text-[0.95rem] font-medium">
                 <AtlassianLogo /> Atlassian Group
               </label>
               <SearchableCombobox
@@ -193,7 +193,7 @@ export function AtlassianMappingsPage() {
           </div>
 
           {isNewGroup && selectedGroupName && (
-            <p className="mb-3 text-xs text-muted-foreground italic">
+            <p className="mb-3 text-[0.82rem] italic text-muted-foreground">
               New group &ldquo;{selectedGroupName}&rdquo; will be created during sync.
             </p>
           )}
@@ -201,7 +201,7 @@ export function AtlassianMappingsPage() {
           <button
             onClick={handleAdd}
             disabled={!canAdd}
-            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             <Plus className="h-4 w-4" />
             Add Mapping
@@ -210,44 +210,44 @@ export function AtlassianMappingsPage() {
       </div>
 
       {/* Card 2: Group Mappings */}
-      <div className="rounded-xl border bg-card p-6">
-        <h2 className="text-lg font-semibold mb-4">Group Mappings</h2>
+      <div className="rounded-2xl border bg-card p-6">
+        <h2 className="mb-4 text-xl font-semibold tracking-tight">Group Mappings</h2>
 
         {!hasMappings ? (
-          <p className="text-center py-8 text-muted-foreground">
+          <p className="py-8 text-center text-[0.95rem] text-muted-foreground">
             No mappings configured. Use the form above to add your first mapping.
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-[0.95rem]">
               <thead>
                 <tr className="border-b text-left">
-                  <th className="pb-2 font-medium">Auth0 Role</th>
-                  <th className="pb-2 font-medium">Atlassian Group</th>
-                  <th className="pb-2 font-medium">Auth0 Role ID</th>
-                  <th className="pb-2 font-medium">Atlassian Group ID</th>
-                  <th className="pb-2 font-medium">Added By</th>
-                  <th className="pb-2 font-medium">Added On</th>
-                  <th className="pb-2 font-medium w-12"></th>
+                  <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Auth0 Role</th>
+                  <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Atlassian Group</th>
+                  <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Auth0 Role ID</th>
+                  <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Atlassian Group ID</th>
+                  <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Added By</th>
+                  <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Added On</th>
+                  <th className="w-12 pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground"></th>
                 </tr>
               </thead>
               <tbody>
                 {mappings!.map((m) => (
                   <tr key={m.id} className="border-b">
-                    <td className="py-2">{m.auth0RoleName}</td>
-                    <td className="py-2">{m.atlassianGroupName}</td>
-                    <td className="py-2 text-xs font-mono text-muted-foreground">{m.auth0RoleId}</td>
-                    <td className="py-2 text-xs font-mono text-muted-foreground">
+                    <td className="py-3">{m.auth0RoleName}</td>
+                    <td className="py-3">{m.atlassianGroupName}</td>
+                    <td className="py-3 text-[0.78rem] font-mono text-muted-foreground">{m.auth0RoleId}</td>
+                    <td className="py-3 text-[0.78rem] font-mono text-muted-foreground">
                       {m.atlassianGroupId || <span className="italic">new (will be created)</span>}
                     </td>
-                    <td className="py-2 text-sm text-muted-foreground">{m.createdBy || '—'}</td>
-                    <td className="py-2 text-sm text-muted-foreground whitespace-nowrap">
+                    <td className="py-3 text-[0.92rem] text-muted-foreground">{m.createdBy || '—'}</td>
+                    <td className="whitespace-nowrap py-3 text-[0.92rem] text-muted-foreground">
                       {formatDateTime(m.createdAt)}
                     </td>
-                    <td className="py-2">
+                    <td className="py-3">
                       <button
                         onClick={() => setDeleteTarget(m)}
-                        className="p-1 text-muted-foreground hover:text-destructive transition-colors"
+                        className="rounded-full p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                         aria-label="Remove mapping"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -264,7 +264,7 @@ export function AtlassianMappingsPage() {
           <div className="mt-6 pt-4 border-t">
             <Link
               to="/admin/atlassian/sync"
-              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+              className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
             >
               Next: Sync Users
               <ArrowRight className="h-4 w-4" />
@@ -286,6 +286,55 @@ export function AtlassianMappingsPage() {
         confirmLabel="Delete"
         variant="danger"
       />
+    </div>
+  );
+}
+
+function AtlassianMappingsSkeleton() {
+  return (
+    <div className="space-y-6 motion-safe:animate-pulse">
+      <div className="space-y-3">
+        <SkeletonBlock className="h-10 w-72 rounded-full" />
+        <SkeletonBlock className="h-5 w-[36rem] max-w-full rounded-full" />
+      </div>
+
+      <div className="rounded-2xl border bg-card p-6">
+        <SkeletonBlock className="mb-5 h-7 w-44 rounded-full" />
+        <div className="mb-6 rounded-xl border border-border bg-secondary/45 p-5">
+          <div className="space-y-3">
+            <SkeletonBlock className="h-4 w-full rounded-full" />
+            <SkeletonBlock className="h-4 w-11/12 rounded-full" />
+            <SkeletonBlock className="h-4 w-10/12 rounded-full" />
+          </div>
+        </div>
+        <div className="max-w-2xl space-y-4">
+          <div className="flex items-end gap-3">
+            <div className="flex-1 space-y-2">
+              <SkeletonBlock className="h-4 w-24 rounded-full" />
+              <SkeletonBlock className="h-11 w-full rounded-md" />
+            </div>
+            <SkeletonBlock className="mb-3 h-5 w-5 rounded-full" />
+            <div className="flex-1 space-y-2">
+              <SkeletonBlock className="h-4 w-28 rounded-full" />
+              <SkeletonBlock className="h-11 w-full rounded-md" />
+            </div>
+          </div>
+          <SkeletonBlock className="h-10 w-36 rounded-full" />
+        </div>
+      </div>
+
+      <div className="rounded-2xl border bg-card p-6">
+        <SkeletonBlock className="mb-5 h-7 w-40 rounded-full" />
+        <div className="space-y-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="grid grid-cols-[1.1fr_1.1fr_1.2fr_1.2fr_0.8fr_0.8fr_40px] items-center gap-3 border-b border-border/70 pb-3 last:border-b-0 last:pb-0">
+              {Array.from({ length: 7 }).map((__, cellIndex) => (
+                <SkeletonBlock key={cellIndex} className="h-4 rounded-full" />
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
