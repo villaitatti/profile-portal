@@ -378,7 +378,7 @@ export function AtlassianSyncPage() {
     <div>
       <PageHeader
         title="Sync Users to Atlassian Cloud"
-        description="Sync users and groups from Auth0 to Atlassian Cloud via SCIM"
+        description="Sync users and groups from Auth0 to Atlassian Cloud"
       />
 
       {!status?.configured && (

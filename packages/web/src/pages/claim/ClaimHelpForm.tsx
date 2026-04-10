@@ -19,6 +19,7 @@ type HelpFormData = z.infer<typeof helpSchema>;
 export function ClaimHelpForm() {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(false);
 
   const {
     register,
@@ -30,16 +31,17 @@ export function ClaimHelpForm() {
 
   const onSubmit = async (data: HelpFormData) => {
     setSubmitting(true);
+    setSubmitError(false);
     try {
       await apiFetch('/api/help', {
         method: 'POST',
         body: JSON.stringify(data),
       });
+      setSubmitted(true);
     } catch {
-      // Always show success
+      setSubmitError(true);
     } finally {
       setSubmitting(false);
-      setSubmitted(true);
     }
   };
 
@@ -129,6 +131,15 @@ export function ClaimHelpForm() {
             <p className="text-sm text-destructive mt-1">{errors.message.message}</p>
           )}
         </div>
+
+        {submitError && (
+          <p className="text-sm text-destructive">
+            Something went wrong. Please try again, or contact IT directly at{' '}
+            <a href="mailto:itatti_it@harvard.edu" className="underline hover:no-underline">
+              itatti_it@harvard.edu
+            </a>.
+          </p>
+        )}
 
         <button
           type="submit"

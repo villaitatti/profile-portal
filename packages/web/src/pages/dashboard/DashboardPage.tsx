@@ -14,7 +14,7 @@ export function DashboardPage() {
 
   const fullName = profile
     ? `${profile.firstName} ${profile.lastName}`
-    : user?.name || '';
+    : user?.name || 'there';
 
   return (
     <div className="space-y-12">
