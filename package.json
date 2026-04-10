@@ -6,7 +6,7 @@
     "dev": "pnpm --filter @itatti/server dev & pnpm --filter @itatti/web dev",
     "dev:server": "pnpm --filter @itatti/server dev",
     "dev:web": "pnpm --filter @itatti/web dev",
-    "build": "pnpm --filter @itatti/shared build && pnpm --filter @itatti/server build && pnpm --filter @itatti/web build",
+    "build": "pnpm --filter @itatti/server build && pnpm --filter @itatti/web build",
     "build:web": "pnpm --filter @itatti/web build",
     "build:server": "pnpm --filter @itatti/server build",
     "db:generate": "pnpm --filter @itatti/server db:generate",
