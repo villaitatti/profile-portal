@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -221,10 +221,15 @@ function formatLabel(value?: string): string {
 
 type SortField = 'name' | 'email' | 'appointment' | 'fellowship' | 'fellowshipYear' | 'status';
 type SortDir = 'asc' | 'desc';
+const FELLOWS_PER_PAGE = 25;
 
 function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [page, setPage] = useState(1);
+
+  // Reset to page 1 when the underlying data changes (filter/search/year)
+  useEffect(() => setPage(1), [fellows]);
 
   const sorted = useMemo(() => {
     return [...fellows].sort((a, b) => {
@@ -253,6 +258,9 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
     });
   }, [fellows, sortField, sortDir]);
 
+  const totalPages = Math.ceil(sorted.length / FELLOWS_PER_PAGE);
+  const paginated = sorted.slice((page - 1) * FELLOWS_PER_PAGE, page * FELLOWS_PER_PAGE);
+
   function toggleSort(field: SortField) {
     if (sortField === field) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -277,6 +285,7 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
   }
 
   return (
+    <>
     <div className="rounded-xl border bg-card overflow-hidden">
       <table className="w-full">
         <thead>
@@ -293,7 +302,7 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
           </tr>
         </thead>
         <tbody className="divide-y">
-          {sorted.map((fellow) => (
+          {paginated.map((fellow) => (
             <tr key={fellow.civicrmId} className="hover:bg-muted/30">
               <td className="px-4 py-3">
                 <div className="flex items-center gap-3">
@@ -357,5 +366,29 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
         </tbody>
       </table>
     </div>
+    {totalPages > 1 && (
+      <div className="flex items-center justify-between mt-4 text-sm">
+        <span className="text-muted-foreground">
+          Showing {(page - 1) * FELLOWS_PER_PAGE + 1}–{Math.min(page * FELLOWS_PER_PAGE, sorted.length)} of {sorted.length}
+        </span>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="px-3 py-1 rounded border disabled:opacity-50 hover:bg-muted transition-colors"
+          >
+            Previous
+          </button>
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            className="px-3 py-1 rounded border disabled:opacity-50 hover:bg-muted transition-colors"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
