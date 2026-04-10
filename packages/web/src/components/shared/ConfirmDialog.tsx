@@ -23,25 +23,25 @@ export function ConfirmDialog({
   return (
     <Dialog.Root open={open} onOpenChange={(isOpen) => { if (!isOpen) onCancel(); }}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 bg-black/40 z-50" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md rounded-xl border bg-card p-6 shadow-lg">
-          <Dialog.Title className="text-lg font-semibold">
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgba(43,36,31,0.32)]" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border bg-card p-7 shadow-lg">
+          <Dialog.Title className="text-xl font-semibold tracking-tight text-foreground">
             {title}
           </Dialog.Title>
-          <Dialog.Description className="mt-2 text-sm text-muted-foreground">
+          <Dialog.Description className="mt-3 text-[0.95rem] leading-7 text-muted-foreground">
             {description}
           </Dialog.Description>
           <div className="mt-6 flex justify-end gap-3">
             <button
               onClick={onCancel}
-              className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-accent transition-colors"
+              className="rounded-full border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
             >
               Cancel
             </button>
             <button
               onClick={onConfirm}
               className={cn(
-                'rounded-md px-4 py-2 text-sm font-medium text-white transition-colors',
+                'rounded-full px-4 py-2 text-sm font-medium text-white transition-colors',
                 variant === 'danger'
                   ? 'bg-destructive hover:bg-destructive/90'
                   : 'bg-primary hover:bg-primary/90'

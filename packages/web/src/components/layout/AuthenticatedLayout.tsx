@@ -39,7 +39,7 @@ export function AuthenticatedLayout() {
       {isMobile && mobileMenuOpen && (
         <>
           <div
-            className="fixed inset-0 bg-black/20 z-30"
+            className="fixed inset-0 z-30 bg-[rgba(43,36,31,0.18)]"
             onClick={closeMobileMenu}
             aria-hidden="true"
           />
@@ -49,9 +49,9 @@ export function AuthenticatedLayout() {
         </>
       )}
 
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex min-w-0 flex-col">
         <AppHeader />
-        <main className={`flex-1 ${isMobile ? 'px-4 py-6' : 'px-10 py-8'}`}>
+        <main className={`flex-1 ${isMobile ? 'px-4 py-6' : 'px-12 py-10'}`}>
           <Outlet />
         </main>
       </div>

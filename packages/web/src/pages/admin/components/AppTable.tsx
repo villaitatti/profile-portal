@@ -15,113 +15,116 @@ export function AppTable({ applications, onDelete, isDeleting }: AppTableProps) 
 
   return (
     <>
-    <div className="rounded-xl border bg-card overflow-hidden">
-      <table className="w-full">
-        <thead>
-          <tr className="border-b bg-muted/50">
-            <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Application
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">
-              Roles
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell">
-              Order
-            </th>
-            <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Actions
-            </th>
-          </tr>
-        </thead>
-        <tbody className="divide-y">
-          {applications.map((app) => (
-            <tr key={app.id} className="hover:bg-muted/30">
-              <td className="px-4 py-3">
-                <div className="flex items-center gap-3">
-                  {app.imageUrl ? (
-                    <img
-                      src={app.imageUrl}
-                      alt=""
-                      className="h-8 w-14 rounded object-cover"
-                    />
-                  ) : (
-                    <div className="h-8 w-14 rounded bg-primary/10" />
-                  )}
-                  <div>
-                    <div className="font-medium text-sm">{app.name}</div>
-                    <a
-                      href={app.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-muted-foreground hover:underline inline-flex items-center gap-1"
-                    >
-                      {app.url}
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  </div>
-                </div>
-              </td>
-              <td className="px-4 py-3 hidden md:table-cell">
-                <div className="flex flex-wrap gap-1">
-                  {app.requiredRoles.map((role) => (
-                    <span
-                      key={role}
-                      className="inline-flex items-center rounded-full bg-secondary px-2 py-0.5 text-xs font-medium"
-                    >
-                      {role}
-                    </span>
-                  ))}
-                </div>
-              </td>
-              <td className="px-4 py-3 text-sm text-muted-foreground hidden sm:table-cell">
-                {app.sortOrder}
-              </td>
-              <td className="px-4 py-3">
-                <div className="flex items-center justify-end gap-1">
-                  <Link
-                    to={`/admin/apps/${app.id}/edit`}
-                    className="p-2 rounded-md hover:bg-muted text-muted-foreground transition-colors"
-                    title="Edit"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Link>
-                  <button
-                    onClick={() => setDeleteTarget(app)}
-                    disabled={isDeleting}
-                    className="p-2 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
-                    title="Delete"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              </td>
+      <div className="overflow-hidden rounded-2xl border bg-card">
+        <table className="w-full text-[0.95rem]">
+          <thead>
+            <tr className="border-b bg-muted/50">
+              <th className="px-4 py-3 text-left text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                Application
+              </th>
+              <th className="hidden px-4 py-3 text-left text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground md:table-cell">
+                Roles
+              </th>
+              <th className="hidden px-4 py-3 text-left text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground sm:table-cell">
+                Order
+              </th>
+              <th className="px-4 py-3 text-right text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                Actions
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-    <ConfirmDialog
-      open={!!deleteTarget}
-      onConfirm={async () => {
-        if (deleteTarget) {
-          try {
-            await onDelete(deleteTarget.id);
-            setDeleteTarget(null);
-          } catch {
-            // Dialog stays open — error surfaced by parent via toast
+          </thead>
+          <tbody className="divide-y">
+            {applications.map((app) => (
+              <tr key={app.id} className="hover:bg-muted/30">
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    {app.imageUrl ? (
+                      <img
+                        src={app.imageUrl}
+                        alt=""
+                        className="h-8 w-14 rounded object-cover"
+                      />
+                    ) : (
+                      <div className="h-8 w-14 rounded bg-primary/10" />
+                    )}
+                    <div>
+                      <div className="text-[0.98rem] font-semibold">{app.name}</div>
+                      <a
+                        href={app.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[0.82rem] leading-5 text-muted-foreground hover:underline"
+                      >
+                        {app.url}
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
+                  </div>
+                </td>
+                <td className="hidden px-4 py-3 md:table-cell">
+                  <div className="flex flex-wrap gap-1">
+                    {app.requiredRoles.map((role) => (
+                      <span
+                        key={role}
+                        className="inline-flex items-center rounded-full bg-secondary px-2.5 py-1 text-[0.75rem] font-medium text-secondary-foreground"
+                      >
+                        {role}
+                      </span>
+                    ))}
+                  </div>
+                </td>
+                <td className="hidden px-4 py-3 text-[0.92rem] text-muted-foreground sm:table-cell">
+                  {app.sortOrder}
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center justify-end gap-1">
+                    <Link
+                      to={`/admin/apps/${app.id}/edit`}
+                      aria-label={`Edit ${app.name || app.id}`}
+                      className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted"
+                      title="Edit"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(app)}
+                      disabled={isDeleting}
+                      aria-label={`Delete ${app.name || app.id}`}
+                      className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+                      title="Delete"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onConfirm={async () => {
+          if (deleteTarget) {
+            try {
+              await onDelete(deleteTarget.id);
+              setDeleteTarget(null);
+            } catch {
+              // Dialog stays open — error surfaced by parent via toast
+            }
           }
+        }}
+        onCancel={() => setDeleteTarget(null)}
+        title="Delete Application"
+        description={
+          deleteTarget
+            ? `Delete "${deleteTarget.name}"? This cannot be undone.`
+            : ''
         }
-      }}
-      onCancel={() => setDeleteTarget(null)}
-      title="Delete Application"
-      description={
-        deleteTarget
-          ? `Delete "${deleteTarget.name}"? This cannot be undone.`
-          : ''
-      }
-      confirmLabel="Delete"
-      variant="danger"
-    />
+        confirmLabel="Delete"
+        variant="danger"
+      />
     </>
   );
 }

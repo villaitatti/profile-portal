@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.4.3] - 2026-04-10
+
+### Changed
+- Authenticated dashboard, profile, and admin screens now use warmer neutral surfaces, darker secondary text, and larger body typography for better readability.
+- Sidebar spacing and chrome were tightened so navigation feels quieter and the content area leads visually.
+- Shared page headers, empty states, dialogs, comboboxes, and admin tables/forms were realigned to the updated legibility-focused design system.
+- Dashboard content now uses a fuller profile card and clearer credential guidance above the applications grid.
+
+### Added
+- Route-specific skeleton loaders for the dashboard, profile, applications catalog, application form, fellows management, Atlassian mappings, and Atlassian sync pages.
+
+### Fixed
+- Root `pnpm build` no longer fails by invoking a nonexistent `@itatti/shared` build script.
+
 ## [0.4.2] - 2026-04-10
 
 ### Changed

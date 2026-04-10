@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
+import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useFellowsDashboard } from '@/api/fellows';
 import { getCurrentAcademicYear } from './utils/academic-year';
@@ -42,7 +42,7 @@ export function FellowsManagementPage() {
     return fellows;
   }, [data, activeTab, searchQuery]);
 
-  if (isLoading) return <LoadingSpinner />;
+  if (isLoading) return <FellowsManagementSkeleton />;
 
   if (error) {
     return (
@@ -79,7 +79,7 @@ export function FellowsManagementPage() {
       />
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+      <div className="mb-10 grid grid-cols-1 gap-5 sm:grid-cols-3">
         <SummaryCard
           label="Total Fellows"
           value={summary.total}
@@ -100,12 +100,12 @@ export function FellowsManagementPage() {
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex border-b mb-4">
+      <div className="mb-5 flex gap-2 border-b">
         {tabs.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            className={`rounded-t-lg border-b-2 px-4 py-2.5 text-[0.95rem] font-medium transition-colors ${
               activeTab === tab.key
                 ? 'border-primary text-primary'
                 : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -126,7 +126,7 @@ export function FellowsManagementPage() {
       </div>
 
       {/* Search + Year Filter */}
-      <div className="flex gap-3 mb-4">
+      <div className="mb-5 flex gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input
@@ -134,7 +134,7 @@ export function FellowsManagementPage() {
             placeholder="Search by name or email..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-md border bg-background pl-9 pr-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+            className="w-full rounded-md border bg-background py-2.5 pl-10 pr-4 text-base outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
         </div>
         <select
@@ -144,7 +144,7 @@ export function FellowsManagementPage() {
             setActiveTab('all');
             setSearchQuery('');
           }}
-          className="rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary min-w-[140px]"
+          className="min-w-[150px] rounded-md border bg-background px-3.5 py-2.5 text-[0.95rem] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
         >
           {academicYears.length > 0 ? (
             academicYears.map((year) => (
@@ -177,6 +177,69 @@ export function FellowsManagementPage() {
   );
 }
 
+function FellowsManagementSkeleton() {
+  return (
+    <div className="space-y-8 motion-safe:animate-pulse">
+      <div className="space-y-3">
+        <SkeletonBlock className="h-10 w-64 rounded-full" />
+        <SkeletonBlock className="h-5 w-[28rem] max-w-full rounded-full" />
+      </div>
+
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <div key={index} className="rounded-2xl border bg-card p-5">
+            <div className="flex items-center justify-between">
+              <SkeletonBlock className="h-3.5 w-24 rounded-full" />
+              <SkeletonBlock className="h-5 w-5 rounded-full" />
+            </div>
+            <SkeletonBlock className="mt-4 h-8 w-16 rounded-full" />
+          </div>
+        ))}
+      </div>
+
+      <div className="space-y-5">
+        <div className="flex gap-2 border-b pb-0.5">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <SkeletonBlock key={index} className="h-10 w-28 rounded-t-lg" />
+          ))}
+        </div>
+
+        <div className="flex gap-4">
+          <SkeletonBlock className="h-11 flex-1 rounded-md" />
+          <SkeletonBlock className="h-11 w-40 rounded-md" />
+        </div>
+
+        <div className="overflow-hidden rounded-2xl border bg-card">
+          <div className="border-b bg-muted/50 px-4 py-3">
+            <div className="grid grid-cols-6 gap-4">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <SkeletonBlock key={index} className="h-3.5 rounded-full" />
+              ))}
+            </div>
+          </div>
+          <div className="divide-y">
+            {Array.from({ length: 5 }).map((_, index) => (
+              <div key={index} className="grid grid-cols-6 items-center gap-4 px-4 py-4">
+                <div className="flex items-center gap-3">
+                  <SkeletonBlock className="h-8 w-8 rounded-full bg-muted/80" />
+                  <div className="space-y-2">
+                    <SkeletonBlock className="h-4 w-28 rounded-full" />
+                    <SkeletonBlock className="h-3.5 w-24 rounded-full" />
+                  </div>
+                </div>
+                {Array.from({ length: 4 }).map((__, column) => (
+                  <SkeletonBlock key={column} className="h-4 w-20 rounded-full" />
+                ))}
+                <SkeletonBlock className="h-4 w-14 rounded-full" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SummaryCard({
   label,
   value,
@@ -189,12 +252,12 @@ function SummaryCard({
   valueClassName?: string;
 }) {
   return (
-    <div className="rounded-xl border bg-card p-5">
+    <div className="rounded-2xl border bg-card p-5">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-sm text-muted-foreground">{label}</span>
+        <span className="text-[0.8rem] uppercase tracking-[0.14em] text-muted-foreground">{label}</span>
         {icon}
       </div>
-      <div className={`text-2xl font-bold ${valueClassName || ''}`}>{value}</div>
+      <div className={`mt-3 text-[1.9rem] font-semibold tracking-tight ${valueClassName || ''}`}>{value}</div>
     </div>
   );
 }
@@ -271,124 +334,132 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
   }
 
   function SortHeader({ field, label, className }: { field: SortField; label: string; className?: string }) {
+    const ariaSort = sortField !== field ? 'none' : sortDir === 'asc' ? 'ascending' : 'descending';
+
     return (
       <th
-        className={`px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:text-foreground transition-colors ${className || ''}`}
-        onClick={() => toggleSort(field)}
+        aria-sort={ariaSort}
+        className={`px-4 py-3 text-left ${className || ''}`}
       >
-        {label}
-        {sortField === field && (
-          <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>
-        )}
+        <button
+          type="button"
+          onClick={() => toggleSort(field)}
+          className="inline-flex select-none items-center text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground"
+        >
+          {label}
+          {sortField === field && (
+            <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>
+          )}
+        </button>
       </th>
     );
   }
 
   return (
     <>
-    <div className="rounded-xl border bg-card overflow-hidden">
-      <table className="w-full">
-        <thead>
-          <tr className="border-b bg-muted/50">
-            <SortHeader field="name" label="Name" />
-            <SortHeader field="email" label="Email" className="hidden md:table-cell" />
-            <SortHeader field="appointment" label="Appointment" className="hidden lg:table-cell" />
-            <SortHeader field="fellowship" label="Fellowship Type" className="hidden lg:table-cell" />
-            <SortHeader field="fellowshipYear" label="Year" className="hidden sm:table-cell" />
-            <SortHeader field="status" label="VIT ID Status" />
-            <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Actions
-            </th>
-          </tr>
-        </thead>
-        <tbody className="divide-y">
-          {paginated.map((fellow) => (
-            <tr key={fellow.civicrmId} className="hover:bg-muted/30">
-              <td className="px-4 py-3">
-                <div className="flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                    {fellow.imageUrl ? (
-                      <img src={fellow.imageUrl} alt="" className="h-8 w-8 rounded-full object-cover" />
-                    ) : (
-                      <span className="text-xs font-medium text-primary">
-                        {fellow.firstName?.[0]}{fellow.lastName?.[0]}
+      <div className="overflow-hidden rounded-2xl border bg-card">
+        <table className="w-full text-[0.95rem]">
+          <thead>
+            <tr className="border-b bg-muted/50">
+              <SortHeader field="name" label="Name" />
+              <SortHeader field="email" label="Email" className="hidden md:table-cell" />
+              <SortHeader field="appointment" label="Appointment" className="hidden lg:table-cell" />
+              <SortHeader field="fellowship" label="Fellowship Type" className="hidden lg:table-cell" />
+              <SortHeader field="fellowshipYear" label="Year" className="hidden sm:table-cell" />
+              <SortHeader field="status" label="VIT ID Status" />
+              <th className="px-4 py-3 text-left text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {paginated.map((fellow) => (
+              <tr key={fellow.civicrmId} className="hover:bg-muted/30">
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10">
+                      {fellow.imageUrl ? (
+                        <img src={fellow.imageUrl} alt="" className="h-8 w-8 rounded-full object-cover" />
+                      ) : (
+                        <span className="text-xs font-medium text-primary">
+                          {fellow.firstName?.[0]}{fellow.lastName?.[0]}
+                        </span>
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-[0.98rem] font-semibold">
+                        {fellow.firstName} {fellow.lastName}
+                      </div>
+                      <div className="text-[0.82rem] leading-5 text-muted-foreground md:hidden">
+                        {fellow.email || 'No email'}
+                      </div>
+                    </div>
+                  </div>
+                </td>
+                <td className="hidden px-4 py-3 text-[0.95rem] text-muted-foreground md:table-cell">
+                  {fellow.email || (
+                    <span className="italic text-muted-foreground/60">No email in CiviCRM</span>
+                  )}
+                </td>
+                <td className="hidden px-4 py-3 text-[0.95rem] text-muted-foreground lg:table-cell">
+                  {formatLabel(fellow.appointment)}
+                </td>
+                <td className="hidden px-4 py-3 text-[0.95rem] text-muted-foreground lg:table-cell">
+                  {formatLabel(fellow.fellowship)}
+                </td>
+                <td className="hidden px-4 py-3 text-[0.95rem] text-muted-foreground sm:table-cell">
+                  {fellow.fellowshipYear}
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <StatusBadge status={fellow.status} />
+                    {fellow.civicrmIdStatus === 'missing' && (
+                      <span title="Auth0 account exists but civicrm_id is missing from app_metadata">
+                        <AlertTriangle className="h-4 w-4 text-amber-500" />
                       </span>
                     )}
                   </div>
-                  <div>
-                    <div className="font-semibold text-sm">
-                      {fellow.firstName} {fellow.lastName}
-                    </div>
-                    <div className="text-xs text-muted-foreground md:hidden">
-                      {fellow.email || 'No email'}
-                    </div>
-                  </div>
-                </div>
-              </td>
-              <td className="px-4 py-3 text-sm text-muted-foreground hidden md:table-cell">
-                {fellow.email || (
-                  <span className="italic text-muted-foreground/60">No email in CiviCRM</span>
-                )}
-              </td>
-              <td className="px-4 py-3 text-sm text-muted-foreground hidden lg:table-cell">
-                {formatLabel(fellow.appointment)}
-              </td>
-              <td className="px-4 py-3 text-sm text-muted-foreground hidden lg:table-cell">
-                {formatLabel(fellow.fellowship)}
-              </td>
-              <td className="px-4 py-3 text-sm text-muted-foreground hidden sm:table-cell">
-                {fellow.fellowshipYear}
-              </td>
-              <td className="px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <StatusBadge status={fellow.status} />
-                  {fellow.civicrmIdStatus === 'missing' && (
-                    <span title="Auth0 account exists but civicrm_id is missing from app_metadata">
-                      <AlertTriangle className="h-4 w-4 text-amber-500" />
-                    </span>
+                </td>
+                <td className="px-4 py-3">
+                  {CIVICRM_URL && (
+                    <a
+                      href={`${CIVICRM_URL}/civicrm/contact/view?reset=1&cid=${fellow.civicrmId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                    >
+                      CiviCRM <ExternalLink className="h-3 w-3" />
+                    </a>
                   )}
-                </div>
-              </td>
-              <td className="px-4 py-3">
-                {CIVICRM_URL && (
-                  <a
-                    href={`${CIVICRM_URL}/civicrm/contact/view?reset=1&cid=${fellow.civicrmId}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                  >
-                    CiviCRM <ExternalLink className="h-3 w-3" />
-                  </a>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-    {totalPages > 1 && (
-      <div className="flex items-center justify-between mt-4 text-sm">
-        <span className="text-muted-foreground">
-          Showing {(page - 1) * FELLOWS_PER_PAGE + 1}–{Math.min(page * FELLOWS_PER_PAGE, sorted.length)} of {sorted.length}
-        </span>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page === 1}
-            className="px-3 py-1 rounded border disabled:opacity-50 hover:bg-muted transition-colors"
-          >
-            Previous
-          </button>
-          <button
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page === totalPages}
-            className="px-3 py-1 rounded border disabled:opacity-50 hover:bg-muted transition-colors"
-          >
-            Next
-          </button>
-        </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
-    )}
+      {totalPages > 1 && (
+        <div className="mt-4 flex items-center justify-between text-sm">
+          <span className="text-muted-foreground">
+            Showing {(page - 1) * FELLOWS_PER_PAGE + 1}–{Math.min(page * FELLOWS_PER_PAGE, sorted.length)} of {sorted.length}
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="rounded border px-3 py-1 transition-colors hover:bg-muted disabled:opacity-50"
+            >
+              Previous
+            </button>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="rounded border px-3 py-1 transition-colors hover:bg-muted disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
