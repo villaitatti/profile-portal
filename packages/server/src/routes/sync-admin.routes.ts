@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { createSseToken, verifySseToken } from '../lib/sse-token.js';
 import { isScimConfigured, getGroups } from '../services/atlassian-scim.service.js';
+import { AUTH0_NAMESPACE } from '@itatti/shared';
 import {
   runDrySync,
   executeSync,
@@ -37,7 +38,8 @@ router.get('/mappings', async (_req, res, next) => {
 router.post('/mappings', async (req, res, next) => {
   try {
     const body = createMappingSchema.parse(req.body);
-    const createdBy = (req.auth as Record<string, unknown>)?.email as string || null;
+    const auth = req.auth as Record<string, unknown> | undefined;
+    const createdBy = (auth?.[`${AUTH0_NAMESPACE}/name`] as string) || (auth?.email as string) || null;
     const mapping = await prisma.roleGroupMapping.create({
       data: {
         auth0RoleId: body.auth0RoleId,
