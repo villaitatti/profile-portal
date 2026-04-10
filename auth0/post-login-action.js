@@ -1,10 +1,10 @@
 /**
  * Auth0 Post-Login Action
  *
- * This action enriches the ID token and access token with:
- * - User roles (from Auth0 RBAC)
- * - App metadata (CiviCRM contact ID, set during VIT ID claim)
- * - User name and email (for audit trail in admin features)
+ * This action enriches tokens with:
+ * - User roles on both ID and access tokens (from Auth0 RBAC, requires authorization)
+ * - App metadata on both ID and access tokens (CiviCRM contact ID)
+ * - User name and email on the access token only (for server-side audit trail)
  *
  * NOTE: This file is documentation only. The actual Action lives in the
  * Auth0 Dashboard (Actions > Flows > Login) and must be updated there.
@@ -18,14 +18,16 @@
 exports.onExecutePostLogin = async (event, api) => {
   const namespace = 'https://auth0.itatti.harvard.edu';
 
+  // User-level claims (always available, no authorization required)
+  api.idToken.setCustomClaim(`${namespace}/app_metadata`, event.user.app_metadata || {});
+  api.accessToken.setCustomClaim(`${namespace}/app_metadata`, event.user.app_metadata || {});
+  api.accessToken.setCustomClaim(`${namespace}/name`, event.user.name || null);
+  api.accessToken.setCustomClaim(`${namespace}/email`, event.user.email || null);
+
+  // Role claims (require authorization context)
   if (event.authorization) {
-    // Namespaced claims
     api.idToken.setCustomClaim(`${namespace}/roles`, event.authorization.roles);
     api.accessToken.setCustomClaim(`${namespace}/roles`, event.authorization.roles);
-    api.idToken.setCustomClaim(`${namespace}/app_metadata`, event.user.app_metadata);
-    api.accessToken.setCustomClaim(`${namespace}/app_metadata`, event.user.app_metadata);
-    api.accessToken.setCustomClaim(`${namespace}/name`, event.user.name);
-    api.accessToken.setCustomClaim(`${namespace}/email`, event.user.email);
 
     // TODO: remove by 2026-10 — legacy non-namespaced claims for backwards compatibility.
     // Once all consumers use namespaced claims (AUTH0_NAMESPACE/roles, AUTH0_NAMESPACE/app_metadata),
