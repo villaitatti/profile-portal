@@ -40,6 +40,7 @@ export function RoleMultiSelect({ value, onChange }: RoleMultiSelectProps) {
               <button
                 type="button"
                 onClick={() => toggleRole(role)}
+                aria-label={`Remove ${role}`}
                 className="hover:bg-primary/20 rounded-full p-0.5"
               >
                 <X className="h-3 w-3" />

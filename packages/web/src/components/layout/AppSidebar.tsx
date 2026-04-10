@@ -188,7 +188,7 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
           </button>
         )}
         {!sidebarCollapsed && (
-          <p className="mt-3 text-[0.72rem] tracking-[0.04em] text-sidebar-muted-foreground/80">v{__APP_VERSION__}</p>
+          <p className="mt-3 text-xs tracking-[0.04em] text-sidebar-muted-foreground">v{__APP_VERSION__}</p>
         )}
       </div>
     </aside>

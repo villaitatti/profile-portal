@@ -334,15 +334,23 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
   }
 
   function SortHeader({ field, label, className }: { field: SortField; label: string; className?: string }) {
+    const ariaSort = sortField !== field ? 'none' : sortDir === 'asc' ? 'ascending' : 'descending';
+
     return (
       <th
-        className={`cursor-pointer select-none px-4 py-3 text-left text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground ${className || ''}`}
-        onClick={() => toggleSort(field)}
+        aria-sort={ariaSort}
+        className={`px-4 py-3 text-left ${className || ''}`}
       >
-        {label}
-        {sortField === field && (
-          <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>
-        )}
+        <button
+          type="button"
+          onClick={() => toggleSort(field)}
+          className="inline-flex select-none items-center text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground"
+        >
+          {label}
+          {sortField === field && (
+            <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>
+          )}
+        </button>
       </th>
     );
   }

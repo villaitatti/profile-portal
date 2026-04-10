@@ -36,6 +36,8 @@ function Auth0ErrorPanel({ onRetry }: { onRetry: () => void }) {
 }
 
 function UserTable({ users, query }: { users: Auth0UserListItem[]; query: string }) {
+  const commonHeaderClass = 'pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground';
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return users;
@@ -64,11 +66,11 @@ function UserTable({ users, query }: { users: Auth0UserListItem[]; query: string
         <table className="w-full text-[0.95rem]">
           <thead>
             <tr className="border-b text-left">
-              <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Name</th>
-              <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Email</th>
-              <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Email Verified</th>
-              <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Last Login</th>
-              <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Signed Up</th>
+              <th className={commonHeaderClass}>Name</th>
+              <th className={commonHeaderClass}>Email</th>
+              <th className={commonHeaderClass}>Email Verified</th>
+              <th className={commonHeaderClass}>Last Login</th>
+              <th className={commonHeaderClass}>Signed Up</th>
             </tr>
           </thead>
           <tbody>

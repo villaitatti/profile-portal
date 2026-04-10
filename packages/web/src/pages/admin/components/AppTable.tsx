@@ -80,14 +80,17 @@ export function AppTable({ applications, onDelete, isDeleting }: AppTableProps) 
                   <div className="flex items-center justify-end gap-1">
                     <Link
                       to={`/admin/apps/${app.id}/edit`}
+                      aria-label={`Edit ${app.name || app.id}`}
                       className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted"
                       title="Edit"
                     >
                       <Pencil className="h-4 w-4" />
                     </Link>
                     <button
+                      type="button"
                       onClick={() => setDeleteTarget(app)}
                       disabled={isDeleting}
+                      aria-label={`Delete ${app.name || app.id}`}
                       className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
                       title="Delete"
                     >
