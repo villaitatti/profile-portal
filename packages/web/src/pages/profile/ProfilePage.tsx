@@ -111,7 +111,7 @@ function ProfileField({
     <div className="flex items-center gap-5 px-6 py-5 md:px-8">
       <Icon className="h-5 w-5 text-muted-foreground flex-shrink-0" />
       <div>
-        <p className="text-[0.72rem] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+        <p className="text-[0.78rem] font-medium uppercase tracking-[0.14em] text-muted-foreground">
           {label}
         </p>
         <p className="mt-1 text-base leading-7 text-foreground">{value || '—'}</p>

@@ -47,7 +47,7 @@ export function ClaimHelpForm() {
 
   if (submitted) {
     return (
-      <div className="rounded-xl border bg-card p-8 text-center">
+      <div className="rounded-2xl border bg-card p-8 text-center">
         <CheckCircle2 className="h-12 w-12 text-green-600 mx-auto mb-4" />
         <h3 className="text-lg font-semibold mb-2">Request Submitted</h3>
         <p className="text-muted-foreground">
@@ -59,7 +59,7 @@ export function ClaimHelpForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="rounded-xl border bg-card p-8">
+    <form onSubmit={handleSubmit(onSubmit)} className="rounded-2xl border bg-card p-8">
       <h2 className="text-xl font-semibold mb-2">Need help?</h2>
       <p className="text-muted-foreground mb-6 text-sm">
         If you cannot claim your VIT ID automatically, fill out this form and our
@@ -144,7 +144,7 @@ export function ClaimHelpForm() {
         <button
           type="submit"
           disabled={submitting}
-          className="w-full inline-flex items-center justify-center rounded-md bg-secondary px-4 py-2.5 text-sm font-medium text-secondary-foreground shadow-sm hover:bg-secondary/80 transition-colors disabled:opacity-50"
+          className="w-full inline-flex items-center justify-center rounded-full bg-secondary px-4 py-2.5 text-sm font-semibold text-secondary-foreground shadow-sm hover:bg-secondary/80 transition-colors disabled:opacity-50"
         >
           {submitting ? (
             <>

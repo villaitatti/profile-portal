@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.4.4] - 2026-04-13
+
+### Fixed
+- Execute Sync button no longer uses green ("safe") color for a destructive action. Restyled to primary crimson with a confirmation dialog summarizing pending changes before execution. Dry Run is now a secondary outline button.
+- Collapsed sidebar icons now show a tooltip on hover identifying each navigation item.
+- Claim page headline changed from "VIT ID — Self Service" to "Welcome to I Tatti" with context about eligibility and what to expect after submitting.
+- Claim form success message now includes a timeline hint and spam-folder reminder.
+- Profile page field labels bumped from 0.72rem to 0.78rem for readability.
+- SCIM configuration error banner now shows user-friendly copy instead of raw environment variable names.
+- Sync diff stats now include icons alongside color so status categories are distinguishable without relying on color alone.
+
+### Changed
+- Card radii normalized to `rounded-2xl` across claim forms, sync page panels, and warning banners.
+- Button shapes standardized to `rounded-full` across claim forms and pagination controls.
+- HasVitIdPage table cell padding aligned to `px-4` to match all other tables.
+- Year filter dropdown now shows "All years" at the top instead of the bottom.
+- EmptyState component fixed double bottom margin on icon wrapper.
+- Dashboard app card image hover scale reduced from 1.05 to 1.02.
+
 ## [0.4.3] - 2026-04-10
 
 ### Changed

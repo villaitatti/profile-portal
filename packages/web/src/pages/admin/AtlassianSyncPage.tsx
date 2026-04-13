@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { LoadingSpinner, SkeletonBlock } from '@/components/shared/LoadingSpinner';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useApiToken } from '@/api/client';
 import {
   useMappings,
@@ -25,6 +26,11 @@ import {
   ChevronDown,
   ChevronRight,
   Download,
+  UserPlus,
+  UserMinus,
+  Pencil,
+  FolderPlus,
+  Link as LinkIcon,
 } from 'lucide-react';
 
 // ── Progress Bar ───────────────────────────────────────────────────
@@ -46,7 +52,7 @@ function ProgressPanel({ progress, startTime }: { progress: SyncProgress | null;
   };
 
   return (
-    <div className="rounded-xl border bg-card p-6">
+    <div className="rounded-2xl border bg-card p-6">
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm font-medium">{progress.description}</span>
         <span className="text-xs text-muted-foreground">{formatDuration(elapsed)}</span>
@@ -82,7 +88,7 @@ function DiffPreview({ run }: { run: SyncRunDetail }) {
 
   if (totalChanges === 0) {
     return (
-      <div className="rounded-xl border bg-card p-6 text-center">
+      <div className="rounded-2xl border bg-card p-6 text-center">
         <CheckCircle2 className="h-8 w-8 text-green-500 mx-auto mb-2" />
         <p className="font-medium">Everything in sync</p>
         <p className="text-sm text-muted-foreground">No changes needed.</p>
@@ -91,7 +97,7 @@ function DiffPreview({ run }: { run: SyncRunDetail }) {
   }
 
   return (
-    <div className="rounded-xl border bg-card p-6">
+    <div className="rounded-2xl border bg-card p-6">
       <h3 className="text-lg font-semibold mb-4">Proposed Changes ({totalChanges})</h3>
 
       {diff.groupsToCreate?.length > 0 && (
@@ -197,7 +203,7 @@ function SyncHistory() {
   };
 
   return (
-    <div className="rounded-xl border bg-card p-6">
+    <div className="rounded-2xl border bg-card p-6">
       <h2 className="text-lg font-semibold mb-4">Sync History</h2>
       <div className="space-y-2">
         {data.runs.map((run) => (
@@ -232,13 +238,13 @@ function SyncHistory() {
 
                 {detail.stats && (
                   <div className="flex flex-wrap gap-4 mb-3 text-xs">
-                    {detail.stats.created > 0 && <span className="text-green-600">+{detail.stats.created} created</span>}
-                    {detail.stats.updated > 0 && <span className="text-amber-600">{detail.stats.updated} updated</span>}
-                    {detail.stats.deactivated > 0 && <span className="text-red-600">{detail.stats.deactivated} deactivated</span>}
-                    {detail.stats.groupsCreated > 0 && <span className="text-blue-600">{detail.stats.groupsCreated} groups created</span>}
-                    {detail.stats.groupsAdded > 0 && <span className="text-purple-600">+{detail.stats.groupsAdded} memberships</span>}
-                    {detail.stats.groupsRemoved > 0 && <span className="text-purple-600">-{detail.stats.groupsRemoved} memberships</span>}
-                    {detail.stats.errors > 0 && <span className="text-destructive">{detail.stats.errors} errors</span>}
+                    {detail.stats.created > 0 && <span className="inline-flex items-center gap-1 text-green-600"><UserPlus className="h-3 w-3" />+{detail.stats.created} created</span>}
+                    {detail.stats.updated > 0 && <span className="inline-flex items-center gap-1 text-amber-600"><Pencil className="h-3 w-3" />{detail.stats.updated} updated</span>}
+                    {detail.stats.deactivated > 0 && <span className="inline-flex items-center gap-1 text-red-600"><UserMinus className="h-3 w-3" />{detail.stats.deactivated} deactivated</span>}
+                    {detail.stats.groupsCreated > 0 && <span className="inline-flex items-center gap-1 text-blue-600"><FolderPlus className="h-3 w-3" />{detail.stats.groupsCreated} groups created</span>}
+                    {detail.stats.groupsAdded > 0 && <span className="inline-flex items-center gap-1 text-purple-600"><LinkIcon className="h-3 w-3" />+{detail.stats.groupsAdded} memberships</span>}
+                    {detail.stats.groupsRemoved > 0 && <span className="inline-flex items-center gap-1 text-purple-600"><XCircle className="h-3 w-3" />-{detail.stats.groupsRemoved} memberships</span>}
+                    {detail.stats.errors > 0 && <span className="inline-flex items-center gap-1 text-destructive"><AlertCircle className="h-3 w-3" />{detail.stats.errors} errors</span>}
                   </div>
                 )}
 
@@ -280,7 +286,7 @@ function SyncHistory() {
           <button
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page === 1}
-            className="text-sm px-3 py-1 rounded border disabled:opacity-50"
+            className="text-sm px-3 py-1 rounded-full border transition-colors hover:bg-muted disabled:opacity-50"
           >
             Previous
           </button>
@@ -290,7 +296,7 @@ function SyncHistory() {
           <button
             onClick={() => setPage((p) => p + 1)}
             disabled={page * data.perPage >= data.total}
-            className="text-sm px-3 py-1 rounded border disabled:opacity-50"
+            className="text-sm px-3 py-1 rounded-full border transition-colors hover:bg-muted disabled:opacity-50"
           >
             Next
           </button>
@@ -380,6 +386,7 @@ export function AtlassianSyncPage() {
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [progress, setProgress] = useState<SyncProgress | null>(null);
   const [lastDryRunId, setLastDryRunId] = useState<string | null>(null);
+  const [showExecuteConfirm, setShowExecuteConfirm] = useState(false);
   const [startTime, setStartTime] = useState(0);
   const { data: dryRunDetail } = useSyncRunDetail(lastDryRunId);
 
@@ -472,20 +479,20 @@ export function AtlassianSyncPage() {
       />
 
       {!status?.configured && (
-        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
+        <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
           <div className="flex items-center gap-2">
-            <AlertCircle className="h-5 w-5 text-amber-600" />
+            <AlertCircle className="h-5 w-5 flex-shrink-0 text-amber-600" />
             <p className="text-sm text-amber-800">
-              Atlassian SCIM is not configured. Set ATLASSIAN_SCIM_BASE_URL, ATLASSIAN_SCIM_DIRECTORY_ID, and ATLASSIAN_SCIM_BEARER_TOKEN environment variables.
+              Atlassian Cloud sync is not configured yet. Please contact IT to set up the SCIM connection.
             </p>
           </div>
         </div>
       )}
 
       {mappingsEmpty && (
-        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
+        <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
           <div className="flex items-center gap-2">
-            <AlertCircle className="h-5 w-5 text-amber-600" />
+            <AlertCircle className="h-5 w-5 flex-shrink-0 text-amber-600" />
             <p className="text-sm text-amber-800">
               No group mappings configured.{' '}
               <Link to="/admin/atlassian/mappings" className="font-medium underline hover:no-underline">
@@ -502,18 +509,18 @@ export function AtlassianSyncPage() {
           <button
             onClick={handleDryRun}
             disabled={isRunning || startDryRun.isPending || !status?.configured || mappingsEmpty}
-            className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-full border border-primary px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/5 disabled:opacity-50"
           >
             <RefreshCw className={`h-4 w-4 ${isRunning ? 'animate-spin' : ''}`} />
-            Run Dry Sync
+            Preview Changes
           </button>
 
           {canExecute && (
             <>
               <button
-                onClick={handleExecute}
+                onClick={() => setShowExecuteConfirm(true)}
                 disabled={isRunning}
-                className="inline-flex items-center gap-2 rounded-full bg-green-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               >
                 <Play className="h-4 w-4" />
                 Execute Sync
@@ -528,7 +535,7 @@ export function AtlassianSyncPage() {
 
           {hasMappings && !isRunning && !lastDryRunId && (
             <span className="text-[0.95rem] text-muted-foreground">
-              Run a dry sync to preview changes
+              Preview changes before syncing
             </span>
           )}
         </div>
@@ -542,6 +549,32 @@ export function AtlassianSyncPage() {
         {/* Sync history */}
         <SyncHistory />
       </div>
+
+      <ConfirmDialog
+        open={showExecuteConfirm}
+        onConfirm={() => {
+          setShowExecuteConfirm(false);
+          if (canExecute) handleExecute();
+        }}
+        onCancel={() => setShowExecuteConfirm(false)}
+        title="Execute Sync to Atlassian Cloud"
+        description={(() => {
+          const parts = dryRunDetail?.diff
+            ? [
+                dryRunDetail.diff.usersToCreate?.length && `create ${dryRunDetail.diff.usersToCreate.length} user(s)`,
+                dryRunDetail.diff.usersToUpdate?.length && `update ${dryRunDetail.diff.usersToUpdate.length} user(s)`,
+                dryRunDetail.diff.usersToDeactivate?.length && `deactivate ${dryRunDetail.diff.usersToDeactivate.length} user(s)`,
+                dryRunDetail.diff.groupsToCreate?.length && `create ${dryRunDetail.diff.groupsToCreate.length} group(s)`,
+                dryRunDetail.diff.membershipChanges?.length && `${dryRunDetail.diff.membershipChanges.length} membership change(s)`,
+              ].filter(Boolean)
+            : [];
+          return parts.length > 0
+            ? `This will apply changes to Atlassian Cloud: ${parts.join(', ')}. This action cannot be undone.`
+            : 'Apply the previewed changes to Atlassian Cloud. This action cannot be undone.';
+        })()}
+        confirmLabel="Execute Sync"
+        variant="danger"
+      />
     </div>
   );
 }
