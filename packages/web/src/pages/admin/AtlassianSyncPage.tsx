@@ -210,7 +210,7 @@ function SyncHistory() {
           <div key={run.id} className="border rounded-lg">
             <button
               onClick={() => setExpandedId(expandedId === run.id ? null : run.id)}
-              className="w-full flex items-center gap-3 p-3 text-left hover:bg-muted/50 transition-colors"
+              className="w-full flex items-center gap-3 p-3 text-left hover:bg-muted/50 transition-colors active:scale-100"
             >
               {expandedId === run.id ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
               {statusIcon(run)}
