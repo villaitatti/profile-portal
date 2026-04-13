@@ -554,7 +554,7 @@ export function AtlassianSyncPage() {
         open={showExecuteConfirm}
         onConfirm={() => {
           setShowExecuteConfirm(false);
-          handleExecute();
+          if (canExecute) handleExecute();
         }}
         onCancel={() => setShowExecuteConfirm(false)}
         title="Execute Sync to Atlassian Cloud"
