@@ -145,7 +145,7 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
                         aria-label={sidebarCollapsed ? item.label : undefined}
                         className={({ isActive }) =>
                           cn(
-                            'group relative mx-2 flex items-center gap-2.5 rounded-lg text-[0.95rem] font-medium leading-5 transition-colors duration-150 ease-out',
+                            'group relative mx-2 flex items-center gap-2.5 rounded-md text-[0.95rem] font-medium leading-5 transition-colors duration-150 ease-out',
                             isActive
                               ? 'bg-primary px-3.5 py-2.5 text-white shadow-[0_6px_18px_rgba(171,25,45,0.16)]'
                               : 'px-3.5 py-2 text-sidebar-foreground hover:bg-sidebar-accent',

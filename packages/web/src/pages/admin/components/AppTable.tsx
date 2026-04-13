@@ -15,7 +15,7 @@ export function AppTable({ applications, onDelete, isDeleting }: AppTableProps) 
 
   return (
     <>
-      <div className="overflow-hidden rounded-2xl border bg-card">
+      <div className="overflow-hidden rounded-xl border bg-card">
         <table className="w-full text-[0.95rem]">
           <thead>
             <tr className="border-b bg-muted/50">
@@ -81,7 +81,7 @@ export function AppTable({ applications, onDelete, isDeleting }: AppTableProps) 
                     <Link
                       to={`/admin/apps/${app.id}/edit`}
                       aria-label={`Edit ${app.name || app.id}`}
-                      className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted"
+                      className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted"
                       title="Edit"
                     >
                       <Pencil className="h-4 w-4" />
@@ -91,7 +91,7 @@ export function AppTable({ applications, onDelete, isDeleting }: AppTableProps) 
                       onClick={() => setDeleteTarget(app)}
                       disabled={isDeleting}
                       aria-label={`Delete ${app.name || app.id}`}
-                      className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+                      className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
                       title="Delete"
                     >
                       <Trash2 className="h-4 w-4" />

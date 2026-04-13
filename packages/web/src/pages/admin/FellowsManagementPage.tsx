@@ -187,7 +187,7 @@ function FellowsManagementSkeleton() {
 
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
         {Array.from({ length: 3 }).map((_, index) => (
-          <div key={index} className="rounded-2xl border bg-card p-5">
+          <div key={index} className="rounded-xl border bg-card p-5">
             <div className="flex items-center justify-between">
               <SkeletonBlock className="h-3.5 w-24 rounded-full" />
               <SkeletonBlock className="h-5 w-5 rounded-full" />
@@ -209,7 +209,7 @@ function FellowsManagementSkeleton() {
           <SkeletonBlock className="h-11 w-40 rounded-md" />
         </div>
 
-        <div className="overflow-hidden rounded-2xl border bg-card">
+        <div className="overflow-hidden rounded-xl border bg-card">
           <div className="border-b bg-muted/50 px-4 py-3">
             <div className="grid grid-cols-6 gap-4">
               {Array.from({ length: 6 }).map((_, index) => (
@@ -252,7 +252,7 @@ function SummaryCard({
   valueClassName?: string;
 }) {
   return (
-    <div className="rounded-2xl border bg-card p-5">
+    <div className="rounded-xl border bg-card p-5">
       <div className="flex items-center justify-between mb-2">
         <span className="text-[0.8rem] uppercase tracking-[0.14em] text-muted-foreground">{label}</span>
         {icon}
@@ -357,7 +357,7 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
 
   return (
     <>
-      <div className="overflow-hidden rounded-2xl border bg-card">
+      <div className="overflow-hidden rounded-xl border bg-card">
         <table className="w-full text-[0.95rem]">
           <thead>
             <tr className="border-b bg-muted/50">
@@ -446,14 +446,14 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
-              className="rounded-full border px-3 py-1 text-sm transition-colors hover:bg-muted disabled:opacity-50"
+              className="rounded-md border px-3 py-1 text-sm transition-colors hover:bg-muted disabled:opacity-50"
             >
               Previous
             </button>
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
-              className="rounded-full border px-3 py-1 text-sm transition-colors hover:bg-muted disabled:opacity-50"
+              className="rounded-md border px-3 py-1 text-sm transition-colors hover:bg-muted disabled:opacity-50"
             >
               Next
             </button>

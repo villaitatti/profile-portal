@@ -18,7 +18,7 @@ function SkeletonRow() {
 
 function Auth0ErrorPanel({ onRetry }: { onRetry: () => void }) {
   return (
-    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
       <div className="flex items-center gap-2">
         <AlertCircle className="h-5 w-5 text-amber-600" />
         <p className="text-sm text-amber-800">
@@ -142,7 +142,7 @@ export function HasVitIdPage() {
       />
 
       {/* Search box */}
-      <div className="mb-6 rounded-2xl border bg-card p-6">
+      <div className="mb-6 rounded-xl border bg-card p-6">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input
@@ -190,7 +190,7 @@ export function HasVitIdPage() {
       </div>
 
       {/* Expandable full table */}
-      <div className="rounded-2xl border bg-card p-6">
+      <div className="rounded-xl border bg-card p-6">
         <button
           onClick={handleShowAll}
           className="flex items-center gap-2 text-[0.95rem] font-semibold text-primary hover:underline"

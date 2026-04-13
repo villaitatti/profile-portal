@@ -169,11 +169,11 @@ export function AtlassianMappingsPage() {
       />
 
       {/* Card 1: Add New Mapping */}
-      <div className="mb-6 rounded-2xl border bg-card p-6">
+      <div className="mb-6 rounded-xl border bg-card p-6">
         <h2 className="mb-4 text-xl font-semibold tracking-tight">Add New Mapping</h2>
 
         {/* Instructions */}
-        <div className="mb-6 rounded-xl border border-border bg-secondary/45 p-5">
+        <div className="mb-6 rounded-lg border border-border bg-secondary/45 p-5">
           <div className="flex gap-3">
             <Info className="mt-0.5 h-5 w-5 flex-shrink-0 text-primary" />
             <div className="space-y-2 text-[0.95rem] leading-7 text-muted-foreground">
@@ -245,7 +245,7 @@ export function AtlassianMappingsPage() {
           <button
             onClick={handleAdd}
             disabled={!canAdd}
-            className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             <Plus className="h-4 w-4" />
             Add Mapping
@@ -254,7 +254,7 @@ export function AtlassianMappingsPage() {
       </div>
 
       {/* Card 2: Group Mappings */}
-      <div className="rounded-2xl border bg-card p-6">
+      <div className="rounded-xl border bg-card p-6">
         <h2 className="mb-4 text-xl font-semibold tracking-tight">Group Mappings</h2>
 
         {!hasMappings ? (
@@ -308,7 +308,7 @@ export function AtlassianMappingsPage() {
                         <td className="py-3">
                           <button
                             onClick={() => setDeleteTarget(m)}
-                            className="rounded-full p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                            className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                             aria-label="Remove mapping"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -327,10 +327,10 @@ export function AtlassianMappingsPage() {
           <div className="mt-6 pt-4 border-t">
             <Link
               to="/admin/atlassian/sync"
-              className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
             >
-              Next: Sync Users
               <ArrowRight className="h-4 w-4" />
+              Next: Sync Users
             </Link>
           </div>
         )}
@@ -389,9 +389,9 @@ function AtlassianMappingsSkeleton() {
         <SkeletonBlock className="h-5 w-[36rem] max-w-full rounded-full" />
       </div>
 
-      <div className="rounded-2xl border bg-card p-6">
+      <div className="rounded-xl border bg-card p-6">
         <SkeletonBlock className="mb-5 h-7 w-44 rounded-full" />
-        <div className="mb-6 rounded-xl border border-border bg-secondary/45 p-5">
+        <div className="mb-6 rounded-lg border border-border bg-secondary/45 p-5">
           <div className="space-y-3">
             <SkeletonBlock className="h-4 w-full rounded-full" />
             <SkeletonBlock className="h-4 w-11/12 rounded-full" />
@@ -414,7 +414,7 @@ function AtlassianMappingsSkeleton() {
         </div>
       </div>
 
-      <div className="rounded-2xl border bg-card p-6">
+      <div className="rounded-xl border bg-card p-6">
         <SkeletonBlock className="mb-5 h-7 w-40 rounded-full" />
         <div className="space-y-4">
           {Array.from({ length: 4 }).map((_, index) => (

@@ -24,7 +24,7 @@ export function DashboardPage() {
       />
 
       {/* Profile card */}
-      <div className="flex flex-col gap-6 rounded-2xl border bg-card px-8 py-7 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-6 rounded-xl border bg-card px-8 py-7 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-5">
           <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
             {profile?.imageUrl || user?.picture ? (
@@ -44,10 +44,10 @@ export function DashboardPage() {
         </div>
         <Link
           to="/profile"
-          className="inline-flex flex-shrink-0 items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/92"
+          className="inline-flex flex-shrink-0 items-center gap-2 rounded-md bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/92"
         >
-          <span>View My Profile</span>
           <ArrowRight className="h-4 w-4" />
+          <span>View My Profile</span>
         </Link>
       </div>
 
@@ -85,7 +85,7 @@ export function DashboardPage() {
               href={app.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="group overflow-hidden rounded-2xl border bg-card transition-[border-color,box-shadow,transform] duration-200 ease-out hover:border-primary/20 hover:shadow-md hover:-translate-y-0.5"
+              className="group overflow-hidden rounded-xl border bg-card transition-[border-color,box-shadow,transform] duration-200 ease-out hover:border-primary/20 hover:shadow-md hover:-translate-y-0.5"
             >
               {/* Preview image */}
               <div className="aspect-[16/9] bg-muted overflow-hidden">
@@ -136,7 +136,7 @@ function DashboardPageSkeleton() {
         <SkeletonBlock className="h-5 w-[34rem] max-w-full rounded-full" />
       </div>
 
-      <div className="flex flex-col gap-6 rounded-2xl border bg-card px-8 py-7 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-6 rounded-xl border bg-card px-8 py-7 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-5">
           <SkeletonBlock className="h-16 w-16 rounded-full bg-muted/80" />
           <div className="space-y-3">
@@ -159,7 +159,7 @@ function DashboardPageSkeleton() {
 
         <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 3 }).map((_, index) => (
-            <div key={index} className="overflow-hidden rounded-2xl border bg-card">
+            <div key={index} className="overflow-hidden rounded-xl border bg-card">
               <SkeletonBlock className="aspect-[16/9] w-full bg-muted/80" />
               <div className="space-y-4 p-6">
                 <SkeletonBlock className="h-5 w-40 rounded-full" />

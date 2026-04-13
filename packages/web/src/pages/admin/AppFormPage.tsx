@@ -72,7 +72,7 @@ export function AppFormPage() {
       />
 
       <div className="max-w-3xl">
-        <div className="rounded-2xl border bg-card p-7">
+        <div className="rounded-xl border bg-card p-7">
           <AppForm
             defaultValues={
               existingApp
@@ -107,7 +107,7 @@ function AppFormPageSkeleton() {
         <SkeletonBlock className="h-5 w-64 rounded-full" />
       </div>
 
-      <div className="max-w-3xl rounded-2xl border bg-card p-7">
+      <div className="max-w-3xl rounded-xl border bg-card p-7">
         <div className="space-y-6">
           {Array.from({ length: 4 }).map((_, index) => (
             <div key={index} className="space-y-2">

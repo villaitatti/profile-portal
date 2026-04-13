@@ -12,7 +12,7 @@ export function ProfilePage() {
     return (
       <div>
         <PageHeader title="My Profile" />
-        <div className="rounded-2xl border bg-card p-8 text-center text-[0.98rem] leading-7 text-muted-foreground">
+        <div className="rounded-xl border bg-card p-8 text-center text-[0.98rem] leading-7 text-muted-foreground">
           <p>Unable to load profile information. Please try again later.</p>
         </div>
       </div>
@@ -30,7 +30,7 @@ export function ProfilePage() {
         }
       />
 
-      <div className="max-w-3xl rounded-2xl border bg-card">
+      <div className="max-w-3xl rounded-xl border bg-card">
         <div className="divide-y">
           <ProfileField
             icon={User}
@@ -55,7 +55,7 @@ export function ProfilePage() {
         </div>
 
         {profile?.source && (
-          <div className="rounded-b-2xl bg-muted/45 px-6 py-4 md:px-8">
+          <div className="rounded-b-xl bg-muted/45 px-6 py-4 md:px-8">
             <div className="flex items-center gap-2 text-[0.82rem] text-muted-foreground">
               <Database className="h-3 w-3" />
               <span>
@@ -77,7 +77,7 @@ function ProfilePageSkeleton() {
         <SkeletonBlock className="h-5 w-[26rem] max-w-full rounded-full" />
       </div>
 
-      <div className="max-w-3xl overflow-hidden rounded-2xl border bg-card">
+      <div className="max-w-3xl overflow-hidden rounded-xl border bg-card">
         {Array.from({ length: 4 }).map((_, index) => (
           <div
             key={index}

@@ -52,7 +52,7 @@ function ProgressPanel({ progress, startTime }: { progress: SyncProgress | null;
   };
 
   return (
-    <div className="rounded-2xl border bg-card p-6">
+    <div className="rounded-xl border bg-card p-6">
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm font-medium">{progress.description}</span>
         <span className="text-xs text-muted-foreground">{formatDuration(elapsed)}</span>
@@ -88,7 +88,7 @@ function DiffPreview({ run }: { run: SyncRunDetail }) {
 
   if (totalChanges === 0) {
     return (
-      <div className="rounded-2xl border bg-card p-6 text-center">
+      <div className="rounded-xl border bg-card p-6 text-center">
         <CheckCircle2 className="h-8 w-8 text-green-500 mx-auto mb-2" />
         <p className="font-medium">Everything in sync</p>
         <p className="text-sm text-muted-foreground">No changes needed.</p>
@@ -97,7 +97,7 @@ function DiffPreview({ run }: { run: SyncRunDetail }) {
   }
 
   return (
-    <div className="rounded-2xl border bg-card p-6">
+    <div className="rounded-xl border bg-card p-6">
       <h3 className="text-lg font-semibold mb-4">Proposed Changes ({totalChanges})</h3>
 
       {diff.groupsToCreate?.length > 0 && (
@@ -203,7 +203,7 @@ function SyncHistory() {
   };
 
   return (
-    <div className="rounded-2xl border bg-card p-6">
+    <div className="rounded-xl border bg-card p-6">
       <h2 className="text-lg font-semibold mb-4">Sync History</h2>
       <div className="space-y-2">
         {data.runs.map((run) => (
@@ -286,7 +286,7 @@ function SyncHistory() {
           <button
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page === 1}
-            className="text-sm px-3 py-1 rounded-full border transition-colors hover:bg-muted disabled:opacity-50"
+            className="text-sm px-3 py-1 rounded-md border transition-colors hover:bg-muted disabled:opacity-50"
           >
             Previous
           </button>
@@ -296,7 +296,7 @@ function SyncHistory() {
           <button
             onClick={() => setPage((p) => p + 1)}
             disabled={page * data.perPage >= data.total}
-            className="text-sm px-3 py-1 rounded-full border transition-colors hover:bg-muted disabled:opacity-50"
+            className="text-sm px-3 py-1 rounded-md border transition-colors hover:bg-muted disabled:opacity-50"
           >
             Next
           </button>
@@ -479,7 +479,7 @@ export function AtlassianSyncPage() {
       />
 
       {!status?.configured && (
-        <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
           <div className="flex items-center gap-2">
             <AlertCircle className="h-5 w-5 flex-shrink-0 text-amber-600" />
             <p className="text-sm text-amber-800">
@@ -490,7 +490,7 @@ export function AtlassianSyncPage() {
       )}
 
       {mappingsEmpty && (
-        <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
           <div className="flex items-center gap-2">
             <AlertCircle className="h-5 w-5 flex-shrink-0 text-amber-600" />
             <p className="text-sm text-amber-800">
@@ -509,7 +509,7 @@ export function AtlassianSyncPage() {
           <button
             onClick={handleDryRun}
             disabled={isRunning || startDryRun.isPending || !status?.configured || mappingsEmpty}
-            className="inline-flex items-center gap-2 rounded-full border border-primary px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/5 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-md border border-primary px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/5 disabled:opacity-50"
           >
             <RefreshCw className={`h-4 w-4 ${isRunning ? 'animate-spin' : ''}`} />
             Preview Changes
@@ -520,7 +520,7 @@ export function AtlassianSyncPage() {
               <button
                 onClick={() => setShowExecuteConfirm(true)}
                 disabled={isRunning}
-                className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               >
                 <Play className="h-4 w-4" />
                 Execute Sync
@@ -594,7 +594,7 @@ function AtlassianSyncPageSkeleton() {
           <SkeletonBlock className="h-4 w-40 rounded-full" />
         </div>
 
-        <div className="rounded-2xl border bg-card p-6">
+        <div className="rounded-xl border bg-card p-6">
           <div className="mb-3 flex items-center justify-between gap-4">
             <SkeletonBlock className="h-5 w-52 rounded-full" />
             <SkeletonBlock className="h-4 w-16 rounded-full" />
@@ -603,7 +603,7 @@ function AtlassianSyncPageSkeleton() {
           <SkeletonBlock className="mt-3 h-4 w-28 rounded-full" />
         </div>
 
-        <div className="rounded-2xl border bg-card p-6">
+        <div className="rounded-xl border bg-card p-6">
           <SkeletonBlock className="mb-4 h-6 w-48 rounded-full" />
           <div className="space-y-4">
             {Array.from({ length: 3 }).map((_, index) => (
@@ -616,11 +616,11 @@ function AtlassianSyncPageSkeleton() {
           </div>
         </div>
 
-        <div className="rounded-2xl border bg-card p-6">
+        <div className="rounded-xl border bg-card p-6">
           <SkeletonBlock className="mb-4 h-6 w-32 rounded-full" />
           <div className="space-y-3">
             {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className="rounded-xl border border-border/80 bg-background/70 px-4 py-3">
+              <div key={index} className="rounded-lg border border-border/80 bg-background/70 px-4 py-3">
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
                     <SkeletonBlock className="h-4 w-4 rounded-full bg-muted/80" />

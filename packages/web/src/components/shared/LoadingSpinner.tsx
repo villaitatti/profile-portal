@@ -21,7 +21,7 @@ export function LoadingSpinner({
         role="status"
         aria-live="polite"
         aria-label="Loading content"
-        className="rounded-2xl border bg-card p-6"
+        className="rounded-xl border bg-card p-6"
       >
         <span className="sr-only">Loading content</span>
         <div className="space-y-4 motion-safe:animate-pulse">
@@ -31,7 +31,7 @@ export function LoadingSpinner({
           </div>
           <div className="space-y-3">
             {Array.from({ length: rows }).map((_, index) => (
-              <div key={index} className="rounded-xl border border-border/80 bg-background/70 px-4 py-3">
+              <div key={index} className="rounded-lg border border-border/80 bg-background/70 px-4 py-3">
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
                     <SkeletonBlock className="h-4 w-4 rounded-full bg-muted/80" />
@@ -55,14 +55,14 @@ export function LoadingSpinner({
       className="flex min-h-[60vh] items-center justify-center"
     >
       <span className="sr-only">Loading page</span>
-      <div className="w-full max-w-md rounded-2xl border bg-card p-8 motion-safe:animate-pulse">
+      <div className="w-full max-w-md rounded-xl border bg-card p-8 motion-safe:animate-pulse">
         <div className="space-y-5">
           <div className="space-y-3">
             <SkeletonBlock className="h-8 w-44 rounded-full" />
             <SkeletonBlock className="h-4.5 w-full rounded-full" />
             <SkeletonBlock className="h-4.5 w-4/5 rounded-full" />
           </div>
-          <div className="rounded-xl border border-border/80 bg-background/70 p-4">
+          <div className="rounded-lg border border-border/80 bg-background/70 p-4">
             <div className="space-y-3">
               <SkeletonBlock className="h-4 w-28 rounded-full" />
               <SkeletonBlock className="h-10 w-full rounded-md" />
