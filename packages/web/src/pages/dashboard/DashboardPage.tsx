@@ -85,7 +85,7 @@ export function DashboardPage() {
               href={app.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="group overflow-hidden rounded-2xl border bg-card transition-all hover:border-primary/20 hover:shadow-sm"
+              className="group overflow-hidden rounded-2xl border bg-card transition-[border-color,box-shadow,transform] duration-200 ease-out hover:border-primary/20 hover:shadow-md hover:-translate-y-0.5"
             >
               {/* Preview image */}
               <div className="aspect-[16/9] bg-muted overflow-hidden">

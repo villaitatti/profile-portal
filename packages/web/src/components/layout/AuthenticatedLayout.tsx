@@ -39,11 +39,11 @@ export function AuthenticatedLayout() {
       {isMobile && mobileMenuOpen && (
         <>
           <div
-            className="fixed inset-0 z-30 bg-[rgba(29,37,44,0.18)]"
+            className="fixed inset-0 z-30 bg-[rgba(29,37,44,0.18)] animate-in fade-in-0 duration-200"
             onClick={closeMobileMenu}
             aria-hidden="true"
           />
-          <div className="fixed inset-y-0 left-0 z-40 transition-transform duration-300">
+          <div className="fixed inset-y-0 left-0 z-40 animate-in slide-in-from-left duration-250 ease-out">
             <AppSidebar onNavigate={closeMobileMenu} />
           </div>
         </>
