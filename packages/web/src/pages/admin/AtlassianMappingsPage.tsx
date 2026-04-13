@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
@@ -12,7 +12,7 @@ import {
   useAtlassianGroups,
 } from '@/api/sync';
 import type { RoleGroupMapping } from '@/api/sync';
-import { Plus, ArrowRight, Trash2, Info, Link as LinkIcon } from 'lucide-react';
+import { Plus, ArrowRight, Trash2, Info, Link as LinkIcon, Search } from 'lucide-react';
 
 function Auth0Logo() {
   return (
@@ -55,6 +55,50 @@ export function AtlassianMappingsPage() {
   const [selectedGroupName, setSelectedGroupName] = useState('');
   const [isNewGroup, setIsNewGroup] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<RoleGroupMapping | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortField, setSortField] = useState<'auth0RoleName' | 'atlassianGroupName' | 'createdBy' | 'createdAt'>('auth0RoleName');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
+  const filteredMappings = useMemo(() => {
+    if (!mappings) return [];
+    let result = [...mappings];
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      result = result.filter(
+        (m) =>
+          m.auth0RoleName.toLowerCase().includes(q) ||
+          m.atlassianGroupName.toLowerCase().includes(q)
+      );
+    }
+    result.sort((a, b) => {
+      let cmp = 0;
+      switch (sortField) {
+        case 'auth0RoleName':
+          cmp = a.auth0RoleName.localeCompare(b.auth0RoleName);
+          break;
+        case 'atlassianGroupName':
+          cmp = a.atlassianGroupName.localeCompare(b.atlassianGroupName);
+          break;
+        case 'createdBy':
+          cmp = (a.createdBy || '').localeCompare(b.createdBy || '');
+          break;
+        case 'createdAt':
+          cmp = a.createdAt.localeCompare(b.createdAt);
+          break;
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+    return result;
+  }, [mappings, searchQuery, sortField, sortDir]);
+
+  function toggleSort(field: typeof sortField) {
+    if (sortField === field) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  }
 
   const handleRoleSelect = (value: string, label: string) => {
     setSelectedRoleId(value);
@@ -218,46 +262,65 @@ export function AtlassianMappingsPage() {
             No mappings configured. Use the form above to add your first mapping.
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-[0.95rem]">
-              <thead>
-                <tr className="border-b text-left">
-                  <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Auth0 Role</th>
-                  <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Atlassian Group</th>
-                  <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Auth0 Role ID</th>
-                  <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Atlassian Group ID</th>
-                  <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Added By</th>
-                  <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Added On</th>
-                  <th className="w-12 pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {mappings!.map((m) => (
-                  <tr key={m.id} className="border-b">
-                    <td className="py-3">{m.auth0RoleName}</td>
-                    <td className="py-3">{m.atlassianGroupName}</td>
-                    <td className="py-3 text-[0.78rem] font-mono text-muted-foreground">{m.auth0RoleId}</td>
-                    <td className="py-3 text-[0.78rem] font-mono text-muted-foreground">
-                      {m.atlassianGroupId || <span className="italic">new (will be created)</span>}
-                    </td>
-                    <td className="py-3 text-[0.92rem] text-muted-foreground">{m.createdBy || '—'}</td>
-                    <td className="whitespace-nowrap py-3 text-[0.92rem] text-muted-foreground">
-                      {formatDateTime(m.createdAt)}
-                    </td>
-                    <td className="py-3">
-                      <button
-                        onClick={() => setDeleteTarget(m)}
-                        className="rounded-full p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                        aria-label="Remove mapping"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <div className="relative mb-4">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Filter by Auth0 role or Atlassian group..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full rounded-md border bg-background py-2.5 pl-10 pr-4 text-base outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+
+            {filteredMappings.length === 0 ? (
+              <p className="py-8 text-center text-[0.95rem] text-muted-foreground">
+                No mappings match &ldquo;{searchQuery}&rdquo;.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-[0.95rem]">
+                  <thead>
+                    <tr className="border-b text-left">
+                      <SortHeader field="auth0RoleName" label="Auth0 Role" current={sortField} dir={sortDir} onSort={toggleSort} />
+                      <SortHeader field="atlassianGroupName" label="Atlassian Group" current={sortField} dir={sortDir} onSort={toggleSort} />
+                      <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Auth0 Role ID</th>
+                      <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Atlassian Group ID</th>
+                      <SortHeader field="createdBy" label="Added By" current={sortField} dir={sortDir} onSort={toggleSort} />
+                      <SortHeader field="createdAt" label="Added On" current={sortField} dir={sortDir} onSort={toggleSort} />
+                      <th className="w-12 pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredMappings.map((m) => (
+                      <tr key={m.id} className="border-b">
+                        <td className="py-3">{m.auth0RoleName}</td>
+                        <td className="py-3">{m.atlassianGroupName}</td>
+                        <td className="py-3 text-[0.78rem] font-mono text-muted-foreground">{m.auth0RoleId}</td>
+                        <td className="py-3 text-[0.78rem] font-mono text-muted-foreground">
+                          {m.atlassianGroupId || <span className="italic">new (will be created)</span>}
+                        </td>
+                        <td className="py-3 text-[0.92rem] text-muted-foreground">{m.createdBy || '—'}</td>
+                        <td className="whitespace-nowrap py-3 text-[0.92rem] text-muted-foreground">
+                          {formatDateTime(m.createdAt)}
+                        </td>
+                        <td className="py-3">
+                          <button
+                            onClick={() => setDeleteTarget(m)}
+                            className="rounded-full p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                            aria-label="Remove mapping"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
         )}
 
         {hasMappings && (
@@ -287,6 +350,34 @@ export function AtlassianMappingsPage() {
         variant="danger"
       />
     </div>
+  );
+}
+
+function SortHeader({
+  field,
+  label,
+  current,
+  dir,
+  onSort,
+}: {
+  field: 'auth0RoleName' | 'atlassianGroupName' | 'createdBy' | 'createdAt';
+  label: string;
+  current: string;
+  dir: 'asc' | 'desc';
+  onSort: (field: 'auth0RoleName' | 'atlassianGroupName' | 'createdBy' | 'createdAt') => void;
+}) {
+  const active = current === field;
+  return (
+    <th className="pb-3 text-left">
+      <button
+        type="button"
+        onClick={() => onSort(field)}
+        className="inline-flex select-none items-center text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground"
+      >
+        {label}
+        {active && <span className="ml-1">{dir === 'asc' ? '↑' : '↓'}</span>}
+      </button>
+    </th>
   );
 }
 
