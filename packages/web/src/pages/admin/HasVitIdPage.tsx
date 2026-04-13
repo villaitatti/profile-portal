@@ -18,7 +18,7 @@ function SkeletonRow() {
 
 function Auth0ErrorPanel({ onRetry }: { onRetry: () => void }) {
   return (
-    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
       <div className="flex items-center gap-2">
         <AlertCircle className="h-5 w-5 text-amber-600" />
         <p className="text-sm text-amber-800">
@@ -76,9 +76,9 @@ function UserTable({ users, query }: { users: Auth0UserListItem[]; query: string
           <tbody>
             {filtered.map((user) => (
               <tr key={user.user_id} className="border-b">
-                <td className="px-1 py-3">{user.name || '—'}</td>
-                <td className="px-1 py-3">{user.email}</td>
-                <td className="px-1 py-3">
+                <td className="px-4 py-3">{user.name || '—'}</td>
+                <td className="px-4 py-3">{user.email}</td>
+                <td className="px-4 py-3">
                   {user.email_verified ? (
                     <CheckCircle2 className="h-4 w-4 text-green-500" aria-hidden="true" />
                   ) : (

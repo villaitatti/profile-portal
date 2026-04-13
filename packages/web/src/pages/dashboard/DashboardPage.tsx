@@ -93,7 +93,7 @@ export function DashboardPage() {
                   <img
                     src={app.imageUrl}
                     alt={`${app.name} preview`}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">

@@ -146,6 +146,7 @@ export function FellowsManagementPage() {
           }}
           className="min-w-[150px] rounded-md border bg-background px-3.5 py-2.5 text-[0.95rem] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
         >
+          <option value="">All years</option>
           {academicYears.length > 0 ? (
             academicYears.map((year) => (
               <option key={year} value={year}>
@@ -155,7 +156,6 @@ export function FellowsManagementPage() {
           ) : (
             <option value={currentYear}>{currentYear}</option>
           )}
-          <option value="">All years</option>
         </select>
       </div>
 
@@ -446,14 +446,14 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
-              className="rounded border px-3 py-1 transition-colors hover:bg-muted disabled:opacity-50"
+              className="rounded-full border px-3 py-1 text-sm transition-colors hover:bg-muted disabled:opacity-50"
             >
               Previous
             </button>
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
-              className="rounded border px-3 py-1 transition-colors hover:bg-muted disabled:opacity-50"
+              className="rounded-full border px-3 py-1 text-sm transition-colors hover:bg-muted disabled:opacity-50"
             >
               Next
             </button>
