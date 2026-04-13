@@ -17,7 +17,7 @@ export function DashboardPage() {
     : user?.name || 'there';
 
   return (
-    <div className="space-y-12">
+    <div className="mx-auto max-w-6xl space-y-12">
       <PageHeader
         title="Dashboard"
         description="Access your profile and the internal services available to you through VIT ID and Harvard Key."
@@ -130,7 +130,7 @@ export function DashboardPage() {
 
 function DashboardPageSkeleton() {
   return (
-    <div className="space-y-12 motion-safe:animate-pulse">
+    <div className="mx-auto max-w-6xl space-y-12 motion-safe:animate-pulse">
       <div className="space-y-3">
         <SkeletonBlock className="h-10 w-52 rounded-full" />
         <SkeletonBlock className="h-5 w-[34rem] max-w-full rounded-full" />

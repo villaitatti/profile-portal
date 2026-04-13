@@ -51,7 +51,7 @@ export function AuthenticatedLayout() {
 
       <div className="flex-1 flex min-w-0 flex-col">
         <AppHeader />
-        <main className={`flex-1 ${isMobile ? 'px-4 py-6' : 'mx-auto w-full max-w-6xl px-12 py-10'}`}>
+        <main className={`flex-1 ${isMobile ? 'px-4 py-6' : 'px-12 py-10'}`}>
           <Outlet />
         </main>
       </div>
