@@ -558,19 +558,20 @@ export function AtlassianSyncPage() {
         }}
         onCancel={() => setShowExecuteConfirm(false)}
         title="Execute Sync to Atlassian Cloud"
-        description={
-          dryRunDetail?.diff
-            ? `This will apply changes to Atlassian Cloud: ${[
+        description={(() => {
+          const parts = dryRunDetail?.diff
+            ? [
                 dryRunDetail.diff.usersToCreate?.length && `create ${dryRunDetail.diff.usersToCreate.length} user(s)`,
                 dryRunDetail.diff.usersToUpdate?.length && `update ${dryRunDetail.diff.usersToUpdate.length} user(s)`,
                 dryRunDetail.diff.usersToDeactivate?.length && `deactivate ${dryRunDetail.diff.usersToDeactivate.length} user(s)`,
                 dryRunDetail.diff.groupsToCreate?.length && `create ${dryRunDetail.diff.groupsToCreate.length} group(s)`,
                 dryRunDetail.diff.membershipChanges?.length && `${dryRunDetail.diff.membershipChanges.length} membership change(s)`,
-              ]
-                .filter(Boolean)
-                .join(', ')}. This action cannot be undone.`
-            : 'Apply the previewed changes to Atlassian Cloud. This action cannot be undone.'
-        }
+              ].filter(Boolean)
+            : [];
+          return parts.length > 0
+            ? `This will apply changes to Atlassian Cloud: ${parts.join(', ')}. This action cannot be undone.`
+            : 'Apply the previewed changes to Atlassian Cloud. This action cannot be undone.';
+        })()}
         confirmLabel="Execute Sync"
         variant="danger"
       />
