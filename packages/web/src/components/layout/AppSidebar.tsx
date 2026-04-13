@@ -4,6 +4,7 @@ import { useProfile } from '@/api/profile';
 import { useUserRoles } from '@/hooks/useUserRoles';
 import { hasAnyRole, KnownRoles } from '@itatti/shared';
 import { useUIStore } from '@/stores/ui-store';
+import * as Tooltip from '@radix-ui/react-tooltip';
 import {
   LayoutDashboard,
   User,
@@ -81,6 +82,7 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
   );
 
   return (
+    <Tooltip.Provider delayDuration={200} skipDelayDuration={0}>
     <aside
       className={cn(
         'relative sticky top-0 flex h-screen flex-col overflow-visible border-r border-sidebar-border bg-sidebar transition-all duration-300',
@@ -133,26 +135,44 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
             )}
             <div className="space-y-0.5">
               {section.items.map((item) => (
-                <NavLink
-                  key={item.path}
-                  to={item.path}
-                  end
-                  onClick={onNavigate}
-                  {...(sidebarCollapsed ? { 'aria-label': item.label } : {})}
-                  className={({ isActive }) =>
-                    cn(
-                      'group relative flex items-center gap-2.5 rounded-lg text-[0.95rem] font-medium leading-5 transition-colors duration-150 ease-out',
-                      isActive
-                        ? 'mx-2 bg-primary px-3.5 py-2.5 text-white shadow-[0_6px_18px_rgba(171,25,45,0.16)]'
-                        : 'mx-2 px-3.5 py-2 text-sidebar-foreground hover:bg-sidebar-accent',
-                      sidebarCollapsed && isActive && 'justify-center px-2.5 py-2.5',
-                      sidebarCollapsed && !isActive && 'justify-center px-2.5 py-2'
-                    )
-                  }
-                >
-                  <item.icon className="h-[18px] w-[18px] flex-shrink-0 transition-transform duration-200 group-hover:scale-105" />
-                  {!sidebarCollapsed && <span>{item.label}</span>}
-                </NavLink>
+                <Tooltip.Root key={item.path}>
+                  <Tooltip.Trigger asChild>
+                    <div>
+                      <NavLink
+                        to={item.path}
+                        end
+                        onClick={onNavigate}
+                        aria-label={sidebarCollapsed ? item.label : undefined}
+                        className={({ isActive }) =>
+                          cn(
+                            'group relative mx-2 flex items-center gap-2.5 rounded-lg text-[0.95rem] font-medium leading-5 transition-colors duration-150 ease-out',
+                            isActive
+                              ? 'bg-primary px-3.5 py-2.5 text-white shadow-[0_6px_18px_rgba(171,25,45,0.16)]'
+                              : 'px-3.5 py-2 text-sidebar-foreground hover:bg-sidebar-accent',
+                            sidebarCollapsed && 'justify-center px-2.5',
+                            sidebarCollapsed && isActive && 'py-2.5',
+                            sidebarCollapsed && !isActive && 'py-2'
+                          )
+                        }
+                      >
+                        <item.icon className="h-[18px] w-[18px] flex-shrink-0" />
+                        {!sidebarCollapsed && <span>{item.label}</span>}
+                      </NavLink>
+                    </div>
+                  </Tooltip.Trigger>
+                  {sidebarCollapsed && (
+                    <Tooltip.Portal>
+                      <Tooltip.Content
+                        side="right"
+                        sideOffset={8}
+                        className="z-50 rounded-md bg-foreground px-2.5 py-1.5 text-xs font-medium text-background shadow-md"
+                      >
+                        {item.label}
+                        <Tooltip.Arrow className="fill-foreground" />
+                      </Tooltip.Content>
+                    </Tooltip.Portal>
+                  )}
+                </Tooltip.Root>
               ))}
             </div>
           </div>
@@ -195,5 +215,6 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
         )}
       </div>
     </aside>
+    </Tooltip.Provider>
   );
 }
