@@ -23,7 +23,7 @@ export function ConfirmDialog({
   return (
     <Dialog.Root open={open} onOpenChange={(isOpen) => { if (!isOpen) onCancel(); }}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgba(43,36,31,0.32)]" />
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgba(29,37,44,0.32)]" />
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border bg-card p-7 shadow-lg">
           <Dialog.Title className="text-xl font-semibold tracking-tight text-foreground">
             {title}
