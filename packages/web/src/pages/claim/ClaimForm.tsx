@@ -40,18 +40,20 @@ export function ClaimForm() {
 
   if (submitted) {
     return (
-      <div className="rounded-xl border bg-card p-8 text-center">
+      <div className="rounded-2xl border bg-card p-8 text-center">
         <CheckCircle2 className="h-12 w-12 text-green-600 mx-auto mb-4" />
         <h3 className="text-lg font-semibold mb-2">Request Submitted</h3>
         <p className="text-muted-foreground">
-          If you are eligible, you will receive an email with next steps.
+          If you are eligible, you'll receive an email with your login
+          credentials within a few minutes. Check your spam folder if you
+          don't see it.
         </p>
       </div>
     );
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="rounded-xl border bg-card p-8">
+    <form onSubmit={handleSubmit(onSubmit)} className="rounded-2xl border bg-card p-8">
       <h2 className="text-xl font-semibold mb-2">Claim your VIT ID</h2>
       <p className="text-muted-foreground mb-6 text-sm">
         Enter your email address to check your eligibility and receive your VIT ID credentials.
@@ -83,7 +85,7 @@ export function ClaimForm() {
         <button
           type="submit"
           disabled={submitting}
-          className="w-full inline-flex items-center justify-center rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 transition-colors disabled:opacity-50"
+          className="w-full inline-flex items-center justify-center rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow hover:bg-primary/90 transition-colors disabled:opacity-50"
         >
           {submitting ? (
             <>
