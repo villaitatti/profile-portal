@@ -48,14 +48,14 @@ const navSections: NavSection[] = [
     items: [
       { label: 'Has VIT ID?', path: '/admin/has-vitid', icon: Search },
       { label: 'Manage Appointees', path: '/admin/fellows', icon: Users },
-      { label: 'Claim Log', path: '/admin/claims', icon: ShieldCheck },
-      { label: 'Automations', path: '/admin/automations', icon: CalendarClock },
     ],
   },
   {
     heading: 'Portal Settings',
     requiredRoles: [KnownRoles.STAFF_IT],
     items: [
+      { label: 'Claim Log', path: '/admin/claims', icon: ShieldCheck },
+      { label: 'Automations', path: '/admin/automations', icon: CalendarClock },
       { label: 'Applications Catalog', path: '/admin/apps', icon: Grid3X3 },
     ],
   },

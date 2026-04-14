@@ -53,6 +53,7 @@ model VitIdClaim {
   orgsAssigned         String[] @map("orgs_assigned")
   claimedAt            DateTime @default(now()) @map("claimed_at")
 
+  @@index([email])
   @@index([claimedAt(sort: Desc)])
   @@map("vit_id_claims")
 }

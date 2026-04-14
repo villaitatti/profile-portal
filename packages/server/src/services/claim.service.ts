@@ -96,20 +96,30 @@ export async function processClaim(email: string): Promise<void> {
   logger.info({ emailHash }, 'Claim: password setup email sent');
 
   // Step 9: Fire-and-forget async operations (JSM orgs + email notification)
-  const displayName = `${contact.firstName} ${contact.lastName}`;
-  processAsyncClaimOps(claimRecord.id, email, displayName, hasFellowship, hasCurrentFellowship, rolesAssigned).catch(
+  processAsyncClaimOps({
+    claimId: claimRecord.id,
+    email,
+    firstName: contact.firstName,
+    lastName: contact.lastName,
+    hasFellowship,
+    hasCurrentFellowship,
+    rolesAssigned,
+  }).catch(
     (err) => logger.error({ err, emailHash }, 'Claim: async operations failed')
   );
 }
 
-async function processAsyncClaimOps(
-  claimId: string,
-  email: string,
-  displayName: string,
-  hasFellowship: boolean,
-  hasCurrentFellowship: boolean,
-  rolesAssigned: string[]
-): Promise<void> {
+async function processAsyncClaimOps(params: {
+  claimId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  hasFellowship: boolean;
+  hasCurrentFellowship: boolean;
+  rolesAssigned: string[];
+}): Promise<void> {
+  const { claimId, email, firstName, lastName, hasFellowship, hasCurrentFellowship, rolesAssigned } = params;
+  const displayName = `${firstName} ${lastName}`;
   const orgsAssigned: string[] = [];
 
   if (hasFellowship && jsmService.isJsmConfigured()) {
@@ -135,8 +145,8 @@ async function processAsyncClaimOps(
   // Send notification email
   await emailService.sendClaimNotification({
     email,
-    firstName: displayName.split(' ')[0],
-    lastName: displayName.split(' ').slice(1).join(' '),
+    firstName,
+    lastName,
     hasFellowship,
     hasCurrentFellowship,
     rolesAssigned,

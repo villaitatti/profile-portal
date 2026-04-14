@@ -56,8 +56,8 @@ const envSchema = z.object({
   AUTH0_FELLOWS_CURRENT_ROLE_ID: z.string().optional(),
 
   // Atlassian JSM Organizations (Phase 2 — optional, org features disabled if not configured)
-  ATLASSIAN_JSM_SITE1_URL: z.string().url().optional(),
-  ATLASSIAN_JSM_SITE2_URL: z.string().url().optional(),
+  ATLASSIAN_JSM_SITE1_URL: z.string().url().or(z.literal('')).optional(),
+  ATLASSIAN_JSM_SITE2_URL: z.string().url().or(z.literal('')).optional(),
   ATLASSIAN_JSM_SITE1_FORMER_ORG_ID: z.string().optional(),
   ATLASSIAN_JSM_SITE1_CURRENT_ORG_ID: z.string().optional(),
   ATLASSIAN_JSM_SITE2_FORMER_ORG_ID: z.string().optional(),

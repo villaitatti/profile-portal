@@ -48,9 +48,12 @@ export function ClaimLogPage() {
         case 'email':
           cmp = a.email.localeCompare(b.email);
           break;
-        case 'status':
-          cmp = Number(b.hasCurrentFellowship) - Number(a.hasCurrentFellowship);
+        case 'status': {
+          const rankA = Number(a.hasCurrentFellowship) * 2 + Number(a.hasFellowship);
+          const rankB = Number(b.hasCurrentFellowship) * 2 + Number(b.hasFellowship);
+          cmp = rankA - rankB;
           break;
+        }
         case 'claimedAt':
           cmp = a.claimedAt.localeCompare(b.claimedAt);
           break;
@@ -131,6 +134,7 @@ export function ClaimLogPage() {
               <input
                 type="text"
                 placeholder="Search by name or email..."
+                aria-label="Search claims by name or email"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full rounded-md border bg-background py-2.5 pl-10 pr-4 text-base outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"

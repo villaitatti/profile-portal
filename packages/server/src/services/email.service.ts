@@ -24,6 +24,15 @@ export function isEmailConfigured(): boolean {
   return !!(env.AWS_SES_REGION && env.AWS_SES_FROM_EMAIL && env.ADMIN_NOTIFICATION_EMAIL);
 }
 
+let cachedSesClient: any = null;
+async function getSesClient() {
+  if (!cachedSesClient) {
+    const { SESClient } = await import('@aws-sdk/client-ses');
+    cachedSesClient = new SESClient({ region: env.AWS_SES_REGION });
+  }
+  return cachedSesClient;
+}
+
 async function sendEmail(to: string, subject: string, body: string): Promise<void> {
   if (isDevMode || !isEmailConfigured()) {
     logger.info({ to, subject, bodyLength: body.length }, 'Email (dev mode/not configured): would send');
@@ -31,10 +40,9 @@ async function sendEmail(to: string, subject: string, body: string): Promise<voi
     return;
   }
 
-  // Lazy import to avoid loading AWS SDK in dev mode
-  const { SESClient, SendEmailCommand } = await import('@aws-sdk/client-ses');
-
-  const client = new SESClient({ region: env.AWS_SES_REGION });
+  // Lazy import + cached client to avoid loading AWS SDK in dev mode
+  const client = await getSesClient();
+  const { SendEmailCommand } = await import('@aws-sdk/client-ses');
   const command = new SendEmailCommand({
     Source: env.AWS_SES_FROM_EMAIL,
     Destination: { ToAddresses: [to] },
@@ -62,7 +70,7 @@ export async function sendClaimNotification(input: ClaimNotificationInput): Prom
   ].join('\n');
 
   try {
-    await sendEmail(env.ADMIN_NOTIFICATION_EMAIL || '', subject, body);
+    await sendEmail(env.ADMIN_NOTIFICATION_EMAIL!, subject, body);
   } catch (err) {
     logger.error({ err }, 'Failed to send claim notification email');
   }
@@ -89,7 +97,7 @@ export async function sendAutomationReport(input: AutomationReportInput): Promis
   ].join('\n');
 
   try {
-    await sendEmail(env.ADMIN_NOTIFICATION_EMAIL || '', subject, body);
+    await sendEmail(env.ADMIN_NOTIFICATION_EMAIL!, subject, body);
   } catch (err) {
     logger.error({ err }, 'Failed to send automation report email');
   }

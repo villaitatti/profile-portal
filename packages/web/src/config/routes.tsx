@@ -62,15 +62,15 @@ export const router = createBrowserRouter([
                 children: [
                   { path: '/admin/fellows', element: <FellowsManagementPage /> },
                   { path: '/admin/has-vitid', element: <HasVitIdPage /> },
-                  { path: '/admin/claims', element: <ClaimLogPage /> },
-                  { path: '/admin/automations', element: <AutomationsPage /> },
                 ],
               },
 
-              // Portal Settings + Atlassian Cloud (staff-it only)
+              // Portal Settings + Atlassian Cloud + Claim Log + Automations (staff-it only)
               {
                 element: <RoleGuard requiredRoles={[KnownRoles.STAFF_IT]} />,
                 children: [
+                  { path: '/admin/claims', element: <ClaimLogPage /> },
+                  { path: '/admin/automations', element: <AutomationsPage /> },
                   { path: '/admin/apps', element: <AppCatalogPage /> },
                   { path: '/admin/apps/new', element: <AppFormPage /> },
                   { path: '/admin/apps/:id/edit', element: <AppFormPage /> },

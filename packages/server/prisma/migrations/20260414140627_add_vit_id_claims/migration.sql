@@ -15,4 +15,7 @@ CREATE TABLE "vit_id_claims" (
 );
 
 -- CreateIndex
+CREATE INDEX "vit_id_claims_email_idx" ON "vit_id_claims"("email");
+
+-- CreateIndex
 CREATE INDEX "vit_id_claims_claimed_at_idx" ON "vit_id_claims"("claimed_at" DESC);

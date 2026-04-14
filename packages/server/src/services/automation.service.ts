@@ -21,7 +21,8 @@ interface DryRunResult {
 interface DryRunAction {
   email: string;
   name: string;
-  action: string; // e.g., "remove from fellows-current", "add to Current Appointees"
+  action: string;
+  needsCurrentAppointees?: boolean;
 }
 
 // --- Scheduling ---
@@ -182,6 +183,7 @@ export async function runBackfillDryRun(triggeredBy: string): Promise<DryRunResu
           email: fellow.email,
           name: fellow.name || fellow.email,
           action: 'add to I Tatti Current Appointees (both JSM sites) + fellows-current role',
+          needsCurrentAppointees: true,
         });
       }
     }
@@ -309,7 +311,7 @@ async function executeEndOfYearCleanup(dryRun: { result: unknown }): Promise<Exe
 
       // Remove from Current Appointees on both JSM sites
       if (jsmService.isJsmConfigured()) {
-        await jsmService.removeUserFromCurrentAppointees(email, user?.name || email);
+        await jsmService.removeUserFromCurrentAppointees(email);
       }
 
       processed++;
@@ -401,7 +403,7 @@ async function executeBackfill(dryRun: { result: unknown }): Promise<ExecutionRe
 
       // Check if current fellow needs Current Appointees too
       const needsCurrent = actions.some(
-        (a) => a.email === email && a.action.includes('Current Appointees')
+        (a) => a.email === email && a.needsCurrentAppointees
       );
       if (needsCurrent) {
         if (jsmService.isJsmConfigured()) {

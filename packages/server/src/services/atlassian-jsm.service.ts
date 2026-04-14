@@ -85,6 +85,22 @@ export async function ensureCustomer(
   return data.accountId;
 }
 
+export async function findCustomerByEmail(
+  siteUrl: string,
+  email: string
+): Promise<string | null> {
+  if (isDevMode) {
+    return `mock-account-lookup-${Date.now()}`;
+  }
+
+  const res = await jsmFetch(
+    `${siteUrl}/rest/api/3/user/search?query=${encodeURIComponent(email)}`
+  );
+  const data = (await res.json()) as { accountId: string; emailAddress: string }[];
+  const match = data.find((u) => u.emailAddress?.toLowerCase() === email.toLowerCase());
+  return match?.accountId ?? null;
+}
+
 export async function addToOrganization(
   siteUrl: string,
   orgId: string,
@@ -209,8 +225,7 @@ export async function addUserToCurrentAppointees(
 }
 
 export async function removeUserFromCurrentAppointees(
-  email: string,
-  displayName: string
+  email: string
 ): Promise<{ site1: boolean; site2: boolean }> {
   const sites = getSites();
   const results = { site1: false, site2: false };
@@ -219,7 +234,11 @@ export async function removeUserFromCurrentAppointees(
     const site = sites[i];
     const label = `site${i + 1}` as 'site1' | 'site2';
     try {
-      const accountId = await ensureCustomer(site.url, email, displayName);
+      const accountId = await findCustomerByEmail(site.url, email);
+      if (!accountId) {
+        logger.info({ email, site: site.url }, 'No customer found, skipping removal from Current Appointees');
+        continue;
+      }
       await removeFromOrganization(site.url, site.currentOrgId, accountId);
       results[label] = true;
       logger.info({ email, site: site.url }, 'Removed from Current Appointees');

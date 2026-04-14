@@ -36,9 +36,30 @@ function formatDateTime(dateStr: string): string {
 }
 
 export function AutomationsPage() {
-  const { data: runs, isLoading } = useAutomationRuns();
+  const { data: runs, isLoading, error, refetch } = useAutomationRuns();
 
   if (isLoading) return <AutomationsSkeleton />;
+
+  if (error) {
+    return (
+      <div>
+        <PageHeader title="Appointees Automations" />
+        <div className="flex flex-col items-center justify-center py-16 text-destructive">
+          <AlertCircle className="h-12 w-12 mb-4" />
+          <h3 className="text-lg font-medium mb-1">Failed to load automations</h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            {error instanceof Error ? error.message : 'An unexpected error occurred'}
+          </p>
+          <button
+            onClick={() => refetch()}
+            className="inline-flex items-center gap-2 rounded-md border border-primary px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/5"
+          >
+            <RefreshCw className="h-4 w-4" /> Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -135,6 +156,7 @@ function AutomationCard({
   const [dryRunResult, setDryRunResult] = useState<DryRunResult | null>(null);
 
   const handleDryRun = async () => {
+    executeMutation.reset();
     const result = await dryRunMutation.mutateAsync();
     setDryRunResult(result);
   };
@@ -288,7 +310,7 @@ function HistoryRow({ run }: { run: AutomationRun }) {
               a.href = url;
               a.download = `automation-run-${run.id}.json`;
               a.click();
-              URL.revokeObjectURL(url);
+              setTimeout(() => URL.revokeObjectURL(url), 1000);
             }}
             className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
           >
