@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.5.0] - 2026-04-14
+
+### Added
+- **VIT ID claim audit log.** Every successful claim is recorded with fellowship status, roles assigned, and timestamp. New admin page at `/admin/claims` with sortable, searchable table and detailed instructions for IT staff.
+- **JSM organization management.** Fellows are automatically added to "I Tatti Former Appointees" and (if current) "I Tatti Current Appointees" organizations on both Atlassian Cloud JSM sites when they claim their VIT ID. Customer records are created with full names from CiviCRM.
+- **AWS SES email notifications.** Admin receives an email every time a fellow claims a VIT ID, including fellowship status and roles assigned.
+- **Annual automations.** Two cron jobs (July 1 cleanup + July 2 new cohort onboarding) automatically rotate `fellows-current` Auth0 role and JSM Current Appointees organization membership at the academic year boundary. Both use dry-run/execute pattern.
+- **Backfill endpoint.** One-time admin action to add all pre-existing fellows to JSM organizations retroactively.
+- **Automations admin page** at `/admin/automations` with instruction callout, preview/execute buttons for each automation, and expandable run history.
+- **Generic Auth0 role management.** New `assignRole` and `removeRole` methods for managing arbitrary Auth0 roles.
+- New sidebar entries: "Claim Log" and "Automations" under VIT ID Administration.
+
+### Changed
+- VIT ID claim flow now assigns `fellows-current` role for current-year fellows and fires JSM organization membership + email notification asynchronously (fire-and-forget) after the claim record is persisted.
+
 ## [0.4.4] - 2026-04-13
 
 ### Fixed

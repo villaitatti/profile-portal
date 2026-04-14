@@ -16,6 +16,8 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
+  ShieldCheck,
+  CalendarClock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import itattiLogo from '@/assets/itatti-logo.png';
@@ -52,6 +54,8 @@ const navSections: NavSection[] = [
     heading: 'Portal Settings',
     requiredRoles: [KnownRoles.STAFF_IT],
     items: [
+      { label: 'Claim Log', path: '/admin/claims', icon: ShieldCheck },
+      { label: 'Automations', path: '/admin/automations', icon: CalendarClock },
       { label: 'Applications Catalog', path: '/admin/apps', icon: Grid3X3 },
     ],
   },

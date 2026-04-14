@@ -51,6 +51,22 @@ const envSchema = z.object({
   ATLASSIAN_SCIM_BASE_URL: z.string().url().optional(),
   ATLASSIAN_SCIM_DIRECTORY_ID: z.string().optional(),
   ATLASSIAN_SCIM_BEARER_TOKEN: z.string().optional(),
+
+  // Auth0 - Fellows current role (Phase 2)
+  AUTH0_FELLOWS_CURRENT_ROLE_ID: z.string().optional(),
+
+  // Atlassian JSM Organizations (Phase 2 — optional, org features disabled if not configured)
+  ATLASSIAN_JSM_SITE1_URL: z.string().url().or(z.literal('')).optional(),
+  ATLASSIAN_JSM_SITE2_URL: z.string().url().or(z.literal('')).optional(),
+  ATLASSIAN_JSM_SITE1_FORMER_ORG_ID: z.string().optional(),
+  ATLASSIAN_JSM_SITE1_CURRENT_ORG_ID: z.string().optional(),
+  ATLASSIAN_JSM_SITE2_FORMER_ORG_ID: z.string().optional(),
+  ATLASSIAN_JSM_SITE2_CURRENT_ORG_ID: z.string().optional(),
+
+  // AWS SES (Phase 2 — optional, email notifications disabled if not configured)
+  AWS_SES_REGION: z.string().optional(),
+  AWS_SES_FROM_EMAIL: z.string().email().optional().or(z.literal('')),
+  ADMIN_NOTIFICATION_EMAIL: z.string().email().optional().or(z.literal('')),
 });
 
 function loadEnv() {

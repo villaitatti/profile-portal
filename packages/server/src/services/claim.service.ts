@@ -1,8 +1,12 @@
 import { createHash } from 'crypto';
 import * as auth0Service from './auth0.service.js';
 import * as civicrmService from './civicrm.service.js';
-import { evaluateEligibility } from '../utils/eligibility.js';
+import * as jsmService from './atlassian-jsm.service.js';
+import * as emailService from './email.service.js';
+import { evaluateEligibility, classifyFellowship } from '../utils/eligibility.js';
 import { logger } from '../lib/logger.js';
+import { prisma } from '../lib/prisma.js';
+import { env } from '../env.js';
 
 function hashEmail(email: string): string {
   return createHash('sha256').update(email).digest('hex').slice(0, 12);
@@ -53,7 +57,99 @@ export async function processClaim(email: string): Promise<void> {
   await auth0Service.assignFellowsRole(newUser.user_id);
   logger.info({ emailHash }, 'Claim: fellows role assigned');
 
-  // Step 6: Trigger password setup email
+  // Step 6: Determine fellowship status for org/role assignment
+  const hasFellowship = fellowships.length > 0;
+  const hasCurrentFellowship = fellowships.some(
+    (f) => classifyFellowship(f.startDate, f.endDate) === 'current'
+  );
+
+  const rolesAssigned = ['fellows'];
+
+  // Assign fellows-current role synchronously if applicable
+  if (hasCurrentFellowship && env.AUTH0_FELLOWS_CURRENT_ROLE_ID) {
+    try {
+      await auth0Service.assignRole(newUser.user_id, env.AUTH0_FELLOWS_CURRENT_ROLE_ID);
+      rolesAssigned.push('fellows-current');
+      logger.info({ emailHash }, 'Claim: fellows-current role assigned');
+    } catch (err) {
+      logger.error({ err, emailHash }, 'Claim: failed to assign fellows-current role');
+    }
+  }
+
+  // Step 7: Persist claim record
+  const claimRecord = await prisma.vitIdClaim.create({
+    data: {
+      email,
+      firstName: contact.firstName,
+      lastName: contact.lastName,
+      civicrmId: contact.id,
+      hasFellowship,
+      hasCurrentFellowship,
+      rolesAssigned,
+      orgsAssigned: [],
+    },
+  });
+  logger.info({ emailHash, hasFellowship, hasCurrentFellowship }, 'Claim: record persisted');
+
+  // Step 8: Trigger password setup email
   await auth0Service.triggerPasswordSetupEmail(email);
   logger.info({ emailHash }, 'Claim: password setup email sent');
+
+  // Step 9: Fire-and-forget async operations (JSM orgs + email notification)
+  processAsyncClaimOps({
+    claimId: claimRecord.id,
+    email,
+    firstName: contact.firstName,
+    lastName: contact.lastName,
+    hasFellowship,
+    hasCurrentFellowship,
+    rolesAssigned,
+  }).catch(
+    (err) => logger.error({ err, emailHash }, 'Claim: async operations failed')
+  );
+}
+
+async function processAsyncClaimOps(params: {
+  claimId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  hasFellowship: boolean;
+  hasCurrentFellowship: boolean;
+  rolesAssigned: string[];
+}): Promise<void> {
+  const { claimId, email, firstName, lastName, hasFellowship, hasCurrentFellowship, rolesAssigned } = params;
+  const displayName = `${firstName} ${lastName}`;
+  const orgsAssigned: string[] = [];
+
+  if (hasFellowship && jsmService.isJsmConfigured()) {
+    const result = await jsmService.addUserToFormerAppointees(email, displayName);
+    if (result.site1) orgsAssigned.push('Former Appointees (Site 1)');
+    if (result.site2) orgsAssigned.push('Former Appointees (Site 2)');
+  }
+
+  if (hasCurrentFellowship && jsmService.isJsmConfigured()) {
+    const result = await jsmService.addUserToCurrentAppointees(email, displayName);
+    if (result.site1) orgsAssigned.push('Current Appointees (Site 1)');
+    if (result.site2) orgsAssigned.push('Current Appointees (Site 2)');
+  }
+
+  // Update claim record with org results
+  if (orgsAssigned.length > 0) {
+    await prisma.vitIdClaim.update({
+      where: { id: claimId },
+      data: { orgsAssigned },
+    });
+  }
+
+  // Send notification email
+  await emailService.sendClaimNotification({
+    email,
+    firstName,
+    lastName,
+    hasFellowship,
+    hasCurrentFellowship,
+    rolesAssigned,
+    claimedAt: new Date(),
+  });
 }

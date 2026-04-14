@@ -24,6 +24,8 @@ import { FellowsManagementPage } from '@/pages/admin/FellowsManagementPage';
 import { HasVitIdPage } from '@/pages/admin/HasVitIdPage';
 import { AtlassianMappingsPage } from '@/pages/admin/AtlassianMappingsPage';
 import { AtlassianSyncPage } from '@/pages/admin/AtlassianSyncPage';
+import { ClaimLogPage } from '@/pages/admin/ClaimLogPage';
+import { AutomationsPage } from '@/pages/admin/AutomationsPage';
 
 export const router = createBrowserRouter([
   {
@@ -63,10 +65,12 @@ export const router = createBrowserRouter([
                 ],
               },
 
-              // Portal Settings + Atlassian Cloud (staff-it only)
+              // Portal Settings + Atlassian Cloud + Claim Log + Automations (staff-it only)
               {
                 element: <RoleGuard requiredRoles={[KnownRoles.STAFF_IT]} />,
                 children: [
+                  { path: '/admin/claims', element: <ClaimLogPage /> },
+                  { path: '/admin/automations', element: <AutomationsPage /> },
                   { path: '/admin/apps', element: <AppCatalogPage /> },
                   { path: '/admin/apps/new', element: <AppFormPage /> },
                   { path: '/admin/apps/:id/edit', element: <AppFormPage /> },
