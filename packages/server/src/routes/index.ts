@@ -10,6 +10,7 @@ import { fellowsAdminRoutes } from './fellows-admin.routes.js';
 import { syncAdminRoutes, syncSseRoutes } from './sync-admin.routes.js';
 import { usersRoutes } from './users.routes.js';
 import { claimsAdminRoutes } from './claims-admin.routes.js';
+import { automationAdminRoutes } from './automation-admin.routes.js';
 import { authMiddleware, extractUser } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
 
@@ -49,6 +50,15 @@ export function registerRoutes(app: Express) {
     extractUser,
     requireRole(KnownRoles.STAFF_IT),
     claimsAdminRoutes
+  );
+
+  // Admin routes: Automations (staff-IT only)
+  app.use(
+    '/api/admin/automations',
+    authMiddleware,
+    extractUser,
+    requireRole(KnownRoles.STAFF_IT),
+    automationAdminRoutes
   );
 
   // SSE stream — mounted BEFORE the JWT chain so EventSource requests (which can't

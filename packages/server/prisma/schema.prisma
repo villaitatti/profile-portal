@@ -57,6 +57,21 @@ model VitIdClaim {
   @@map("vit_id_claims")
 }
 
+model AutomationRun {
+  id           String    @id @default(uuid())
+  type         String    // end-of-year-cleanup | new-cohort-onboarding | backfill
+  status       String    // dry_run | executing | completed | failed | partial
+  triggeredBy  String    @map("triggered_by") // cron | admin:{email}
+  academicYear String    @map("academic_year")
+  startedAt    DateTime  @default(now()) @map("started_at")
+  completedAt  DateTime? @map("completed_at")
+  result       Json      // { processed, pending, errors, details: [...] }
+  stats        Json?     // { removed, added, pending, errors }
+
+  @@index([type, startedAt(sort: Desc)])
+  @@map("automation_runs")
+}
+
 model RoleGroupMapping {
   id                 String   @id @default(uuid())
   auth0RoleId        String   @map("auth0_role_id")

@@ -11,6 +11,10 @@ const { default: app } = await import('./app.js');
 
 logger.info({ mode: env.NODE_ENV }, 'Starting server');
 
+// Register automation cron jobs (July 1 + July 2 at 04:00 UTC)
+const { registerCronJobs } = await import('./services/automation.service.js');
+registerCronJobs();
+
 app.listen(env.PORT, () => {
   logger.info({ port: env.PORT }, 'Server running');
 });
