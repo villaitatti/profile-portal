@@ -79,6 +79,14 @@ export async function assignFellowsRole(userId: string): Promise<void> {
   );
 }
 
+export async function assignRole(userId: string, roleId: string): Promise<void> {
+  await management.users.assignRoles({ id: userId }, { roles: [roleId] });
+}
+
+export async function removeRole(userId: string, roleId: string): Promise<void> {
+  await management.users.deleteRoles({ id: userId }, { roles: [roleId] });
+}
+
 export async function triggerPasswordSetupEmail(email: string): Promise<void> {
   await authentication.database.changePassword({
     email,

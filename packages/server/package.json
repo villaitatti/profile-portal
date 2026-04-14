@@ -17,6 +17,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@aws-sdk/client-ses": "^3.1030.0",
     "@itatti/shared": "workspace:*",
     "@prisma/client": "^6.19.0",
     "auth0": "^4.12.0",
