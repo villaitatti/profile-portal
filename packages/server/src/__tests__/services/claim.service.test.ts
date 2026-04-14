@@ -6,12 +6,42 @@ vi.mock('../../services/auth0.service.js', () => ({
   findUserByEmail: vi.fn(),
   createUser: vi.fn(),
   assignFellowsRole: vi.fn(),
+  assignRole: vi.fn(),
+  removeRole: vi.fn(),
   triggerPasswordSetupEmail: vi.fn(),
 }));
 
 vi.mock('../../services/civicrm.service.js', () => ({
   findContactByPrimaryEmail: vi.fn(),
   getFellowships: vi.fn(),
+}));
+
+vi.mock('../../services/atlassian-jsm.service.js', () => ({
+  isJsmConfigured: vi.fn().mockReturnValue(false),
+  addUserToFormerAppointees: vi.fn().mockResolvedValue({ site1: true, site2: true }),
+  addUserToCurrentAppointees: vi.fn().mockResolvedValue({ site1: true, site2: true }),
+}));
+
+vi.mock('../../services/email.service.js', () => ({
+  sendClaimNotification: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../../lib/prisma.js', () => ({
+  prisma: {
+    vitIdClaim: {
+      create: vi.fn().mockResolvedValue({ id: 'test-claim-id' }),
+      update: vi.fn().mockResolvedValue({}),
+    },
+  },
+}));
+
+vi.mock('../../env.js', () => ({
+  env: {
+    AUTH0_FELLOWS_ROLE_ID: 'test-fellows-role',
+    AUTH0_FELLOWS_CURRENT_ROLE_ID: 'test-fellows-current-role',
+    AUTH0_CONNECTION: 'Username-Password-Authentication',
+  },
+  isDevMode: false,
 }));
 
 vi.mock('../../lib/logger.js', () => ({
