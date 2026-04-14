@@ -1,8 +1,9 @@
 import { createHash } from 'crypto';
 import * as auth0Service from './auth0.service.js';
 import * as civicrmService from './civicrm.service.js';
-import { evaluateEligibility } from '../utils/eligibility.js';
+import { evaluateEligibility, classifyFellowship } from '../utils/eligibility.js';
 import { logger } from '../lib/logger.js';
+import { prisma } from '../lib/prisma.js';
 
 function hashEmail(email: string): string {
   return createHash('sha256').update(email).digest('hex').slice(0, 12);
@@ -53,7 +54,33 @@ export async function processClaim(email: string): Promise<void> {
   await auth0Service.assignFellowsRole(newUser.user_id);
   logger.info({ emailHash }, 'Claim: fellows role assigned');
 
-  // Step 6: Trigger password setup email
+  // Step 6: Determine fellowship status for org/role assignment
+  const hasFellowship = fellowships.length > 0;
+  const hasCurrentFellowship = fellowships.some(
+    (f) => classifyFellowship(f.startDate, f.endDate) === 'current'
+  );
+
+  const rolesAssigned = ['fellows'];
+  if (hasCurrentFellowship) {
+    rolesAssigned.push('fellows-current');
+  }
+
+  // Step 7: Persist claim record
+  await prisma.vitIdClaim.create({
+    data: {
+      email,
+      firstName: contact.firstName,
+      lastName: contact.lastName,
+      civicrmId: contact.id,
+      hasFellowship,
+      hasCurrentFellowship,
+      rolesAssigned,
+      orgsAssigned: [], // populated by async JSM operations in a later phase
+    },
+  });
+  logger.info({ emailHash, hasFellowship, hasCurrentFellowship }, 'Claim: record persisted');
+
+  // Step 8: Trigger password setup email
   await auth0Service.triggerPasswordSetupEmail(email);
   logger.info({ emailHash }, 'Claim: password setup email sent');
 }

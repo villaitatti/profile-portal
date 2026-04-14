@@ -41,6 +41,22 @@ model SyncRun {
   @@map("sync_runs")
 }
 
+model VitIdClaim {
+  id                   String   @id @default(uuid())
+  email                String
+  firstName            String   @map("first_name")
+  lastName             String   @map("last_name")
+  civicrmId            Int      @map("civicrm_id")
+  hasFellowship        Boolean  @map("has_fellowship")
+  hasCurrentFellowship Boolean  @map("has_current_fellowship")
+  rolesAssigned        String[] @map("roles_assigned")
+  orgsAssigned         String[] @map("orgs_assigned")
+  claimedAt            DateTime @default(now()) @map("claimed_at")
+
+  @@index([claimedAt(sort: Desc)])
+  @@map("vit_id_claims")
+}
+
 model RoleGroupMapping {
   id                 String   @id @default(uuid())
   auth0RoleId        String   @map("auth0_role_id")
