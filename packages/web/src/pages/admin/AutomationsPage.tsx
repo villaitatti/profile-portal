@@ -21,7 +21,7 @@ import {
 
 const TYPE_LABELS: Record<string, string> = {
   'end-of-year-cleanup': 'End-of-Year Cleanup',
-  'new-cohort-onboarding': 'New Cohort Onboarding',
+  'new-cohort-onboarding': 'New Appointees Onboarding',
   'backfill': 'Backfill Existing Fellows',
 };
 
@@ -59,26 +59,30 @@ export function AutomationsPage() {
               previewing or re-running them.
             </p>
             <p>
-              <strong>End-of-Year Cleanup</strong> runs automatically on July 1 at 4:00 AM UTC.
-              It removes departing fellows from the <em>fellows-current</em> Auth0 role and the
-              "I Tatti Current Appointees" organizations on both Atlassian Cloud JSM sites.
-              Fellows keep their <em>fellows</em> role and "Former Appointees" membership.
+              <strong>End-of-Year Cleanup</strong> runs automatically on July 1 at 4:00 AM UTC
+              (6:00 AM in Florence). It removes departing fellows from the <em>fellows-current</em>{' '}
+              Auth0 role and the "I Tatti Current Appointees" organizations on both Atlassian Cloud
+              JSM sites (helpdesk and library services). Fellows keep their <em>fellows</em> role
+              (in Auth0) and "Former Appointees" membership (in Jira).
             </p>
             <p>
-              <strong>New Cohort Onboarding</strong> runs automatically on July 2 at 4:00 AM UTC.
-              It adds arriving fellows (with a VIT ID) to the <em>fellows-current</em> Auth0 role
-              and the "I Tatti Current Appointees" organizations. Fellows without a VIT ID are
-              listed as "pending" in the report.
+              <strong>New Appointees Onboarding</strong> runs automatically on July 2 at 4:00 AM UTC
+              (6:00 AM in Florence). It adds arriving fellows (with a VIT ID) to the{' '}
+              <em>fellows-current</em> Auth0 role and the "I Tatti Current Appointees"
+              organizations (in Jira). Fellows without a VIT ID are listed as "pending" in the
+              report and will be automatically assigned to the Auth0 role and added to the
+              organizations once they claim their VIT ID.
             </p>
             <p>
-              <strong>Backfill Existing Fellows</strong> is a one-time action for the Phase 2 migration.
-              It adds all existing fellows (who claimed their VIT ID before this feature was deployed)
-              to the correct JSM organizations.
+              <strong>Backfill Existing Fellows</strong> is a one-time action. It adds all existing
+              fellows (who claimed their VIT ID before this feature was deployed) to the correct
+              JSM organizations.
             </p>
             <p>
-              All automations use a <strong>dry-run → execute</strong> pattern. Run the dry run first
-              to preview what will change, then execute to apply. Dry runs are safe in any environment.
-              Execution only works in production.
+              Each automation has two steps. Click <strong>Preview Changes</strong> first to see
+              exactly which fellows will be affected and what will happen &mdash; nothing is
+              modified at this stage, so it's safe to run in any environment. Then click{' '}
+              <strong>Execute</strong> to apply those changes. Execution only works in production.
             </p>
           </div>
         </div>
@@ -95,7 +99,7 @@ export function AutomationsPage() {
         />
         <AutomationCard
           type="new-cohort"
-          title="New Cohort Onboarding"
+          title="New Appointees Onboarding"
           description="Add arriving fellows to Current Appointees"
           icon={<UserPlus className="h-5 w-5 text-primary" />}
           schedule="July 2, 04:00 UTC"
