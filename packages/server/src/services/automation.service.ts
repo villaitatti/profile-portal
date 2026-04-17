@@ -28,12 +28,13 @@ interface DryRunAction {
 // --- Scheduling ---
 
 export function registerCronJobs(): void {
+  if (!env.AUTOMATIONS_ENABLED) {
+    logger.info('Automation: AUTOMATIONS_ENABLED is false, scheduled cron jobs not registered');
+    return;
+  }
+
   // July 1 at 04:00 UTC — end-of-year cleanup
   cron.schedule('0 4 1 7 *', async () => {
-    if (env.NODE_ENV !== 'production') {
-      logger.info('Automation: skipping end-of-year cleanup in non-production');
-      return;
-    }
     logger.info('Automation: starting scheduled end-of-year cleanup');
     try {
       const dryRun = await runEndOfYearDryRun('cron');
@@ -49,10 +50,6 @@ export function registerCronJobs(): void {
 
   // July 2 at 04:00 UTC — new cohort onboarding
   cron.schedule('0 4 2 7 *', async () => {
-    if (env.NODE_ENV !== 'production') {
-      logger.info('Automation: skipping new-cohort onboarding in non-production');
-      return;
-    }
     logger.info('Automation: starting scheduled new-cohort onboarding');
     try {
       const dryRun = await runNewCohortDryRun('cron');

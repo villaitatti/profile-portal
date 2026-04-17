@@ -55,6 +55,15 @@ const envSchema = z.object({
   // Auth0 - Fellows current role (Phase 2)
   AUTH0_FELLOWS_CURRENT_ROLE_ID: z.string().optional(),
 
+  // Scheduled automations — must be explicitly enabled per-deployment.
+  // Only the true production instance should set this to 'true'; dev/staging
+  // boxes running with NODE_ENV=production must leave it unset/false so the
+  // July 1 + July 2 cron jobs don't fire against real Auth0/JSM/CiviCRM.
+  AUTOMATIONS_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+
   // Atlassian JSM Organizations (Phase 2 — optional, org features disabled if not configured)
   ATLASSIAN_JSM_SITE1_URL: z.string().url().or(z.literal('')).optional(),
   ATLASSIAN_JSM_SITE2_URL: z.string().url().or(z.literal('')).optional(),
