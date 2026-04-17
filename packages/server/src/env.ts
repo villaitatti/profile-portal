@@ -41,14 +41,14 @@ const envSchema = z.object({
   CIVICRM_FIELD_FELLOWSHIP: z.string().default('Fellowship'),
 
   // Jira Service Management (optional — help form disabled if not configured)
-  JIRA_BASE_URL: z.string().url().optional(),
-  JIRA_EMAIL: z.string().email().optional(),
+  JIRA_BASE_URL: z.string().url().or(z.literal('')).optional(),
+  JIRA_EMAIL: z.string().email().or(z.literal('')).optional(),
   JIRA_API_TOKEN: z.string().optional(),
   JIRA_SERVICE_DESK_ID: z.string().optional(),
   JIRA_REQUEST_TYPE_ID: z.string().optional(),
 
   // Atlassian SCIM provisioning (optional — sync disabled if not configured)
-  ATLASSIAN_SCIM_BASE_URL: z.string().url().optional(),
+  ATLASSIAN_SCIM_BASE_URL: z.string().url().or(z.literal('')).optional(),
   ATLASSIAN_SCIM_DIRECTORY_ID: z.string().optional(),
   ATLASSIAN_SCIM_BEARER_TOKEN: z.string().optional(),
 

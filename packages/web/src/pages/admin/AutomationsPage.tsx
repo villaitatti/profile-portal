@@ -40,27 +40,6 @@ export function AutomationsPage() {
 
   if (isLoading) return <AutomationsSkeleton />;
 
-  if (error) {
-    return (
-      <div>
-        <PageHeader title="Appointees Automations" />
-        <div className="flex flex-col items-center justify-center py-16 text-destructive">
-          <AlertCircle className="h-12 w-12 mb-4" />
-          <h3 className="text-lg font-medium mb-1">Failed to load automations</h3>
-          <p className="text-sm text-muted-foreground mb-4">
-            {error instanceof Error ? error.message : 'An unexpected error occurred'}
-          </p>
-          <button
-            onClick={() => refetch()}
-            className="inline-flex items-center gap-2 rounded-md border border-primary px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/5"
-          >
-            <RefreshCw className="h-4 w-4" /> Retry
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div>
       <PageHeader
@@ -128,6 +107,23 @@ export function AutomationsPage() {
           icon={<Users className="h-5 w-5 text-primary" />}
         />
       </div>
+
+      {/* History load error (non-blocking) */}
+      {error && (
+        <div className="mt-8 flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+          <span className="flex-1">
+            Couldn't load automation history:{' '}
+            {error instanceof Error ? error.message : 'Unknown error'}
+          </span>
+          <button
+            onClick={() => refetch()}
+            className="inline-flex items-center gap-1 rounded-md border border-amber-300 px-3 py-1.5 text-xs font-medium hover:bg-amber-100"
+          >
+            <RefreshCw className="h-3 w-3" /> Retry
+          </button>
+        </div>
+      )}
 
       {/* History */}
       {runs && runs.length > 0 && (
