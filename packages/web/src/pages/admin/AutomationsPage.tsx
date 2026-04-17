@@ -65,7 +65,7 @@ export function AutomationsPage() {
     <div>
       <PageHeader
         title="Appointees Automations"
-        description="Manage academic year transitions and JSM organization membership"
+        description="Manage automations of academic year transitions in Auth0 and Jira (JSM)"
       />
 
       {/* Instructions */}
@@ -73,6 +73,12 @@ export function AutomationsPage() {
         <div className="flex gap-3">
           <Info className="mt-0.5 h-5 w-5 flex-shrink-0 text-primary" />
           <div className="space-y-2 text-[0.95rem] leading-7 text-muted-foreground">
+            <p>
+              <strong>No action is required on this page.</strong> The automations
+              below run themselves on schedule every July 1 and July 2. This page
+              exists for monitoring past runs and, if something looks wrong, manually
+              previewing or re-running them.
+            </p>
             <p>
               <strong>End-of-Year Cleanup</strong> runs automatically on July 1 at 4:00 AM UTC.
               It removes departing fellows from the <em>fellows-current</em> Auth0 role and the
