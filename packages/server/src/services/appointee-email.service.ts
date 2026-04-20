@@ -221,11 +221,17 @@ export async function dispatchPendingEmails(opts?: {
   // Stale-claim recovery. Uses updatedAt (Prisma @updatedAt) which is bumped
   // every time we transition a row, so a row sitting at SENDING for > 1h
   // must have crashed mid-dispatch.
+  //
+  // CRITICAL: exclude rows where sesMessageId is already set. Those rows
+  // reached SES successfully but the follow-up "mark SENT" DB write failed
+  // (see dispatchOne's split try/catch below). Reclaiming such a row would
+  // send a second copy of the same email to the appointee.
   const reclaimCutoff = new Date(now.getTime() - STALE_SENDING_THRESHOLD_MS);
   const reclaimResult = await prisma.appointeeEmailEvent.updateMany({
     where: {
       status: AppointeeEmailStatus.SENDING,
       updatedAt: { lt: reclaimCutoff },
+      sesMessageId: null,
     },
     data: { status: AppointeeEmailStatus.PENDING },
   });
@@ -326,12 +332,36 @@ export async function dispatchOne(
     return 'skipped';
   }
 
+  // Step 1: hand the message to SES. A throw here means SES rejected the
+  // send, so FAILED is the correct terminal state (admin can retry).
+  let messageId: string | undefined;
   try {
-    const { messageId } = await emailService.sendBioProjectDescriptionEmail({
+    const result = await emailService.sendBioProjectDescriptionEmail({
       to: eligibility.email,
       firstName: eligibility.firstName,
     });
+    messageId = result.messageId;
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    await prisma.appointeeEmailEvent.update({
+      where: { id: eventId },
+      data: {
+        status: AppointeeEmailStatus.FAILED,
+        failureReason: reason.slice(0, 500),
+      },
+    });
+    logger.error({ err, eventId }, 'Bio email: SES send failed');
+    return 'failed';
+  }
 
+  // Step 2: SES accepted the email. Persist success. If this DB write fails
+  // we MUST NOT mark the event FAILED — the email is already in SES's pipeline
+  // and marking FAILED would (a) mislead the admin, and (b) if the admin hits
+  // retry, trigger a duplicate send. Similarly we must prevent the stale-
+  // SENDING reclaim from re-enqueuing this row, which we do by recording
+  // sesMessageId via a best-effort partial write (the reclaim query filters
+  // it out).
+  try {
     await prisma.appointeeEmailEvent.update({
       where: { id: eventId },
       data: {
@@ -347,16 +377,35 @@ export async function dispatchOne(
     );
     return 'sent';
   } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err);
-    await prisma.appointeeEmailEvent.update({
-      where: { id: eventId },
-      data: {
-        status: AppointeeEmailStatus.FAILED,
-        failureReason: reason.slice(0, 500),
+    // Best-effort: store sesMessageId alone so stale-SENDING reclaim skips
+    // this row (its WHERE clause excludes non-null sesMessageId). If that
+    // also fails, the primary alert below gives operators what they need.
+    if (messageId) {
+      try {
+        await prisma.appointeeEmailEvent.update({
+          where: { id: eventId },
+          data: { sesMessageId: messageId },
+        });
+      } catch (partialErr) {
+        logger.error(
+          { err: partialErr, eventId, messageId },
+          'Bio email: partial sesMessageId persistence also failed; row may be reclaimed'
+        );
+      }
+    }
+    logger.error(
+      {
+        err,
+        eventId,
+        contactId: event.contactId,
+        academicYear: event.academicYear,
+        sesMessageId: messageId,
       },
-    });
-    logger.error({ err, eventId }, 'Bio email: SES send failed');
-    return 'failed';
+      'Bio email: CRITICAL — SES accepted email but status persistence failed; manual reconciliation required (check SES logs vs DB row)'
+    );
+    // The email did leave SES; report success to the caller so the admin
+    // UI does not trigger a retry. Reconciliation happens via the log above.
+    return 'sent';
   }
 }
 
@@ -423,16 +472,50 @@ export async function sendBioEmailManually(args: {
   });
 
   const outcome = await dispatchOne(eventId);
-  const finalEvent = await prisma.appointeeEmailEvent.findUniqueOrThrow({
-    where: { id: eventId },
-  });
 
-  // Upstream failure: event stayed PENDING. Surface a 500-ish signal to the
-  // route layer (we don't leak the underlying error to the admin).
+  // Upstream failure (CiviCRM/Auth0 unreachable): event stayed PENDING. Surface
+  // a 500-ish signal to the route layer (we don't leak the underlying error
+  // to the admin).
   if (outcome === 'deferred') {
     throw new Error('upstream_fetch_failed');
   }
 
+  // SES rejected the send. The row is now FAILED. Throw so the route returns
+  // a non-200 — otherwise the admin UI would show a green success toast
+  // while the email never left the server.
+  if (outcome === 'failed') {
+    throw new Error('ses_send_failed');
+  }
+
+  const finalEvent = await prisma.appointeeEmailEvent.findUniqueOrThrow({
+    where: { id: eventId },
+  });
+
+  // SKIPPED means eligibility flipped between the pre-check above and the
+  // dispatch-time re-check (rare race). Map the persisted failureReason back
+  // to an ineligibility reason the admin UI already knows how to render.
+  // Anything that isn't a recognized reason falls through as a generic 500.
+  if (outcome === 'skipped') {
+    const reason = finalEvent.failureReason;
+    const validReasons: readonly BioEmailIneligibilityReason[] = [
+      'no_vit_id',
+      'no_matching_fellowship',
+      'fellowship_not_accepted',
+      'no_primary_email',
+      'already_sent',
+    ];
+    if (reason && (validReasons as readonly string[]).includes(reason)) {
+      return { ok: false, reason: reason as BioEmailIneligibilityReason };
+    }
+    logger.warn(
+      { eventId, failureReason: reason },
+      'Bio email: dispatch returned skipped with unrecognized failureReason'
+    );
+    throw new Error('dispatch_skipped_unexpected');
+  }
+
+  // outcome === 'sent' (or 'not_claimed', which only happens if another worker
+  // raced us on the same eventId — treat the persisted state as authoritative).
   return {
     ok: true,
     eventId: finalEvent.id,

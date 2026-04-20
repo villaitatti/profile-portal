@@ -20,8 +20,21 @@ interface AutomationReportInput {
   details: string[];
 }
 
-export function isEmailConfigured(): boolean {
-  return !!(env.AWS_SES_REGION && env.AWS_SES_FROM_EMAIL && env.ADMIN_NOTIFICATION_EMAIL);
+/**
+ * Appointee-facing email requires only the SES basics (region + FROM).
+ * Used for bio/project-description emails and any future user-facing mail.
+ */
+export function isAppointeeEmailConfigured(): boolean {
+  return !!(env.AWS_SES_REGION && env.AWS_SES_FROM_EMAIL);
+}
+
+/**
+ * Admin-notification email requires SES basics PLUS a valid ADMIN_NOTIFICATION_EMAIL
+ * recipient. Decoupled from appointee config so that a missing admin recipient
+ * never silently blocks appointee deliveries.
+ */
+export function isAdminNotificationEmailConfigured(): boolean {
+  return isAppointeeEmailConfigured() && !!env.ADMIN_NOTIFICATION_EMAIL;
 }
 
 let cachedSesClient: any = null;
@@ -43,13 +56,25 @@ async function sendEmail(
   body: string,
   options?: SendEmailOptions
 ): Promise<string | undefined> {
-  if (isDevMode || !isEmailConfigured()) {
+  // Dev mode: log only, no SES touched. Returning undefined is fine because
+  // the dev-mode short-circuit in the route/dispatch path is what guarantees
+  // "would send" semantics — NOT this function's return value.
+  if (isDevMode) {
     logger.info(
       { to, subject, bccAddresses: options?.bccAddresses, bodyLength: body.length },
-      'Email (dev mode/not configured): would send'
+      'Email (dev mode): would send'
     );
     logger.debug({ body }, 'Email body');
     return undefined;
+  }
+
+  // Outside dev mode, refuse to claim success when SES is misconfigured.
+  // Previously this returned undefined silently, which caused dispatchOne()
+  // to mark appointee events SENT even though no mail ever left the server.
+  if (!isAppointeeEmailConfigured()) {
+    throw new Error(
+      'SES not configured: AWS_SES_REGION and AWS_SES_FROM_EMAIL are required to send email in production'
+    );
   }
 
   // Lazy import + cached client to avoid loading AWS SDK in dev mode
@@ -88,6 +113,14 @@ export async function sendClaimNotification(input: ClaimNotificationInput): Prom
     `Claimed At: ${input.claimedAt.toISOString()}`,
   ].join('\n');
 
+  if (!isAdminNotificationEmailConfigured()) {
+    logger.warn(
+      { subject },
+      'Skipping claim notification email: ADMIN_NOTIFICATION_EMAIL (or SES) not configured'
+    );
+    return;
+  }
+
   try {
     await sendEmail(env.ADMIN_NOTIFICATION_EMAIL!, subject, body);
   } catch (err) {
@@ -116,8 +149,13 @@ export async function sendBioProjectDescriptionEmail(args: {
   const { to, firstName } = args;
   const greetingName = firstName && firstName.trim().length > 0 ? firstName.trim() : 'Appointee';
 
-  const actualTo = env.APPOINTEE_EMAIL_REDIRECT_TO || to;
-  const isRedirected = actualTo !== to;
+  // A redirect is in effect whenever APPOINTEE_EMAIL_REDIRECT_TO is set,
+  // even if it happens to equal the intended recipient. Basing the flag on
+  // actualTo !== to would silently re-enable production BCCs whenever a
+  // developer's test redirect address matches the real appointee's address.
+  const redirectTarget = env.APPOINTEE_EMAIL_REDIRECT_TO?.trim();
+  const isRedirected = !!redirectTarget;
+  const actualTo = redirectTarget || to;
 
   // Redirect must be ALL-OR-NOTHING: if a developer sets
   // APPOINTEE_EMAIL_REDIRECT_TO on a staging box that also inherits a
@@ -189,6 +227,14 @@ export async function sendAutomationReport(input: AutomationReportInput): Promis
     `Details:`,
     ...input.details.map((d) => `  - ${d}`),
   ].join('\n');
+
+  if (!isAdminNotificationEmailConfigured()) {
+    logger.warn(
+      { subject },
+      'Skipping automation report email: ADMIN_NOTIFICATION_EMAIL (or SES) not configured'
+    );
+    return;
+  }
 
   try {
     await sendEmail(env.ADMIN_NOTIFICATION_EMAIL!, subject, body);

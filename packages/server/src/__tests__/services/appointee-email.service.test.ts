@@ -63,8 +63,12 @@ const mockEmail = vi.mocked(emailService);
 // Most existing tests assume the contact has a VIT ID (Auth0 user). Install
 // a default "user exists" stub in beforeEach so each test only overrides it
 // when it is specifically testing the no-VIT-ID path.
+//
+// We use resetAllMocks (not clearAllMocks) so per-test mockResolvedValue /
+// mockRejectedValue stubs do not leak into subsequent tests via the shared
+// mocked modules above. After reset we re-install the Auth0 default.
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   mockAuth0.findUserByEmail.mockResolvedValue({
     user_id: 'auth0|default',
     email: 'default@example.com',
@@ -389,6 +393,57 @@ describe('dispatchOne', () => {
     expect(mockEmail.sendBioProjectDescriptionEmail).not.toHaveBeenCalled();
   });
 
+  it('returns sent and preserves sesMessageId when SES succeeds but the SENT persistence write fails', async () => {
+    // Scenario: SES accepts the email, then the DB write to mark the row SENT
+    // throws (e.g., transient connection drop). We MUST NOT mark FAILED —
+    // that would (a) mislead the admin and (b) combined with the stale-
+    // SENDING reclaim, cause a duplicate send. Instead we best-effort persist
+    // sesMessageId alone so the reclaim filter (sesMessageId: null) will
+    // skip this row, and we return 'sent' so the caller doesn't retry.
+    (mockPrisma.appointeeEmailEvent.updateMany as any).mockResolvedValue({ count: 1 });
+    (mockPrisma.appointeeEmailEvent.findUniqueOrThrow as any).mockResolvedValue({
+      id: 'evt_partial',
+      contactId: 1,
+      academicYear: '2026-2027',
+    });
+    mockCivicrm.getContactById.mockResolvedValue({
+      id: 1,
+      firstName: 'Ada',
+      lastName: 'L',
+      email: 'ada@example.com',
+    });
+    mockCivicrm.getFellowships.mockResolvedValue([
+      {
+        id: 10,
+        contactId: 1,
+        startDate: '2026-07-01',
+        endDate: '2027-06-30',
+        fellowshipAccepted: true,
+      },
+    ]);
+    mockEmail.sendBioProjectDescriptionEmail.mockResolvedValue({ messageId: 'ses-partial' });
+    // First update (mark SENT) throws. Second update (best-effort messageId)
+    // succeeds.
+    (mockPrisma.appointeeEmailEvent.update as any)
+      .mockRejectedValueOnce(new Error('DB connection lost'))
+      .mockResolvedValueOnce({});
+
+    const outcome = await dispatchOne('evt_partial');
+
+    expect(outcome).toBe('sent');
+
+    // Two update calls: first the SENT attempt, second the partial-write
+    // fallback recording ONLY sesMessageId (no status=FAILED anywhere).
+    const calls = (mockPrisma.appointeeEmailEvent.update as any).mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[0][0].data.status).toBe('SENT');
+    // Fallback call must NOT carry a status transition — just the messageId —
+    // because any status transition here is either misleading (SENT already
+    // failed to persist) or dangerous (FAILED would trigger a duplicate).
+    expect(calls[1][0].data).toEqual({ sesMessageId: 'ses-partial' });
+    expect(calls[1][0].data.status).toBeUndefined();
+  });
+
   it('marks event FAILED with a reason when SES rejects the send', async () => {
     (mockPrisma.appointeeEmailEvent.updateMany as any).mockResolvedValue({ count: 1 });
     (mockPrisma.appointeeEmailEvent.findUniqueOrThrow as any).mockResolvedValue({
@@ -466,6 +521,122 @@ describe('sendBioEmailManually', () => {
 
     expect(result).toEqual({ ok: false, reason: 'already_sent' });
   });
+
+  // Shared eligibility/fellowship setup for the dispatch-outcome tests below.
+  // Each test drives a specific dispatchOne outcome via targeted mock overrides.
+  function primeEligibleContact() {
+    mockCivicrm.getContactById.mockResolvedValue({
+      id: 1,
+      firstName: 'Ada',
+      lastName: 'L',
+      email: 'ada@example.com',
+    });
+    mockCivicrm.getFellowships.mockResolvedValue([
+      {
+        id: 10,
+        contactId: 1,
+        startDate: '2026-07-01',
+        endDate: '2027-06-30',
+        fellowshipAccepted: true,
+      },
+    ]);
+    (mockPrisma.appointeeEmailEvent.findUnique as any).mockResolvedValue(null);
+    (mockPrisma.appointeeEmailEvent.create as any).mockImplementation((args: any) =>
+      Promise.resolve({ id: 'evt_new', status: 'PENDING', ...args.data })
+    );
+    // Lets dispatchOne's atomic PENDING→SENDING flip win.
+    (mockPrisma.appointeeEmailEvent.updateMany as any).mockResolvedValue({ count: 1 });
+  }
+
+  it('throws ses_send_failed when dispatchOne returns failed (SES rejection)', async () => {
+    primeEligibleContact();
+    // Inside dispatchOne: findUniqueOrThrow returns the SENDING row.
+    (mockPrisma.appointeeEmailEvent.findUniqueOrThrow as any).mockResolvedValue({
+      id: 'evt_new',
+      contactId: 1,
+      academicYear: '2026-2027',
+    });
+    mockEmail.sendBioProjectDescriptionEmail.mockRejectedValue(new Error('SES 550'));
+    (mockPrisma.appointeeEmailEvent.update as any).mockResolvedValue({});
+
+    await expect(
+      sendBioEmailManually({
+        contactId: 1,
+        academicYear: '2026-2027',
+        triggeredBy: 'admin_manual:u1',
+      })
+    ).rejects.toThrow('ses_send_failed');
+  });
+
+  it('returns {ok:false, reason} when dispatchOne skips with a recognized ineligibility reason', async () => {
+    // Pre-check passes (eligibility.eligible=true). Then dispatchOne re-checks
+    // and finds the fellowship has disappeared — it writes status=SKIPPED with
+    // failureReason='no_matching_fellowship'. sendBioEmailManually should map
+    // that back to a user-facing reason instead of a success toast.
+    primeEligibleContact();
+    (mockPrisma.appointeeEmailEvent.findUniqueOrThrow as any).mockResolvedValue({
+      id: 'evt_new',
+      contactId: 1,
+      academicYear: '2026-2027',
+      status: 'SKIPPED',
+      failureReason: 'no_matching_fellowship',
+      sentAt: null,
+    });
+    // Second call to getFellowships happens inside dispatchOne's re-check.
+    // Override it to return [] so eligibility is lost.
+    mockCivicrm.getFellowships
+      .mockResolvedValueOnce([
+        {
+          id: 10,
+          contactId: 1,
+          startDate: '2026-07-01',
+          endDate: '2027-06-30',
+          fellowshipAccepted: true,
+        },
+      ])
+      .mockResolvedValueOnce([]);
+    (mockPrisma.appointeeEmailEvent.update as any).mockResolvedValue({});
+
+    const result = await sendBioEmailManually({
+      contactId: 1,
+      academicYear: '2026-2027',
+      triggeredBy: 'admin_manual:u1',
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'no_matching_fellowship' });
+  });
+
+  it('throws dispatch_skipped_unexpected when dispatchOne skips with an unrecognized failureReason', async () => {
+    primeEligibleContact();
+    (mockPrisma.appointeeEmailEvent.findUniqueOrThrow as any).mockResolvedValue({
+      id: 'evt_new',
+      contactId: 1,
+      academicYear: '2026-2027',
+      status: 'SKIPPED',
+      failureReason: 'something_weird_from_the_future',
+      sentAt: null,
+    });
+    mockCivicrm.getFellowships
+      .mockResolvedValueOnce([
+        {
+          id: 10,
+          contactId: 1,
+          startDate: '2026-07-01',
+          endDate: '2027-06-30',
+          fellowshipAccepted: true,
+        },
+      ])
+      .mockResolvedValueOnce([]);
+    (mockPrisma.appointeeEmailEvent.update as any).mockResolvedValue({});
+
+    await expect(
+      sendBioEmailManually({
+        contactId: 1,
+        academicYear: '2026-2027',
+        triggeredBy: 'admin_manual:u1',
+      })
+    ).rejects.toThrow('dispatch_skipped_unexpected');
+  });
 });
 
 describe('dispatchPendingEmails', () => {
@@ -488,6 +659,10 @@ describe('dispatchPendingEmails', () => {
     // Cutoff must be 1h before `now` (STALE_SENDING_THRESHOLD_MS = 3_600_000).
     const cutoff: Date = reclaimCall.where.updatedAt.lt;
     expect(cutoff.getTime()).toBe(now.getTime() - 60 * 60 * 1000);
+    // MUST exclude rows that already have an SES messageId — those reached
+    // SES successfully but failed the post-send status write. Reclaiming them
+    // would send a duplicate email.
+    expect(reclaimCall.where.sesMessageId).toBeNull();
     expect(reclaimCall.data.status).toBe('PENDING');
   });
 
