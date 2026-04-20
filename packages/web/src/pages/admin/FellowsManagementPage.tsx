@@ -1,11 +1,28 @@
 import { useState, useMemo, useEffect } from 'react';
+import { toast } from 'sonner';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { EmptyState } from '@/components/shared/EmptyState';
-import { useFellowsDashboard } from '@/api/fellows';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { useFellowsDashboard, useSendBioEmail, type SendBioEmailError } from '@/api/fellows';
 import { getCurrentAcademicYear } from './utils/academic-year';
-import { Users, UserX, UserCheck, Search, AlertCircle, ExternalLink, AlertTriangle } from 'lucide-react';
-import type { FellowDashboardEntry, FellowStatus, CivicrmIdStatus } from '@itatti/shared';
+import {
+  Users,
+  UserX,
+  UserCheck,
+  Search,
+  AlertCircle,
+  ExternalLink,
+  AlertTriangle,
+  Mail,
+  Loader2,
+} from 'lucide-react';
+import type {
+  FellowDashboardEntry,
+  FellowStatus,
+  CivicrmIdStatus,
+  BioEmailStatus,
+} from '@itatti/shared';
 
 const CIVICRM_URL = import.meta.env.VITE_CIVICRM_URL || '';
 
@@ -277,12 +294,93 @@ function StatusBadge({ status }: { status: FellowStatus }) {
   );
 }
 
+function BioEmailPill({
+  status,
+  sentAt,
+  targetAcademicYear,
+}: {
+  status: BioEmailStatus;
+  sentAt: string | null;
+  targetAcademicYear: string | null;
+}) {
+  if (status === 'none') {
+    return (
+      <span
+        className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground"
+        title="No bio & project description email on record for this fellowship year"
+      >
+        —
+      </span>
+    );
+  }
+  if (status === 'pending') {
+    return (
+      <span
+        className="inline-flex items-center rounded-full bg-yellow-50 px-2.5 py-0.5 text-xs font-medium text-yellow-700"
+        title={
+          targetAcademicYear
+            ? `Bio email queued for ${targetAcademicYear} — will be sent by the daily cron`
+            : 'Bio email queued — will be sent by the daily cron'
+        }
+      >
+        Pending
+      </span>
+    );
+  }
+  if (status === 'sent') {
+    const label = sentAt
+      ? `Sent ${new Date(sentAt).toLocaleDateString(undefined, {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+        })}`
+      : 'Sent';
+    return (
+      <span
+        className="inline-flex items-center rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700"
+        title={
+          targetAcademicYear
+            ? `Bio email sent for ${targetAcademicYear}${sentAt ? ` on ${new Date(sentAt).toLocaleString()}` : ''}`
+            : sentAt
+              ? `Bio email sent on ${new Date(sentAt).toLocaleString()}`
+              : 'Bio email sent'
+        }
+      >
+        {label}
+      </span>
+    );
+  }
+  return (
+    <span
+      className="inline-flex items-center rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700"
+      title="Last bio email attempt failed — use the send button to retry"
+    >
+      Failed
+    </span>
+  );
+}
+
+const BIO_EMAIL_ERROR_MESSAGES: Record<SendBioEmailError['reason'], string> = {
+  no_vit_id: 'This appointee has not claimed a VIT ID yet.',
+  no_matching_fellowship: 'No current or upcoming fellowship matches the requested year.',
+  fellowship_not_accepted: 'The fellowship for the target year is not marked as accepted.',
+  no_primary_email: 'No primary email is on file for this appointee.',
+  already_sent: 'The bio email has already been sent for this fellowship year.',
+};
+
 function formatLabel(value?: string): string {
   if (!value) return '';
   return value.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-type SortField = 'name' | 'email' | 'appointment' | 'fellowship' | 'fellowshipYear' | 'status';
+type SortField =
+  | 'name'
+  | 'email'
+  | 'appointment'
+  | 'fellowship'
+  | 'fellowshipYear'
+  | 'status'
+  | 'bioEmail';
 type SortDir = 'asc' | 'desc';
 const FELLOWS_PER_PAGE = 25;
 
@@ -290,6 +388,9 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [page, setPage] = useState(1);
+  const [confirmTarget, setConfirmTarget] = useState<FellowDashboardEntry | null>(null);
+  const sendBioEmail = useSendBioEmail();
+  const [pendingContactId, setPendingContactId] = useState<number | null>(null);
 
   // Reset to page 1 when the underlying data changes (filter/search/year)
   useEffect(() => setPage(1), [fellows]);
@@ -316,6 +417,9 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
         case 'status':
           cmp = a.status.localeCompare(b.status);
           break;
+        case 'bioEmail':
+          cmp = a.bioEmail.status.localeCompare(b.bioEmail.status);
+          break;
       }
       return sortDir === 'asc' ? cmp : -cmp;
     });
@@ -330,6 +434,42 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
     } else {
       setSortField(field);
       setSortDir('asc');
+    }
+  }
+
+  async function handleConfirmSend() {
+    if (!confirmTarget) return;
+    const fellow = confirmTarget;
+    const targetYear = fellow.bioEmail.targetAcademicYear;
+    if (!targetYear) {
+      toast.error('No target academic year available for this fellow.');
+      setConfirmTarget(null);
+      return;
+    }
+
+    setPendingContactId(fellow.civicrmId);
+    setConfirmTarget(null);
+    try {
+      const result = await sendBioEmail.mutateAsync({
+        contactId: fellow.civicrmId,
+        academicYear: targetYear,
+      });
+      if (result.status === 'SENT') {
+        toast.success(`Bio email sent to ${fellow.firstName} ${fellow.lastName}.`);
+      } else {
+        toast.success(
+          `Bio email queued for ${fellow.firstName} ${fellow.lastName} (status: ${result.status.toLowerCase()}).`
+        );
+      }
+    } catch (err) {
+      if (err && typeof err === 'object' && 'reason' in err) {
+        const reason = (err as SendBioEmailError).reason;
+        toast.error(BIO_EMAIL_ERROR_MESSAGES[reason] || `Failed to send bio email (${reason}).`);
+      } else {
+        toast.error(err instanceof Error ? err.message : 'Failed to send bio email.');
+      }
+    } finally {
+      setPendingContactId(null);
     }
   }
 
@@ -367,6 +507,7 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
               <SortHeader field="fellowship" label="Fellowship Type" className="hidden lg:table-cell" />
               <SortHeader field="fellowshipYear" label="Year" className="hidden sm:table-cell" />
               <SortHeader field="status" label="VIT ID Status" />
+              <SortHeader field="bioEmail" label="Bio Email" />
               <th className="px-4 py-3 text-left text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">
                 Actions
               </th>
@@ -421,22 +562,65 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
                   </div>
                 </td>
                 <td className="px-4 py-3">
-                  {CIVICRM_URL && (
-                    <a
-                      href={`${CIVICRM_URL}/civicrm/contact/view?reset=1&cid=${fellow.civicrmId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                    >
-                      CiviCRM <ExternalLink className="h-3 w-3" />
-                    </a>
-                  )}
+                  <BioEmailPill
+                    status={fellow.bioEmail.status}
+                    sentAt={fellow.bioEmail.sentAt}
+                    targetAcademicYear={fellow.bioEmail.targetAcademicYear}
+                  />
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    {fellow.bioEmail.canManuallySend && (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmTarget(fellow)}
+                        disabled={pendingContactId === fellow.civicrmId}
+                        className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                        title={
+                          fellow.bioEmail.targetAcademicYear
+                            ? `Send bio & project description email for ${fellow.bioEmail.targetAcademicYear}`
+                            : 'Send bio & project description email'
+                        }
+                      >
+                        {pendingContactId === fellow.civicrmId ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <Mail className="h-3 w-3" />
+                        )}
+                        <span>Send bio email</span>
+                      </button>
+                    )}
+                    {CIVICRM_URL && (
+                      <a
+                        href={`${CIVICRM_URL}/civicrm/contact/view?reset=1&cid=${fellow.civicrmId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                      >
+                        CiviCRM <ExternalLink className="h-3 w-3" />
+                      </a>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      <ConfirmDialog
+        open={confirmTarget !== null}
+        onCancel={() => setConfirmTarget(null)}
+        onConfirm={handleConfirmSend}
+        title="Send bio & project description email"
+        description={
+          confirmTarget
+            ? `Send the bio & project description email to ${confirmTarget.firstName} ${confirmTarget.lastName}${
+                confirmTarget.email ? ` (${confirmTarget.email})` : ''
+              } for academic year ${confirmTarget.bioEmail.targetAcademicYear ?? '—'}? This will dispatch the email immediately.`
+            : ''
+        }
+        confirmLabel="Send email"
+      />
       {totalPages > 1 && (
         <div className="mt-4 flex items-center justify-between text-sm">
           <span className="text-muted-foreground">
