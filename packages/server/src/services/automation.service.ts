@@ -6,6 +6,7 @@ import * as auth0Service from './auth0.service.js';
 import * as civicrmService from './civicrm.service.js';
 import * as jsmService from './atlassian-jsm.service.js';
 import * as emailService from './email.service.js';
+import * as appointeeEmailService from './appointee-email.service.js';
 import { classifyFellowship } from '../utils/eligibility.js';
 import { getCurrentAcademicYear } from '../utils/academic-year.js';
 
@@ -64,6 +65,30 @@ export function registerCronJobs(): void {
   }, { timezone: 'UTC' });
 
   logger.info('Automation: cron jobs registered (July 1 + July 2 at 04:00 UTC)');
+
+  // Daily at 09:00 Europe/Rome — dispatch pending appointee bio emails.
+  // Gated separately from AUTOMATIONS_ENABLED so the 2x/year July automations
+  // and the daily bio-email dispatch can be toggled independently.
+  if (env.APPOINTEE_EMAIL_CRON_ENABLED) {
+    cron.schedule(
+      '0 9 * * *',
+      async () => {
+        logger.info('Automation: starting scheduled bio-email dispatch');
+        try {
+          const result = await appointeeEmailService.dispatchPendingEmails();
+          logger.info(result, 'Automation: bio-email dispatch finished');
+        } catch (err) {
+          logger.error({ err }, 'Automation: scheduled bio-email dispatch failed');
+        }
+      },
+      { timezone: 'Europe/Rome' }
+    );
+    logger.info('Automation: bio-email cron registered (daily 09:00 Europe/Rome)');
+  } else {
+    logger.info(
+      'Automation: APPOINTEE_EMAIL_CRON_ENABLED is false, bio-email cron not registered'
+    );
+  }
 }
 
 // --- Dry Runs ---

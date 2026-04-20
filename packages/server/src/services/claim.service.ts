@@ -3,7 +3,12 @@ import * as auth0Service from './auth0.service.js';
 import * as civicrmService from './civicrm.service.js';
 import * as jsmService from './atlassian-jsm.service.js';
 import * as emailService from './email.service.js';
-import { evaluateEligibility, classifyFellowship } from '../utils/eligibility.js';
+import * as appointeeEmailService from './appointee-email.service.js';
+import {
+  evaluateEligibility,
+  classifyFellowship,
+  pickBioEmailTargetYear,
+} from '../utils/eligibility.js';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { env } from '../env.js';
@@ -95,15 +100,17 @@ export async function processClaim(email: string): Promise<void> {
   await auth0Service.triggerPasswordSetupEmail(email);
   logger.info({ emailHash }, 'Claim: password setup email sent');
 
-  // Step 9: Fire-and-forget async operations (JSM orgs + email notification)
+  // Step 9: Fire-and-forget async operations (JSM orgs + email notification + bio-email enqueue)
   processAsyncClaimOps({
     claimId: claimRecord.id,
     email,
     firstName: contact.firstName,
     lastName: contact.lastName,
+    contactId: contact.id,
     hasFellowship,
     hasCurrentFellowship,
     rolesAssigned,
+    fellowships,
   }).catch(
     (err) => logger.error({ err, emailHash }, 'Claim: async operations failed')
   );
@@ -114,11 +121,23 @@ async function processAsyncClaimOps(params: {
   email: string;
   firstName: string;
   lastName: string;
+  contactId: number;
   hasFellowship: boolean;
   hasCurrentFellowship: boolean;
   rolesAssigned: string[];
+  fellowships: Awaited<ReturnType<typeof civicrmService.getFellowships>>;
 }): Promise<void> {
-  const { claimId, email, firstName, lastName, hasFellowship, hasCurrentFellowship, rolesAssigned } = params;
+  const {
+    claimId,
+    email,
+    firstName,
+    lastName,
+    contactId,
+    hasFellowship,
+    hasCurrentFellowship,
+    rolesAssigned,
+    fellowships,
+  } = params;
   const displayName = `${firstName} ${lastName}`;
   const orgsAssigned: string[] = [];
 
@@ -152,4 +171,31 @@ async function processAsyncClaimOps(params: {
     rolesAssigned,
     claimedAt: new Date(),
   });
+
+  // Enqueue the bio-and-project-description email (24h delay; daily cron
+  // dispatches it). We pick the target academic year from the fellowships we
+  // already have in memory — for a returning fellow with a new upcoming
+  // accepted fellowship this picks the upcoming year, not the past one.
+  const target = pickBioEmailTargetYear(fellowships);
+  if (target) {
+    try {
+      await appointeeEmailService.enqueueBioEmail({
+        contactId,
+        academicYear: target.academicYear,
+        triggeredBy: 'claim_auto',
+        delayHours: 24,
+      });
+    } catch (err) {
+      // Never fail the claim flow because of the bio-email enqueue.
+      logger.error(
+        { err, contactId, academicYear: target.academicYear },
+        'Claim: failed to enqueue bio email (will be retried manually if needed)'
+      );
+    }
+  } else {
+    logger.info(
+      { contactId },
+      'Claim: no current/upcoming-accepted fellowship, bio email not enqueued'
+    );
+  }
 }

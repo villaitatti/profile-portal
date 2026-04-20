@@ -20,8 +20,21 @@ interface AutomationReportInput {
   details: string[];
 }
 
-export function isEmailConfigured(): boolean {
-  return !!(env.AWS_SES_REGION && env.AWS_SES_FROM_EMAIL && env.ADMIN_NOTIFICATION_EMAIL);
+/**
+ * Appointee-facing email requires only the SES basics (region + FROM).
+ * Used for bio/project-description emails and any future user-facing mail.
+ */
+export function isAppointeeEmailConfigured(): boolean {
+  return !!(env.AWS_SES_REGION && env.AWS_SES_FROM_EMAIL);
+}
+
+/**
+ * Admin-notification email requires SES basics PLUS a valid ADMIN_NOTIFICATION_EMAIL
+ * recipient. Decoupled from appointee config so that a missing admin recipient
+ * never silently blocks appointee deliveries.
+ */
+export function isAdminNotificationEmailConfigured(): boolean {
+  return isAppointeeEmailConfigured() && !!env.ADMIN_NOTIFICATION_EMAIL;
 }
 
 let cachedSesClient: any = null;
@@ -33,11 +46,35 @@ async function getSesClient() {
   return cachedSesClient;
 }
 
-async function sendEmail(to: string, subject: string, body: string): Promise<void> {
-  if (isDevMode || !isEmailConfigured()) {
-    logger.info({ to, subject, bodyLength: body.length }, 'Email (dev mode/not configured): would send');
+interface SendEmailOptions {
+  bccAddresses?: string[];
+}
+
+async function sendEmail(
+  to: string,
+  subject: string,
+  body: string,
+  options?: SendEmailOptions
+): Promise<string | undefined> {
+  // Dev mode: log only, no SES touched. Returning undefined is fine because
+  // the dev-mode short-circuit in the route/dispatch path is what guarantees
+  // "would send" semantics — NOT this function's return value.
+  if (isDevMode) {
+    logger.info(
+      { to, subject, bccAddresses: options?.bccAddresses, bodyLength: body.length },
+      'Email (dev mode): would send'
+    );
     logger.debug({ body }, 'Email body');
-    return;
+    return undefined;
+  }
+
+  // Outside dev mode, refuse to claim success when SES is misconfigured.
+  // Previously this returned undefined silently, which caused dispatchOne()
+  // to mark appointee events SENT even though no mail ever left the server.
+  if (!isAppointeeEmailConfigured()) {
+    throw new Error(
+      'SES not configured: AWS_SES_REGION and AWS_SES_FROM_EMAIL are required to send email in production'
+    );
   }
 
   // Lazy import + cached client to avoid loading AWS SDK in dev mode
@@ -45,15 +82,22 @@ async function sendEmail(to: string, subject: string, body: string): Promise<voi
   const { SendEmailCommand } = await import('@aws-sdk/client-ses');
   const command = new SendEmailCommand({
     Source: env.AWS_SES_FROM_EMAIL,
-    Destination: { ToAddresses: [to] },
+    Destination: {
+      ToAddresses: [to],
+      ...(options?.bccAddresses?.length ? { BccAddresses: options.bccAddresses } : {}),
+    },
     Message: {
       Subject: { Data: subject, Charset: 'UTF-8' },
       Body: { Text: { Data: body, Charset: 'UTF-8' } },
     },
   });
 
-  await client.send(command);
-  logger.info({ to, subject }, 'Email sent via SES');
+  const result = await client.send(command);
+  logger.info(
+    { to, subject, bccAddresses: options?.bccAddresses, messageId: result?.MessageId },
+    'Email sent via SES'
+  );
+  return result?.MessageId as string | undefined;
 }
 
 export async function sendClaimNotification(input: ClaimNotificationInput): Promise<void> {
@@ -69,11 +113,99 @@ export async function sendClaimNotification(input: ClaimNotificationInput): Prom
     `Claimed At: ${input.claimedAt.toISOString()}`,
   ].join('\n');
 
+  if (!isAdminNotificationEmailConfigured()) {
+    logger.warn(
+      { subject },
+      'Skipping claim notification email: ADMIN_NOTIFICATION_EMAIL (or SES) not configured'
+    );
+    return;
+  }
+
   try {
     await sendEmail(env.ADMIN_NOTIFICATION_EMAIL!, subject, body);
   } catch (err) {
     logger.error({ err }, 'Failed to send claim notification email');
   }
+}
+
+const BIO_EMAIL_SUBJECT = 'Biography and Project Description';
+const BIO_EMAIL_JSM_URL =
+  'https://helpdesk.itatti.harvard.edu/servicedesk/customer/portal/4/group/5/create/10';
+const BIO_EMAIL_EXAMPLE_URL = 'https://itatti.harvard.edu/people/giovanni-vito-distefano';
+
+/**
+ * Sends the "Biography and Project Description" email to an Appointee.
+ * Returns the SES MessageId when delivered, or undefined in dev/no-config mode.
+ *
+ * Honors two env knobs:
+ *   - APPOINTEE_EMAIL_REDIRECT_TO: if set, overrides the recipient (dev/staging
+ *     safety valve; production refuses to boot with it set).
+ *   - APPOINTEE_EMAIL_BCC: comma-separated BCC list (Angela + Andrea typically).
+ */
+export async function sendBioProjectDescriptionEmail(args: {
+  to: string;
+  firstName: string;
+}): Promise<{ messageId: string | undefined }> {
+  const { to, firstName } = args;
+  const greetingName = firstName && firstName.trim().length > 0 ? firstName.trim() : 'Appointee';
+
+  // A redirect is in effect whenever APPOINTEE_EMAIL_REDIRECT_TO is set,
+  // even if it happens to equal the intended recipient. Basing the flag on
+  // actualTo !== to would silently re-enable production BCCs whenever a
+  // developer's test redirect address matches the real appointee's address.
+  const redirectTarget = env.APPOINTEE_EMAIL_REDIRECT_TO?.trim();
+  const isRedirected = !!redirectTarget;
+  const actualTo = redirectTarget || to;
+
+  // Redirect must be ALL-OR-NOTHING: if a developer sets
+  // APPOINTEE_EMAIL_REDIRECT_TO on a staging box that also inherits a
+  // production APPOINTEE_EMAIL_BCC (Angela + Andrea), the BCC list would
+  // otherwise leak test emails to real admins. Drop BCCs entirely when
+  // redirected.
+  const bccAddresses = isRedirected ? [] : parseBccList(env.APPOINTEE_EMAIL_BCC);
+
+  if (isRedirected) {
+    logger.info(
+      { intended: to, redirectedTo: actualTo, droppedBcc: parseBccList(env.APPOINTEE_EMAIL_BCC).length },
+      'Bio email redirected via APPOINTEE_EMAIL_REDIRECT_TO (BCC list dropped)'
+    );
+  }
+
+  const body = [
+    `Dear ${greetingName},`,
+    ``,
+    `As an I Tatti appointee, you will be featured on the I Tatti website. To complete your page, we kindly ask you to submit the following materials:`,
+    ``,
+    `  • A short biography (maximum 760 characters)`,
+    `  • A project description (maximum 1,500 characters)`,
+    ``,
+    `Both should be written in English, in the third person, and presented as complete sentences (please do not use bullet points).`,
+    ``,
+    `We would be grateful if you could submit your materials as soon as possible, by using the following link:`,
+    BIO_EMAIL_JSM_URL,
+    ``,
+    `To log in, please use your VIT ID: enter your email address, click Next, then select Continue with single sign-on. If prompted, enter your email and VIT ID password to complete the process.`,
+    ``,
+    `If you would like to see an example of what we are looking for, please view this entry for one of this year's appointees:`,
+    BIO_EMAIL_EXAMPLE_URL,
+    ``,
+    `Best regards,`,
+    `I Tatti — The Harvard University Center for Italian Renaissance Studies`,
+  ].join('\n');
+
+  const messageId = await sendEmail(actualTo, BIO_EMAIL_SUBJECT, body, {
+    bccAddresses: bccAddresses.length > 0 ? bccAddresses : undefined,
+  });
+
+  return { messageId };
+}
+
+function parseBccList(raw: string | undefined): string[] {
+  if (!raw) return [];
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
 }
 
 export async function sendAutomationReport(input: AutomationReportInput): Promise<void> {
@@ -95,6 +227,14 @@ export async function sendAutomationReport(input: AutomationReportInput): Promis
     `Details:`,
     ...input.details.map((d) => `  - ${d}`),
   ].join('\n');
+
+  if (!isAdminNotificationEmailConfigured()) {
+    logger.warn(
+      { subject },
+      'Skipping automation report email: ADMIN_NOTIFICATION_EMAIL (or SES) not configured'
+    );
+    return;
+  }
 
   try {
     await sendEmail(env.ADMIN_NOTIFICATION_EMAIL!, subject, body);

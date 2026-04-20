@@ -76,6 +76,21 @@ const envSchema = z.object({
   AWS_SES_REGION: z.string().optional(),
   AWS_SES_FROM_EMAIL: z.string().email().optional().or(z.literal('')),
   ADMIN_NOTIFICATION_EMAIL: z.string().email().optional().or(z.literal('')),
+
+  // Appointee bio-and-project-description email workflow.
+  // Cron dispatch (daily at 09:00 Europe/Rome). Defaults to false so dev/staging
+  // never accidentally fire it; production must opt in explicitly.
+  APPOINTEE_EMAIL_CRON_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+  // Dev/staging safety valve. When set, ALL outgoing appointee bio emails are
+  // redirected to this single address regardless of the intended recipient.
+  // MUST be empty in production — a check in loadEnv() enforces this.
+  APPOINTEE_EMAIL_REDIRECT_TO: z.string().email().optional().or(z.literal('')),
+  // Comma-separated list of addresses BCC'd on every outgoing appointee bio
+  // email (Angela + Andrea, typically). Empty disables BCC.
+  APPOINTEE_EMAIL_BCC: z.string().optional(),
 });
 
 function loadEnv() {
@@ -94,6 +109,21 @@ function loadEnv() {
   if (result.data.NODE_ENV === 'production' && !result.data.CORS_ORIGIN) {
     console.error('CORS_ORIGIN is required in production mode.');
     console.error('Set CORS_ORIGIN to the frontend URL (e.g. https://dev.profile.itatti.net)');
+    process.exit(1);
+  }
+
+  // APPOINTEE_EMAIL_REDIRECT_TO is a dev/staging-only safety valve; refuse to
+  // start production with it set to avoid silently swallowing real emails.
+  // Uses the strict-checked `devMode` constant (DEV_SKIP_EXTERNAL_SERVICES === 'true')
+  // so that the literal string "false" cannot accidentally disable the guard.
+  if (
+    result.data.NODE_ENV === 'production' &&
+    !devMode &&
+    result.data.APPOINTEE_EMAIL_REDIRECT_TO
+  ) {
+    console.error(
+      'APPOINTEE_EMAIL_REDIRECT_TO must NOT be set in production — it would redirect real appointee emails to a developer inbox.'
+    );
     process.exit(1);
   }
 
