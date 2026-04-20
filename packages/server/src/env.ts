@@ -6,6 +6,17 @@ const requiredStr = devMode ? z.string().default('') : z.string().min(1);
 const requiredUrl = devMode ? z.string().default('http://localhost') : z.string().url();
 const requiredEmail = devMode ? z.string().default('dev@localhost') : z.string().email();
 
+// Parses a "true"/"false" env var, tolerating unset and empty-string values
+// (both treated as the default). `.default()` alone doesn't catch empty strings
+// because dotenv sets `APPOINTEE_FOO=` → `process.env.APPOINTEE_FOO === ""`,
+// not `undefined`. The `.or(z.literal(''))` ensures those fall through cleanly.
+const booleanFlag = (defaultValue: 'true' | 'false' = 'false') =>
+  z
+    .enum(['true', 'false'])
+    .or(z.literal(''))
+    .default(defaultValue)
+    .transform((v) => v === 'true');
+
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.coerce.number().default(3000),
@@ -59,10 +70,7 @@ const envSchema = z.object({
   // Only the true production instance should set this to 'true'; dev/staging
   // boxes running with NODE_ENV=production must leave it unset/false so the
   // July 1 + July 2 cron jobs don't fire against real Auth0/JSM/CiviCRM.
-  AUTOMATIONS_ENABLED: z
-    .enum(['true', 'false'])
-    .default('false')
-    .transform((v) => v === 'true'),
+  AUTOMATIONS_ENABLED: booleanFlag(),
 
   // Atlassian JSM Organizations (Phase 2 — optional, org features disabled if not configured)
   ATLASSIAN_JSM_SITE1_URL: z.string().url().or(z.literal('')).optional(),
@@ -80,10 +88,7 @@ const envSchema = z.object({
   // Appointee bio-and-project-description email workflow.
   // Cron dispatch (daily at 09:00 Europe/Rome). Defaults to false so dev/staging
   // never accidentally fire it; production must opt in explicitly.
-  APPOINTEE_EMAIL_CRON_ENABLED: z
-    .enum(['true', 'false'])
-    .default('false')
-    .transform((v) => v === 'true'),
+  APPOINTEE_EMAIL_CRON_ENABLED: booleanFlag(),
   // Dev/staging safety valve. When set, ALL outgoing appointee bio emails are
   // redirected to this single address regardless of the intended recipient.
   // In production (NODE_ENV=production without DEV_SKIP_EXTERNAL_SERVICES),
@@ -92,14 +97,7 @@ const envSchema = z.object({
   // with NODE_ENV=production and DOES need the redirect, so it opts in via
   // APPOINTEE_EMAIL_ALLOW_REDIRECT=true. Real production leaves both unset.
   APPOINTEE_EMAIL_REDIRECT_TO: z.string().email().optional().or(z.literal('')),
-  // `.or(z.literal(''))` lets an empty value in .env (e.g. `APPOINTEE_EMAIL_ALLOW_REDIRECT=`)
-  // fall through as false rather than aborting loadEnv() — zod `.default()` only
-  // covers `undefined`, not empty-string, and dotenv gives us the latter.
-  APPOINTEE_EMAIL_ALLOW_REDIRECT: z
-    .enum(['true', 'false'])
-    .or(z.literal(''))
-    .default('false')
-    .transform((v) => v === 'true'),
+  APPOINTEE_EMAIL_ALLOW_REDIRECT: booleanFlag(),
   // Comma-separated list of addresses BCC'd on every outgoing appointee bio
   // email (Angela + Andrea, typically). Empty disables BCC.
   APPOINTEE_EMAIL_BCC: z.string().optional(),
