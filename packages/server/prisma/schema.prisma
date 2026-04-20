@@ -87,3 +87,45 @@ model RoleGroupMapping {
   @@index([auth0RoleId])
   @@map("role_group_mappings")
 }
+
+enum AppointeeEmailType {
+  BIO_PROJECT_DESCRIPTION
+
+  @@map("appointee_email_type")
+}
+
+enum AppointeeEmailStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  SKIPPED
+
+  @@map("appointee_email_status")
+}
+
+// Tracks the lifecycle of per-appointee, per-academic-year transactional emails
+// (currently just the "Biography and Project Description" request). One row
+// exists per (contactId, academicYear, emailType) triple so returning fellows
+// get a fresh event for a new fellowship year. See design doc for the full
+// state machine.
+model AppointeeEmailEvent {
+  id            String               @id @default(cuid())
+  contactId     Int                  @map("contact_id")
+  academicYear  String               @map("academic_year")
+  emailType     AppointeeEmailType   @map("email_type")
+  status        AppointeeEmailStatus @default(PENDING)
+  enqueuedAt    DateTime             @default(now()) @map("enqueued_at")
+  sendAfter     DateTime             @map("send_after")
+  sentAt        DateTime?            @map("sent_at")
+  failureReason String?              @map("failure_reason")
+  triggeredBy   String               @map("triggered_by") // "claim_auto" | "admin_manual:<userId>"
+  sesMessageId  String?              @map("ses_message_id")
+  createdAt     DateTime             @default(now()) @map("created_at")
+  updatedAt     DateTime             @updatedAt @map("updated_at")
+
+  @@unique([contactId, academicYear, emailType])
+  @@index([status, sendAfter])
+  @@index([contactId])
+  @@map("appointee_email_events")
+}
