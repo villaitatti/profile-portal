@@ -25,6 +25,21 @@ export interface EligibilityResult {
 export type FellowStatus = 'no-account' | 'active';
 export type CivicrmIdStatus = 'ok' | 'missing' | 'n/a';
 
+export type BioEmailStatus = 'none' | 'pending' | 'sent' | 'failed';
+
+export interface BioEmailSummary {
+  // UI pill state: gray "—" / yellow "Pending" / green "Sent" / red "Failed"
+  status: BioEmailStatus;
+  sentAt: string | null;
+  // Current or next academic year this appointee is eligible for (empty if neither)
+  targetAcademicYear: string | null;
+  // True when admin should see a "Send bio email" button for this row:
+  //   - VIT ID exists
+  //   - current or next-year fellowship with fellowshipAccepted=true
+  //   - no SENT event for that (contactId, academicYear) pair
+  canManuallySend: boolean;
+}
+
 export interface FellowDashboardEntry {
   civicrmId: number;
   firstName: string;
@@ -36,6 +51,7 @@ export interface FellowDashboardEntry {
   fellowshipYear: string;
   status: FellowStatus;
   civicrmIdStatus: CivicrmIdStatus;
+  bioEmail: BioEmailSummary;
 }
 
 export interface FellowsDashboardResponse {

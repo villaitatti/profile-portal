@@ -33,11 +33,23 @@ async function getSesClient() {
   return cachedSesClient;
 }
 
-async function sendEmail(to: string, subject: string, body: string): Promise<void> {
+interface SendEmailOptions {
+  bccAddresses?: string[];
+}
+
+async function sendEmail(
+  to: string,
+  subject: string,
+  body: string,
+  options?: SendEmailOptions
+): Promise<string | undefined> {
   if (isDevMode || !isEmailConfigured()) {
-    logger.info({ to, subject, bodyLength: body.length }, 'Email (dev mode/not configured): would send');
+    logger.info(
+      { to, subject, bccAddresses: options?.bccAddresses, bodyLength: body.length },
+      'Email (dev mode/not configured): would send'
+    );
     logger.debug({ body }, 'Email body');
-    return;
+    return undefined;
   }
 
   // Lazy import + cached client to avoid loading AWS SDK in dev mode
@@ -45,15 +57,22 @@ async function sendEmail(to: string, subject: string, body: string): Promise<voi
   const { SendEmailCommand } = await import('@aws-sdk/client-ses');
   const command = new SendEmailCommand({
     Source: env.AWS_SES_FROM_EMAIL,
-    Destination: { ToAddresses: [to] },
+    Destination: {
+      ToAddresses: [to],
+      ...(options?.bccAddresses?.length ? { BccAddresses: options.bccAddresses } : {}),
+    },
     Message: {
       Subject: { Data: subject, Charset: 'UTF-8' },
       Body: { Text: { Data: body, Charset: 'UTF-8' } },
     },
   });
 
-  await client.send(command);
-  logger.info({ to, subject }, 'Email sent via SES');
+  const result = await client.send(command);
+  logger.info(
+    { to, subject, bccAddresses: options?.bccAddresses, messageId: result?.MessageId },
+    'Email sent via SES'
+  );
+  return result?.MessageId as string | undefined;
 }
 
 export async function sendClaimNotification(input: ClaimNotificationInput): Promise<void> {
@@ -74,6 +93,74 @@ export async function sendClaimNotification(input: ClaimNotificationInput): Prom
   } catch (err) {
     logger.error({ err }, 'Failed to send claim notification email');
   }
+}
+
+const BIO_EMAIL_SUBJECT = 'Biography and Project Description';
+const BIO_EMAIL_JSM_URL =
+  'https://helpdesk.itatti.harvard.edu/servicedesk/customer/portal/4/group/5/create/10';
+const BIO_EMAIL_EXAMPLE_URL = 'https://itatti.harvard.edu/people/giovanni-vito-distefano';
+
+/**
+ * Sends the "Biography and Project Description" email to an Appointee.
+ * Returns the SES MessageId when delivered, or undefined in dev/no-config mode.
+ *
+ * Honors two env knobs:
+ *   - APPOINTEE_EMAIL_REDIRECT_TO: if set, overrides the recipient (dev/staging
+ *     safety valve; production refuses to boot with it set).
+ *   - APPOINTEE_EMAIL_BCC: comma-separated BCC list (Angela + Andrea typically).
+ */
+export async function sendBioProjectDescriptionEmail(args: {
+  to: string;
+  firstName: string;
+}): Promise<{ messageId: string | undefined }> {
+  const { to, firstName } = args;
+  const greetingName = firstName && firstName.trim().length > 0 ? firstName.trim() : 'Appointee';
+
+  const actualTo = env.APPOINTEE_EMAIL_REDIRECT_TO || to;
+  const bccAddresses = parseBccList(env.APPOINTEE_EMAIL_BCC);
+
+  if (env.APPOINTEE_EMAIL_REDIRECT_TO && actualTo !== to) {
+    logger.info(
+      { intended: to, redirectedTo: actualTo },
+      'Bio email redirected via APPOINTEE_EMAIL_REDIRECT_TO'
+    );
+  }
+
+  const body = [
+    `Dear ${greetingName},`,
+    ``,
+    `As an I Tatti appointee, you will be featured on the I Tatti website. To complete your page, we kindly ask you to submit the following materials:`,
+    ``,
+    `  • A short biography (maximum 760 characters)`,
+    `  • A project description (maximum 1,500 characters)`,
+    ``,
+    `Both should be written in English, in the third person, and presented as complete sentences (please do not use bullet points).`,
+    ``,
+    `We would be grateful if you could submit your materials as soon as possible, by using the following link:`,
+    BIO_EMAIL_JSM_URL,
+    ``,
+    `To log in, please use your VIT ID: enter your email address, click Next, then select Continue with single sign-on. If prompted, enter your email and VIT ID password to complete the process.`,
+    ``,
+    `If you would like to see an example of what we are looking for, please view this entry for one of this year's appointees:`,
+    BIO_EMAIL_EXAMPLE_URL,
+    ``,
+    `Best regards,`,
+    `I Tatti — The Harvard University Center for Italian Renaissance Studies`,
+  ].join('\n');
+
+  const messageId = await sendEmail(actualTo, BIO_EMAIL_SUBJECT, body, {
+    bccAddresses: bccAddresses.length > 0 ? bccAddresses : undefined,
+  });
+
+  return { messageId };
+}
+
+function parseBccList(raw: string | undefined): string[] {
+  if (!raw) return [];
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
 }
 
 export async function sendAutomationReport(input: AutomationReportInput): Promise<void> {
