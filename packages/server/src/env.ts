@@ -92,8 +92,12 @@ const envSchema = z.object({
   // with NODE_ENV=production and DOES need the redirect, so it opts in via
   // APPOINTEE_EMAIL_ALLOW_REDIRECT=true. Real production leaves both unset.
   APPOINTEE_EMAIL_REDIRECT_TO: z.string().email().optional().or(z.literal('')),
+  // `.or(z.literal(''))` lets an empty value in .env (e.g. `APPOINTEE_EMAIL_ALLOW_REDIRECT=`)
+  // fall through as false rather than aborting loadEnv() — zod `.default()` only
+  // covers `undefined`, not empty-string, and dotenv gives us the latter.
   APPOINTEE_EMAIL_ALLOW_REDIRECT: z
     .enum(['true', 'false'])
+    .or(z.literal(''))
     .default('false')
     .transform((v) => v === 'true'),
   // Comma-separated list of addresses BCC'd on every outgoing appointee bio
