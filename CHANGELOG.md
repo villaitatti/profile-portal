@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.6.0] - 2026-04-17
+
+### Added
+- **Automated Bio & Project Description email.** After an Appointee successfully claims their VIT ID, a tracked email event is enqueued and dispatched 24h later by a daily cron (09:00 Europe/Rome). The email asks for a short biography and project description via the existing Jira JSM form. Tracking is per `(contactId, academicYear)` so returning Appointees with a new fellowship correctly receive a fresh email.
+- **Bio email status column** on the Manage Appointees page with color-coded pills (`—` none, yellow `Pending`, green `Sent` with timestamp, red `Failed`). Sortable alongside other columns.
+- **Manual "Send bio email" button** on each Appointee row. Visible only when a VIT ID exists, a current or accepted upcoming fellowship is on file for the target academic year, and no email has been sent yet for that `(contactId, academicYear)` pair. Clicking opens a confirmation dialog and dispatches immediately via the same code path as the cron.
+- **New Prisma model `AppointeeEmailEvent`** with enums `AppointeeEmailType` and `AppointeeEmailStatus` (`PENDING`/`SENDING`/`SENT`/`FAILED`/`SKIPPED`). Unique constraint on `(contactId, academicYear, emailType)` guarantees idempotency.
+- **Atomic concurrency guard.** Dispatch uses `updateMany` PENDING→SENDING with `affectedRows=1` check so concurrent cron + manual sends cannot double-deliver. Upstream (CiviCRM) fetch failures revert to `PENDING` and defer to the next run; only SES-level rejections are marked `FAILED`.
+- **Environment configuration for email behavior:**
+  - `APPOINTEE_EMAIL_CRON_ENABLED` (default `false`) — toggle the daily dispatch cron independently of `AUTOMATIONS_ENABLED`.
+  - `APPOINTEE_EMAIL_REDIRECT_TO` (dev-only) — route all outgoing bio emails to a single developer inbox. Enforced empty in production via a `loadEnv()` safety check.
+  - `APPOINTEE_EMAIL_BCC` — comma-separated BCC list for every bio email (Angela + Andrea in production).
+- **Eligibility helpers.** New `pickBioEmailTargetYear()` and `academicYearLabelForFellowship()` in `utils/eligibility.ts` to select the right fellowship year for the bio email (current wins; otherwise earliest accepted upcoming).
+
+### Changed
+- `claim.service.ts` now enqueues the bio email (24h delay) after a successful self-service VIT ID claim, gated on a valid current/upcoming target year.
+- `fellows.service.ts` dashboard payload includes a batched `bioEmail` summary per Appointee (no N+1); the frontend uses it for the new pill + button.
+
 ## [0.5.0] - 2026-04-14
 
 ### Added
