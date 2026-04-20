@@ -4,7 +4,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
-import { useFellowsDashboard, useSendBioEmail, type SendBioEmailError } from '@/api/fellows';
+import { useFellowsDashboard, useSendBioEmail, SendBioEmailError, type SendBioEmailReason } from '@/api/fellows';
 import { getCurrentAcademicYear } from './utils/academic-year';
 import {
   Users,
@@ -360,7 +360,7 @@ function BioEmailPill({
   );
 }
 
-const BIO_EMAIL_ERROR_MESSAGES: Record<SendBioEmailError['reason'], string> = {
+const BIO_EMAIL_ERROR_MESSAGES: Record<SendBioEmailReason, string> = {
   no_vit_id: 'This appointee has not claimed a VIT ID yet.',
   no_matching_fellowship: 'No current or upcoming fellowship matches the requested year.',
   fellowship_not_accepted: 'The fellowship for the target year is not marked as accepted.',
@@ -417,9 +417,21 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
         case 'status':
           cmp = a.status.localeCompare(b.status);
           break;
-        case 'bioEmail':
-          cmp = a.bioEmail.status.localeCompare(b.bioEmail.status);
+        case 'bioEmail': {
+          // Semantic priority instead of alphabetic: actionable states first
+          // (failed = needs retry, none = send candidate) so Angela sees rows
+          // requiring attention at the top, then pending (in-flight), then
+          // sent (already done). Lexicographic order would put "failed"
+          // between "—" and "pending", which is confusing.
+          const priority: Record<typeof a.bioEmail.status, number> = {
+            failed: 0,
+            none: 1,
+            pending: 2,
+            sent: 3,
+          };
+          cmp = priority[a.bioEmail.status] - priority[b.bioEmail.status];
           break;
+        }
       }
       return sortDir === 'asc' ? cmp : -cmp;
     });
@@ -462,9 +474,10 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
         );
       }
     } catch (err) {
-      if (err && typeof err === 'object' && 'reason' in err) {
-        const reason = (err as SendBioEmailError).reason;
-        toast.error(BIO_EMAIL_ERROR_MESSAGES[reason] || `Failed to send bio email (${reason}).`);
+      if (err instanceof SendBioEmailError) {
+        toast.error(
+          BIO_EMAIL_ERROR_MESSAGES[err.reason] || `Failed to send bio email (${err.reason}).`
+        );
       } else {
         toast.error(err instanceof Error ? err.message : 'Failed to send bio email.');
       }

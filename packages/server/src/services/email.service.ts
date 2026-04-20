@@ -117,12 +117,19 @@ export async function sendBioProjectDescriptionEmail(args: {
   const greetingName = firstName && firstName.trim().length > 0 ? firstName.trim() : 'Appointee';
 
   const actualTo = env.APPOINTEE_EMAIL_REDIRECT_TO || to;
-  const bccAddresses = parseBccList(env.APPOINTEE_EMAIL_BCC);
+  const isRedirected = actualTo !== to;
 
-  if (env.APPOINTEE_EMAIL_REDIRECT_TO && actualTo !== to) {
+  // Redirect must be ALL-OR-NOTHING: if a developer sets
+  // APPOINTEE_EMAIL_REDIRECT_TO on a staging box that also inherits a
+  // production APPOINTEE_EMAIL_BCC (Angela + Andrea), the BCC list would
+  // otherwise leak test emails to real admins. Drop BCCs entirely when
+  // redirected.
+  const bccAddresses = isRedirected ? [] : parseBccList(env.APPOINTEE_EMAIL_BCC);
+
+  if (isRedirected) {
     logger.info(
-      { intended: to, redirectedTo: actualTo },
-      'Bio email redirected via APPOINTEE_EMAIL_REDIRECT_TO'
+      { intended: to, redirectedTo: actualTo, droppedBcc: parseBccList(env.APPOINTEE_EMAIL_BCC).length },
+      'Bio email redirected via APPOINTEE_EMAIL_REDIRECT_TO (BCC list dropped)'
     );
   }
 

@@ -1,5 +1,4 @@
-import type { Prisma } from '@prisma/client';
-import { AppointeeEmailStatus, AppointeeEmailType } from '@prisma/client';
+import { Prisma, AppointeeEmailStatus, AppointeeEmailType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import {
@@ -9,6 +8,7 @@ import {
 } from '../utils/eligibility.js';
 import { getCurrentAcademicYear } from '../utils/academic-year.js';
 import * as civicrmService from './civicrm.service.js';
+import * as auth0Service from './auth0.service.js';
 import * as emailService from './email.service.js';
 
 export type BioEmailIneligibilityReason =
@@ -65,28 +65,58 @@ export async function enqueueBioEmail(args: EnqueueArgs): Promise<{
     return { eventId: existing.id, status: existing.status, created: false };
   }
 
-  const created = await prisma.appointeeEmailEvent.create({
-    data: {
-      contactId,
-      academicYear,
-      emailType: AppointeeEmailType.BIO_PROJECT_DESCRIPTION,
-      status: AppointeeEmailStatus.PENDING,
-      sendAfter,
-      triggeredBy,
-    },
-  });
+  // Race-safe create: another worker may have inserted the same
+  // (contactId, academicYear, emailType) tuple after our findUnique but before
+  // our create. Handle the resulting P2002 unique-constraint violation by
+  // re-reading the row the winner inserted, returning created:false.
+  try {
+    const created = await prisma.appointeeEmailEvent.create({
+      data: {
+        contactId,
+        academicYear,
+        emailType: AppointeeEmailType.BIO_PROJECT_DESCRIPTION,
+        status: AppointeeEmailStatus.PENDING,
+        sendAfter,
+        triggeredBy,
+      },
+    });
 
-  logger.info(
-    { eventId: created.id, contactId, academicYear, sendAfter, triggeredBy },
-    'Bio email: event enqueued'
-  );
+    logger.info(
+      { eventId: created.id, contactId, academicYear, sendAfter, triggeredBy },
+      'Bio email: event enqueued'
+    );
 
-  return { eventId: created.id, status: created.status, created: true };
+    return { eventId: created.id, status: created.status, created: true };
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      const winner = await prisma.appointeeEmailEvent.findUnique({
+        where: {
+          contactId_academicYear_emailType: {
+            contactId,
+            academicYear,
+            emailType: AppointeeEmailType.BIO_PROJECT_DESCRIPTION,
+          },
+        },
+      });
+      if (winner) {
+        logger.info(
+          { contactId, academicYear, winnerStatus: winner.status, triggeredBy },
+          'Bio email: P2002 race lost, returning existing event'
+        );
+        return { eventId: winner.id, status: winner.status, created: false };
+      }
+      // P2002 without a re-fetched row is pathological — a row was deleted
+      // between the constraint hit and the re-read. Fall through to re-throw.
+    }
+    throw err;
+  }
 }
 
 /**
  * Re-evaluate eligibility at dispatch time with a fresh lookup:
  *   - contact must still exist in CiviCRM with a primary email
+ *   - contact must have a VIT ID (Auth0 user by email) — we never email a JSM
+ *     link to someone who can't authenticate
  *   - a current-year fellowship, OR an accepted upcoming-year fellowship,
  *     must still match the target academic year
  *
@@ -104,6 +134,14 @@ export async function evaluateBioEmailEligibility(
 
   if (!contact.email) {
     return { eligible: false, reason: 'no_primary_email' };
+  }
+
+  // Backend policy mirrors the UI rule in fellows.service.ts: no Auth0 user =>
+  // no VIT ID => bio email would link to a JSM form the contact can't log in
+  // to. Better to short-circuit with a clear reason than send a dead-end email.
+  const auth0User = await auth0Service.findUserByEmail(contact.email);
+  if (!auth0User) {
+    return { eligible: false, reason: 'no_vit_id' };
   }
 
   const fellowships = await civicrmService.getFellowships(contactId);
@@ -145,11 +183,23 @@ export async function evaluateBioEmailEligibility(
   };
 }
 
+// Rows stuck in SENDING longer than this are treated as abandoned (process
+// crashed between the atomic flip and the final status write) and reverted to
+// PENDING at the top of the next dispatch run. Generously larger than any
+// realistic single-event dispatch latency (SES + DB updates ≈ seconds).
+const STALE_SENDING_THRESHOLD_MS = 60 * 60 * 1000; // 1 hour
+
 /**
  * Dispatches all bio emails whose sendAfter <= now and status is PENDING.
  * Uses an atomic UPDATE …PENDING→SENDING with affectedRows=1 gate so that a
  * concurrent cron + manual dispatch cannot double-send (C1 decision in the
  * design doc).
+ *
+ * Before scanning PENDING rows, reclaims any abandoned SENDING rows (older
+ * than STALE_SENDING_THRESHOLD_MS) by reverting them to PENDING. This unsticks
+ * rows where a previous process crashed between the atomic flip and the
+ * terminal status write; without this, such rows would be invisible to the
+ * admin UI (manual button reports "in flight" forever).
  *
  * On upstream (CiviCRM/Auth0) fetch failure we leave the row PENDING and log
  * a warning so the next run retries. Only SES-level rejections mark FAILED.
@@ -157,9 +207,34 @@ export async function evaluateBioEmailEligibility(
 export async function dispatchPendingEmails(opts?: {
   now?: Date;
   limit?: number;
-}): Promise<{ processed: number; sent: number; skipped: number; failed: number; deferred: number }> {
+}): Promise<{
+  processed: number;
+  sent: number;
+  skipped: number;
+  failed: number;
+  deferred: number;
+  reclaimed: number;
+}> {
   const now = opts?.now ?? new Date();
   const limit = opts?.limit ?? 100;
+
+  // Stale-claim recovery. Uses updatedAt (Prisma @updatedAt) which is bumped
+  // every time we transition a row, so a row sitting at SENDING for > 1h
+  // must have crashed mid-dispatch.
+  const reclaimCutoff = new Date(now.getTime() - STALE_SENDING_THRESHOLD_MS);
+  const reclaimResult = await prisma.appointeeEmailEvent.updateMany({
+    where: {
+      status: AppointeeEmailStatus.SENDING,
+      updatedAt: { lt: reclaimCutoff },
+    },
+    data: { status: AppointeeEmailStatus.PENDING },
+  });
+  if (reclaimResult.count > 0) {
+    logger.warn(
+      { reclaimed: reclaimResult.count, thresholdMs: STALE_SENDING_THRESHOLD_MS },
+      'Bio email: reclaimed stale SENDING rows back to PENDING (worker likely crashed mid-dispatch)'
+    );
+  }
 
   const due = await prisma.appointeeEmailEvent.findMany({
     where: {
@@ -184,11 +259,18 @@ export async function dispatchPendingEmails(opts?: {
   }
 
   logger.info(
-    { processed: due.length, sent, skipped, failed, deferred },
+    { processed: due.length, sent, skipped, failed, deferred, reclaimed: reclaimResult.count },
     'Bio email: dispatch run complete'
   );
 
-  return { processed: due.length, sent, skipped, failed, deferred };
+  return {
+    processed: due.length,
+    sent,
+    skipped,
+    failed,
+    deferred,
+    reclaimed: reclaimResult.count,
+  };
 }
 
 /**

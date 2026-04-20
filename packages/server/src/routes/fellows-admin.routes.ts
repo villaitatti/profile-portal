@@ -63,9 +63,12 @@ router.get('/', async (req, res, next) => {
 // POST /api/admin/fellows/:contactId/send-bio-email
 // Body: { academicYear: "YYYY-YYYY" }
 // Returns:
-//   200 { eventId, status, sentAt? }           — success (including in-flight PENDING/SENDING)
-//   400 { reason: BioEmailIneligibilityReason } — precondition failed (no VIT ID / not accepted / already sent)
-//   500 { error: "internal_error" }             — upstream (CiviCRM / Auth0 / SES) failure
+//   200 { eventId, status, sentAt? }             — success (including in-flight PENDING/SENDING)
+//   400 { error: "invalid_request", details? }   — malformed :contactId or body failed schema validation
+//   400 { reason: BioEmailIneligibilityReason }  — eligibility precondition failed
+//                                                  (no_vit_id / no_matching_fellowship / fellowship_not_accepted /
+//                                                   no_primary_email / already_sent)
+//   500 { error: "internal_error" }              — upstream (CiviCRM / Auth0 / SES) failure
 const sendBioEmailBodySchema = z.object({
   academicYear: z.string().regex(/^\d{4}-\d{4}$/),
 });
@@ -75,13 +78,21 @@ router.post('/:contactId/send-bio-email', async (req, res, next) => {
     const contactIdRaw = req.params.contactId;
     const contactId = Number(contactIdRaw);
     if (!Number.isInteger(contactId) || contactId <= 0) {
-      res.status(400).json({ reason: 'no_matching_fellowship' });
+      res
+        .status(400)
+        .json({ error: 'invalid_request', details: 'contactId must be a positive integer' });
       return;
     }
 
     const parsed = sendBioEmailBodySchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ reason: 'no_matching_fellowship' });
+      res.status(400).json({
+        error: 'invalid_request',
+        details: parsed.error.issues.map((i) => ({
+          path: i.path.join('.'),
+          message: i.message,
+        })),
+      });
       return;
     }
 

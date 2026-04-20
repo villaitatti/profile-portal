@@ -24,13 +24,25 @@ export interface SendBioEmailResponse {
   sentAt: string | null;
 }
 
-export interface SendBioEmailError {
-  reason:
-    | 'no_vit_id'
-    | 'no_matching_fellowship'
-    | 'fellowship_not_accepted'
-    | 'no_primary_email'
-    | 'already_sent';
+export type SendBioEmailReason =
+  | 'no_vit_id'
+  | 'no_matching_fellowship'
+  | 'fellowship_not_accepted'
+  | 'no_primary_email'
+  | 'already_sent';
+
+/**
+ * Error thrown when the server returns 400 { reason } (eligibility failure).
+ * Extends Error so React Query / generic error handlers receive a proper
+ * Error instance; the `reason` field lets UI code map to a specific toast.
+ */
+export class SendBioEmailError extends Error {
+  readonly reason: SendBioEmailReason;
+  constructor(reason: SendBioEmailReason) {
+    super(`send-bio-email: ${reason}`);
+    this.name = 'SendBioEmailError';
+    this.reason = reason;
+  }
 }
 
 export function useSendBioEmail() {
@@ -39,13 +51,14 @@ export function useSendBioEmail() {
 
   return useMutation<
     SendBioEmailResponse,
-    Error | SendBioEmailError,
+    Error,
     { contactId: number; academicYear: string }
   >({
     mutationFn: async ({ contactId, academicYear }) => {
       const token = await getToken();
-      // Use fetch directly so we can distinguish 400 {reason} from 500 errors;
-      // apiFetch throws on any non-2xx and strips the body shape.
+      // Use fetch directly so we can distinguish 400 {reason} (eligibility) from
+      // 400 {error: 'invalid_request'} (malformed) and 500 errors. apiFetch
+      // throws on any non-2xx and strips the body shape.
       const res = await fetch(`${API_BASE}/api/admin/fellows/${contactId}/send-bio-email`, {
         method: 'POST',
         headers: {
@@ -57,7 +70,7 @@ export function useSendBioEmail() {
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}));
         if (payload && typeof payload.reason === 'string') {
-          throw payload as SendBioEmailError;
+          throw new SendBioEmailError(payload.reason as SendBioEmailReason);
         }
         throw new Error(payload?.error || `Request failed: ${res.status}`);
       }

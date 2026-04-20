@@ -28,15 +28,22 @@ export type CivicrmIdStatus = 'ok' | 'missing' | 'n/a';
 export type BioEmailStatus = 'none' | 'pending' | 'sent' | 'failed';
 
 export interface BioEmailSummary {
-  // UI pill state: gray "—" / yellow "Pending" / green "Sent" / red "Failed"
+  // UI pill state derived from the DB AppointeeEmailStatus:
+  //   - "none"    → no event exists, or event is SKIPPED
+  //   - "pending" → event is PENDING or SENDING (in-flight)
+  //   - "sent"    → event is SENT
+  //   - "failed"  → event is FAILED
   status: BioEmailStatus;
   sentAt: string | null;
-  // Current or next academic year this appointee is eligible for (empty if neither)
+  // Current or next academic year this appointee is eligible for (null if neither)
   targetAcademicYear: string | null;
-  // True when admin should see a "Send bio email" button for this row:
-  //   - VIT ID exists
-  //   - current or next-year fellowship with fellowshipAccepted=true
-  //   - no SENT event for that (contactId, academicYear) pair
+  // True when admin should see a "Send bio email" button for this row.
+  // The button is suppressed when:
+  //   - no VIT ID (Auth0 user) exists
+  //   - no current/accepted-upcoming target academic year
+  //   - status is "sent"    (already delivered — use re-send flow separately)
+  //   - status is "pending" (already queued/in-flight — avoid double-sends)
+  // Allowed: status "none" or "failed" (retryable).
   canManuallySend: boolean;
 }
 

@@ -78,7 +78,7 @@ export function pickBioEmailTargetYear(
   if (!chosen) return null;
 
   return {
-    academicYear: academicYearLabelForFellowship(chosen, referenceDate),
+    academicYear: academicYearLabelForFellowship(chosen),
     fellowship: chosen,
   };
 }
@@ -87,16 +87,17 @@ export function pickBioEmailTargetYear(
  * Derive the "YYYY-YYYY" academic-year label for a fellowship. Academic years
  * at I Tatti run July 1 → June 30; a fellowship starting in July-December of
  * year Y belongs to year label "Y-(Y+1)", a fellowship starting January-June
- * of year Y belongs to "(Y-1)-Y". Handles fellowships that straddle calendar
- * years by using the start month.
+ * of year Y belongs to "(Y-1)-Y".
+ *
+ * Uses UTC accessors so that a CiviCRM startDate of "2026-07-01" (parsed by
+ * Date as midnight UTC) does not drift to June 30 23:00 when the server runs
+ * in a west-of-UTC timezone, which would flip the label from "2026-2027" to
+ * "2025-2026".
  */
-export function academicYearLabelForFellowship(
-  fellowship: CiviCRMFellowship,
-  _referenceDate: Date = new Date()
-): string {
+export function academicYearLabelForFellowship(fellowship: CiviCRMFellowship): string {
   const start = new Date(fellowship.startDate);
-  const startYear = start.getFullYear();
-  const startMonth = start.getMonth(); // 0-indexed
+  const startYear = start.getUTCFullYear();
+  const startMonth = start.getUTCMonth(); // 0-indexed
   if (startMonth >= 6) return `${startYear}-${startYear + 1}`;
   return `${startYear - 1}-${startYear}`;
 }

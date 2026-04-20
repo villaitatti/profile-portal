@@ -114,9 +114,11 @@ function loadEnv() {
 
   // APPOINTEE_EMAIL_REDIRECT_TO is a dev/staging-only safety valve; refuse to
   // start production with it set to avoid silently swallowing real emails.
+  // Uses the strict-checked `devMode` constant (DEV_SKIP_EXTERNAL_SERVICES === 'true')
+  // so that the literal string "false" cannot accidentally disable the guard.
   if (
     result.data.NODE_ENV === 'production' &&
-    !process.env.DEV_SKIP_EXTERNAL_SERVICES &&
+    !devMode &&
     result.data.APPOINTEE_EMAIL_REDIRECT_TO
   ) {
     console.error(
