@@ -73,6 +73,20 @@ All configuration is in `.env` at the project root. See `.env.example` for the f
 | `JIRA_BASE_URL` + `JIRA_EMAIL` + `JIRA_API_TOKEN` + `JIRA_SERVICE_DESK_ID` + `JIRA_REQUEST_TYPE_ID` | Jira SM help tickets |
 | `ATLASSIAN_SCIM_BASE_URL` + `ATLASSIAN_SCIM_DIRECTORY_ID` + `ATLASSIAN_SCIM_BEARER_TOKEN` | Atlassian SCIM user/group sync |
 | `SSE_SECRET` | HMAC key for SSE tokens (random fallback if not set, but tokens won't survive restarts) |
+| `AWS_SES_REGION` + `AWS_SES_FROM_EMAIL` + AWS credentials | Appointee bio/project email sending via SES |
+
+### Appointee bio email workflow (dev server vs. production)
+
+The bio email system has three environment-specific knobs. Defaults are safe (nothing fires), so real production typically only sets the cron flag.
+
+| Variable | Dev server (`civicrm-dev`) | Real production |
+|----------|----------------------------|-----------------|
+| `APPOINTEE_EMAIL_CRON_ENABLED` | `false` (do not auto-send) | `true` |
+| `APPOINTEE_EMAIL_REDIRECT_TO` | developer inbox (e.g. `andrea@…`) | **unset** |
+| `APPOINTEE_EMAIL_ALLOW_REDIRECT` | `true` (required when redirect is set under `NODE_ENV=production`) | **unset** / `false` |
+| `APPOINTEE_EMAIL_BCC` | optional, suppressed automatically when redirect is active | optional |
+
+The server refuses to start if `APPOINTEE_EMAIL_REDIRECT_TO` is set under `NODE_ENV=production` without `APPOINTEE_EMAIL_ALLOW_REDIRECT=true`. This is an intentional guard against accidentally leaving the redirect on in real production.
 
 ### Frontend variables (VITE_ prefix, baked into the build)
 
