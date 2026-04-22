@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.7.0] - 2026-04-22
+
+### Added
+- **VIT ID match ladder** — a new 4-tier matching system catches returning appointees whose email changed. The Manage Appointees dashboard and Has VIT ID? page now recognize a fellow's existing VIT ID even when their current CiviCRM email doesn't match the one on their Auth0 account. Tiers run in order: primary email → Auth0 `civicrm_id` metadata → CiviCRM secondary emails → normalized name match (case- and accent-insensitive).
+- **Two new VIT ID statuses on the Manage Appointees page:**
+  - **Active (different email)** — amber pill when a fellow's VIT ID is found under a different email than CiviCRM's current primary. The row shows which email the VIT ID is under so staff can eyeball the match.
+  - **Needs review** — amber pill with a clickable info icon when the match is ambiguous (name collision, primary/civicrm_id conflict, duplicate CiviCRM contact, or two Auth0 accounts sharing data). The row expands to list the candidate accounts; staff decide which is canonical.
+- **Info icons** on every status badge with plain-language "what's happening" and "what to do" copy. Hover on desktop, tap on mobile. Works on both the Manage Appointees and Has VIT ID? pages via a shared `VitIdStatusBadge` component.
+- **Has VIT ID? page rewritten** to use server-side search with 400ms debounce. One endpoint (`GET /api/admin/vit-id-lookup?q=...`) handles both email-style queries (full reverse ladder) and name-style queries (substring match). Pasting a fellow's new email now finds their VIT ID stored under their old email.
+- **Claim flow is now ladder-aware.** When a fellow tries to claim a VIT ID under a new email, the claim flow runs the full 4-tier ladder against CiviCRM emails and Auth0 metadata. If it finds an existing account, a password reset goes to the OLD Auth0 email (the one they can log into) and IT receives a notification. No duplicate Auth0 account is created. If the ladder is ambiguous, IT gets an email with the candidate accounts and no automatic action is taken. Every returning-fellow or needs-review claim writes a `vitIdClaim` audit row, independent of SES success.
+- **Bio-email eligibility uses the ladder.** The dashboard "has VIT ID" flag and backend `evaluateBioEmailEligibility` now agree: a returning fellow matched via `civicrm_id` or secondary email is eligible for the bio email (previously they'd show "has VIT ID" in the UI but fail with `no_vit_id` on send).
+- **Observability log** on every Manage Appointees page load with counts by status, match tier (primary-email / civicrm-id / secondary-email / name), and needs-review reason. Use this to see how often each tier fires in production.
+
+### Changed
+- **Manage Appointees page sort default** is now `appointment asc → last name asc`. Fellows are grouped by role type (Fellow, Visiting Fellow, Visiting Professor, ...) and alphabetical within each group. Amber and red badges continue to provide the attention signal; sort is for scanning.
+- **Manage Appointees summary bar** now shows 5 cards: Total, Needs Review, Different Email, Needs Account, Active. Previously only Total, Needs Account, Active.
+- **Has VIT ID? page** no longer shows the full user table — one unified search box handles every case. Auth0 email is visible on every result card so staff can reference it at a glance.
+- **Root `pnpm test`** now runs tests across all workspaces (previously server-only). Web component tests gate CI.
+
+### Fixed
+- Fellows whose CiviCRM email changed between fellowships no longer appear as "No Account" on the dashboard when they already have a VIT ID under an older email.
+- The claim flow no longer creates a duplicate Auth0 account for returning fellows who have a VIT ID under an older email.
+- Bio email dispatch no longer silently skips returning fellows whose CiviCRM primary email doesn't match their Auth0 email.
+- When a CiviCRM email is on multiple contacts (duplicate contact), the system surfaces the ambiguity instead of picking one at random.
+- Two Auth0 accounts that accidentally share an email or `civicrm_id` now surface as `needs-review` instead of silently routing to whichever was enumerated last.
+
+### Removed
+- Client-side Auth0 user list download on the Has VIT ID? page (superseded by server-side search). The `/api/admin/users` endpoint, `listAllUsers` service function, and `Auth0UserListItem` shared type are all retired.
+
 ## [0.6.0] - 2026-04-17
 
 ### Added

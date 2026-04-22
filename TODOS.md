@@ -14,11 +14,35 @@
 
 ## Has VIT ID? — Future Improvements
 
-### Migrate to server-side search when user count exceeds ~500
-- **What:** Switch from client-side filter to paginated API with search query parameter
-- **Why:** At 70-80 new users/year, client-side filtering of the full user list will feel slow in 3-4 years (~500+ users, ~1MB+ payload)
-- **How:** Auth0 Management API supports `q` parameter for user search. Add search query param to `GET /api/admin/users` and pass through to `management.users.getAll({ q: ... })`
-- **Context:** Currently ~240 users, client-side filter is instant. Monitor payload size.
+### ~~Migrate to server-side search when user count exceeds ~500~~ (SUPERSEDED)
+- **Resolved:** The VIT ID match ladder PR (feat/vit-id-match-ladder) unifies the Has VIT ID page onto a single server-side search endpoint. Client-side filter retired.
+
+## VIT ID Match Ladder — Follow-ups
+
+### Approach C: Periodic reconciliation job (writes civicrm_id to Auth0)
+- **What:** Nightly or on-demand job that walks all Auth0 users in the fellows role, looks up their canonical civicrm_id via the match ladder, writes it to `app_metadata.civicrm_id` if missing or different.
+- **Why:** The match ladder currently catches each case at read time. A reconciliation job makes civicrm_id lookup O(1) going forward and cleans up historical drift in one shot.
+- **Pros:** Fewer "active-different-email" rows over time (they become plain "active" after reconciliation). Simplifies the dashboard. Audit log of every write creates a paper trail.
+- **Cons:** Writes to Auth0 app_metadata. Needs idempotency, dry-run mode, audit log, and a way to pause/resume. Out of scope for the current read-path fix.
+- **Context:** The observability log in the dashboard (`byMatchedVia` + `byNeedsReviewReason`) will tell you how often this is firing. If "name" or "secondary-email" matchedVia counts stay high after 2-3 months, build this. If they trend to zero (because claim flow now handles new cases correctly), skip.
+- **Depends on:** feat/vit-id-match-ladder landing first (for the reconciliation logic to reuse).
+
+### dispatchPendingEmails: cache Auth0 maps per dispatch run
+- **What:** `evaluateBioEmailEligibility` calls `checkHasVitIdViaLadder`, which calls `listUsersByRole` once per PENDING event. For N events per cron tick, this is N full Auth0 list fetches.
+- **Why:** At current scale (a few bio emails per dispatch) the cost is negligible. If dispatch volume grows, this becomes an N+1 pattern inside the cron and can burn Auth0 Management API quota or add real latency.
+- **How:** Pre-build the Auth0 maps once at the top of `dispatchPendingEmails`, pass them down to `dispatchOne` and into `evaluateBioEmailEligibility` (optional param — falls back to fresh fetch if not supplied, so single-shot callers like `sendBioEmailManually` keep working). Short in-memory TTL (60s) is an acceptable alternative.
+- **Pros:** Makes the cron O(1) on Auth0 list fetches. Matches the dashboard pattern.
+- **Cons:** Adds an optional param that ripples through 2-3 functions. Ergonomic cost.
+- **Context:** Caught by /ship pre-landing review on feat/vit-id-match-ladder (PR #TODO). Flagged as P2 — ship as-is and revisit if dispatch volume grows.
+- **Depends on:** Nothing.
+
+### Dashboard staleTime + manual refresh button
+- **What:** Set `staleTime: 60_000` on `useFellowsDashboard` React Query + add a "Refresh" button in the dashboard header to force a refetch.
+- **Why:** Currently the dashboard refetches on every mount, causing a 1-2s CiviCRM+Auth0 round-trip on every navigation. With the new Email.get call added by the match ladder, this is slightly heavier.
+- **Pros:** Faster navigation. Manual refresh covers the "I'm in a hurry and just changed something in CiviCRM" case.
+- **Cons:** Stale-until-refresh UX unless users know about the button.
+- **Context:** Angela and Andrea both navigate in and out of the dashboard during a fellowship onboarding session.
+- **Depends on:** Nothing. Standalone.
 
 ## Atlassian Cloud — Future Improvements
 
