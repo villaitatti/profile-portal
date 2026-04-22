@@ -1,5 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AppSidebar } from '@/components/layout/AppSidebar';
 
@@ -33,10 +34,18 @@ function setUserRoles(roles: string[]) {
 }
 
 function renderSidebar() {
+  // AppSidebar uses useProfile() internally; wrap in a query client so
+  // useQuery has a context to attach to. Disable retries and caches so
+  // each test gets a clean slate.
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0, staleTime: 0 } },
+  });
   return render(
-    <MemoryRouter>
-      <AppSidebar />
-    </MemoryRouter>
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <AppSidebar />
+      </MemoryRouter>
+    </QueryClientProvider>
   );
 }
 
@@ -92,10 +101,15 @@ describe('AppSidebar', () => {
   it('calls onNavigate when a link is clicked', () => {
     setUserRoles(['fellows']);
     const mockOnNavigate = vi.fn();
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0, staleTime: 0 } },
+    });
     render(
-      <MemoryRouter>
-        <AppSidebar onNavigate={mockOnNavigate} />
-      </MemoryRouter>
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <AppSidebar onNavigate={mockOnNavigate} />
+        </MemoryRouter>
+      </QueryClientProvider>
     );
 
     const dashboardLink = screen.getByRole('link', { name: /dashboard/i });
