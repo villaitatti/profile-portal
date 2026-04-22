@@ -40,7 +40,8 @@ auth0/       # Auth0 configuration reference files
 - **My Profile** — Read-only CiviCRM profile data (falls back to Auth0 profile for staff)
 - **Applications Catalog** — Internal apps filtered by user roles
 - **Admin Section** — `staff-it` users manage the applications catalog and assign role visibility
-- **Claim VIT ID** — Self-service flow: email → CiviCRM eligibility check → Auth0 account creation
+- **Claim VIT ID** — Self-service flow: email → CiviCRM eligibility check → 4-tier VIT ID match ladder (primary email, Auth0 `civicrm_id`, CiviCRM secondary emails, normalized name) → Auth0 account creation or password reset to the existing account. Returning fellows whose email changed between fellowships are routed to their existing account instead of spawning a duplicate.
+- **VIT ID lookup** — Staff-only `/admin/has-vitid` page with unified server-side search (`GET /api/admin/vit-id-lookup?q=...`). Handles email-style queries (full reverse ladder) and name-style queries (substring match) so staff can find a fellow's VIT ID even when it's stored under an older email.
 - **Help Form** — Creates a Jira Service Management ticket for manual assistance
 
 ## Auth0 Setup

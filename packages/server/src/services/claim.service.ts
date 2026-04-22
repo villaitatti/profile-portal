@@ -4,6 +4,7 @@ import * as civicrmService from './civicrm.service.js';
 import * as jsmService from './atlassian-jsm.service.js';
 import * as emailService from './email.service.js';
 import * as appointeeEmailService from './appointee-email.service.js';
+import { buildAuth0Maps, reconcile, type LadderFellow } from './vit-id-match.js';
 import {
   evaluateEligibility,
   classifyFellowship,
@@ -20,7 +21,7 @@ function hashEmail(email: string): string {
 export async function processClaim(email: string): Promise<void> {
   const emailHash = hashEmail(email);
 
-  // Step 1: Check Auth0
+  // Step 1: Check Auth0 by exact email (unchanged).
   const existingUser = await auth0Service.findUserByEmail(email);
 
   if (existingUser) {
@@ -30,11 +31,45 @@ export async function processClaim(email: string): Promise<void> {
     return;
   }
 
-  // Step 2: Check CiviCRM
-  const contact = await civicrmService.findContactByPrimaryEmail(email);
+  // Step 1.5: Run the match ladder. This catches the case where the claimant
+  // typed a new email but already has a VIT ID under an older email.
+  // See services/vit-id-match.ts for the full rules.
+  const ladderResult = await runClaimLadder(email, emailHash);
+  if (ladderResult === 'handled') {
+    // Either a returning fellow was matched (password reset sent to their old
+    // Auth0 email) or the ladder returned needs-review (IT notified). Either
+    // way, do NOT proceed to provision a new account.
+    return;
+  }
 
-  if (!contact) {
+  // Step 2: Check CiviCRM via any-email lookup (not just primary). This uses
+  // the Email.get endpoint so secondary addresses count too.
+  const contactLookup = await civicrmService.findContactIdByAnyEmail(email);
+
+  if (!contactLookup.found) {
+    if ('duplicate' in contactLookup && contactLookup.duplicate) {
+      // Same email on 2+ CiviCRM contacts — a data bug. Refuse to guess which
+      // contact to provision against; notify IT.
+      logger.warn(
+        { emailHash, contactIds: contactLookup.contactIds },
+        'Claim: duplicate CiviCRM contact — needs manual reconciliation'
+      );
+      await emailService.sendClaimNeedsReconciliationNotification({
+        claimantEmail: email,
+        reason: 'duplicate-civicrm-contact',
+        candidates: [],
+        civicrmContactIds: contactLookup.contactIds,
+      });
+      return;
+    }
     logger.info({ emailHash }, 'Claim: no CiviCRM contact found');
+    return;
+  }
+
+  const contact = await civicrmService.getContactById(contactLookup.contactId);
+  if (!contact) {
+    // Contact was deleted between the Email.get and Contact.get — rare race.
+    logger.warn({ emailHash, contactId: contactLookup.contactId }, 'Claim: CiviCRM contact disappeared');
     return;
   }
 
@@ -114,6 +149,171 @@ export async function processClaim(email: string): Promise<void> {
   }).catch(
     (err) => logger.error({ err, emailHash }, 'Claim: async operations failed')
   );
+}
+
+/**
+ * Runs the full 4-tier ladder (primary-email → civicrm_id → secondary-email →
+ * name) against the claimant's typed email. Dispatches based on the
+ * `FellowMatch` outcome:
+ *
+ *   'active' or 'active-different-email' → existing VIT ID; send password
+ *      reset to the MATCHED Auth0 email (not the claimant's typed email if
+ *      they differ). Notify IT via `sendClaimNeedsReconciliationNotification`
+ *      with `reason: 'returning-fellow-reset-sent'` so staff can intervene
+ *      if the claimant no longer controls the old mailbox. Write a
+ *      `vitIdClaim` audit row — DB is the source of truth for "a claim
+ *      happened," independent of SES.
+ *
+ *   'needs-review' → refuse to guess. Write a `vitIdClaim` audit row tagged
+ *      with the reason, notify IT, and do NOT create a new Auth0 account,
+ *      send a reset, or return the claimant to the success path.
+ *
+ *   'no-account' → return 'proceed' so the caller creates a new Auth0
+ *      account as usual.
+ */
+async function runClaimLadder(
+  email: string,
+  emailHash: string
+): Promise<'handled' | 'proceed'> {
+  const contactLookup = await civicrmService.findContactIdByAnyEmail(email);
+
+  // Duplicate CiviCRM contact: main `processClaim` flow handles this branch
+  // (it re-runs findContactIdByAnyEmail and emits the reconciliation
+  // notification). We return 'proceed' so the caller hits that path once.
+  if (!contactLookup.found && 'duplicate' in contactLookup && contactLookup.duplicate) {
+    return 'proceed';
+  }
+
+  if (!contactLookup.found) {
+    // No CiviCRM contact carries this email. Caller creates fresh.
+    return 'proceed';
+  }
+
+  // We have a CiviCRM contact. Build a LadderFellow from its data and run the
+  // full 4-tier reconcile(). This catches returning fellows whose old Auth0
+  // account is reachable via civicrm_id, secondary-email, or normalized name.
+  const [contact, emailsByContact, auth0Users] = await Promise.all([
+    civicrmService.getContactById(contactLookup.contactId),
+    civicrmService.getEmailsForContacts([contactLookup.contactId]),
+    auth0Service.listUsersByRole(env.AUTH0_FELLOWS_ROLE_ID),
+  ]);
+  if (!contact) {
+    // Race: contact was deleted between findContactIdByAnyEmail and
+    // getContactById. Safest action is to proceed with normal claim flow
+    // (which will re-check CiviCRM and bail out or create).
+    logger.warn(
+      { emailHash, contactId: contactLookup.contactId },
+      'Claim: CiviCRM contact disappeared between lookups'
+    );
+    return 'proceed';
+  }
+  const contactEmails = emailsByContact.get(contactLookup.contactId);
+  const maps = buildAuth0Maps(auth0Users);
+  const ladderFellow: LadderFellow = {
+    civicrmId: contactLookup.contactId,
+    firstName: contact.firstName,
+    lastName: contact.lastName,
+    primaryEmail: contactEmails?.primary ?? null,
+    secondaries: contactEmails?.secondaries ?? [],
+  };
+  const match = reconcile(ladderFellow, maps);
+
+  if (match.status === 'no-account') {
+    // Ladder confirms: no prior Auth0 account anywhere. Caller creates fresh.
+    return 'proceed';
+  }
+
+  // Fetch fellowships so the audit rows below record real hasFellowship /
+  // hasCurrentFellowship flags instead of hard-coded false. Shared between
+  // the 'active'/'active-different-email' and 'needs-review' branches.
+  const fellowships = await civicrmService.getFellowships(contactLookup.contactId);
+  const hasFellowship = fellowships.length > 0;
+  const hasCurrentFellowship = fellowships.some(
+    (f) => classifyFellowship(f.startDate, f.endDate) === 'current'
+  );
+
+  if (match.status === 'active' || match.status === 'active-different-email') {
+    // Returning fellow — use the matched Auth0 user's email for the reset,
+    // not the claimant's typed email. If they no longer control that mailbox,
+    // the IT notification is their path back to a working account.
+    const matched = match.matched;
+    logger.info(
+      {
+        emailHash,
+        matchedAuth0UserId: matched.userId,
+        matchedEmailHash: hashEmail(matched.email),
+        matchedVia: match.matchedVia,
+        civicrmId: contactLookup.contactId,
+      },
+      'Claim: ladder matched existing Auth0 account — sending password reset'
+    );
+    await auth0Service.triggerPasswordSetupEmail(matched.email);
+    await emailService.sendClaimNeedsReconciliationNotification({
+      claimantEmail: email,
+      reason: 'returning-fellow-reset-sent',
+      candidates: [matched],
+      resetSentTo: matched.email,
+    });
+    // Audit row — DB is the source of truth for "a claim happened."
+    try {
+      await prisma.vitIdClaim.create({
+        data: {
+          email,
+          firstName: contact.firstName,
+          lastName: contact.lastName,
+          civicrmId: contactLookup.contactId,
+          hasFellowship,
+          hasCurrentFellowship,
+          rolesAssigned: [],
+          orgsAssigned: [],
+        },
+      });
+    } catch (err) {
+      logger.error(
+        { err, emailHash },
+        'Claim: failed to persist audit row for returning-fellow branch'
+      );
+    }
+    return 'handled';
+  }
+
+  // match.status === 'needs-review'
+  // Refuse to guess. IT gets the notification + audit row; claimant sees no
+  // change (they hit the normal "processing" flow but no account is created).
+  logger.warn(
+    {
+      emailHash,
+      reason: match.reason,
+      candidateCount: match.candidates.length,
+      civicrmId: contactLookup.contactId,
+    },
+    'Claim: ladder returned needs-review — refusing to auto-provision'
+  );
+  await emailService.sendClaimNeedsReconciliationNotification({
+    claimantEmail: email,
+    reason: match.reason,
+    candidates: match.candidates,
+  });
+  try {
+    await prisma.vitIdClaim.create({
+      data: {
+        email,
+        firstName: contact.firstName,
+        lastName: contact.lastName,
+        civicrmId: contactLookup.contactId,
+        hasFellowship,
+        hasCurrentFellowship,
+        rolesAssigned: [],
+        orgsAssigned: [],
+      },
+    });
+  } catch (err) {
+    logger.error(
+      { err, emailHash },
+      'Claim: failed to persist audit row for needs-review branch'
+    );
+  }
+  return 'handled';
 }
 
 async function processAsyncClaimOps(params: {

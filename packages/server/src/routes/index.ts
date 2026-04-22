@@ -6,9 +6,8 @@ import { profileRoutes } from './profile.routes.js';
 import { rolesRoutes } from './roles.routes.js';
 import { claimRoutes } from './claim.routes.js';
 import { helpRoutes } from './help.routes.js';
-import { fellowsAdminRoutes } from './fellows-admin.routes.js';
+import { fellowsAdminRoutes, handleVitIdLookup } from './fellows-admin.routes.js';
 import { syncAdminRoutes, syncSseRoutes } from './sync-admin.routes.js';
-import { usersRoutes } from './users.routes.js';
 import { claimsAdminRoutes } from './claims-admin.routes.js';
 import { automationAdminRoutes } from './automation-admin.routes.js';
 import { authMiddleware, extractUser } from '../middleware/auth.js';
@@ -34,13 +33,17 @@ export function registerRoutes(app: Express) {
     fellowsAdminRoutes
   );
 
-  // Admin routes: User listing (fellows-admin OR staff-it)
-  app.use(
-    '/api/admin/users',
+  // Admin routes: Unified VIT ID lookup — "Has VIT ID?" page primary endpoint
+  // (fellows-admin OR staff-it). POST with body `{ q }` — decides internally
+  // whether to run a reverse match ladder (email-shape) or a name substring
+  // search. POST (not GET) so email addresses never land in access logs,
+  // browser history, or intermediate proxies.
+  app.post(
+    '/api/admin/vit-id-lookup',
     authMiddleware,
     extractUser,
     requireRole(KnownRoles.FELLOWS_ADMIN, KnownRoles.STAFF_IT),
-    usersRoutes
+    handleVitIdLookup
   );
 
   // Admin routes: Claim log (staff-IT only)

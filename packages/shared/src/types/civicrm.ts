@@ -22,7 +22,46 @@ export interface EligibilityResult {
   reason: string;
 }
 
-export type FellowStatus = 'no-account' | 'active';
+export type VitIdStatus =
+  | 'active'
+  | 'active-different-email'
+  | 'needs-review'
+  | 'no-account';
+
+export type MatchedVia =
+  | 'primary-email'
+  | 'civicrm-id'
+  | 'secondary-email'
+  | 'name';
+
+export type NeedsReviewReason =
+  | 'name-collision'
+  | 'tier-conflict'
+  | 'primary-conflict'
+  | 'duplicate-civicrm-contact'
+  // Two (or more) Auth0 users share the same email OR the same
+  // app_metadata.civicrm_id. This is an Auth0-side data bug, not a CiviCRM
+  // one. The ladder refuses to guess which is the right person.
+  | 'auth0-collision';
+
+export interface Auth0Candidate {
+  userId: string;
+  email: string;
+  civicrmId: string | null;
+  name: string | null;
+}
+
+export type FellowMatch =
+  | { status: 'active'; matchedVia: 'primary-email'; matched: Auth0Candidate }
+  | {
+      status: 'active-different-email';
+      matchedVia: 'civicrm-id' | 'secondary-email' | 'name';
+      matched: Auth0Candidate;
+      matchedViaEmail?: string;
+    }
+  | { status: 'needs-review'; reason: NeedsReviewReason; candidates: Auth0Candidate[] }
+  | { status: 'no-account' };
+
 export type CivicrmIdStatus = 'ok' | 'missing' | 'n/a';
 
 export type BioEmailStatus = 'none' | 'pending' | 'sent' | 'failed';
@@ -56,7 +95,12 @@ export interface FellowDashboardEntry {
   appointment?: string;
   fellowship?: string;
   fellowshipYear: string;
-  status: FellowStatus;
+  status: VitIdStatus;
+  matchedVia?: MatchedVia;
+  matched?: Auth0Candidate;
+  matchedViaEmail?: string;
+  reason?: NeedsReviewReason;
+  candidates?: Auth0Candidate[];
   civicrmIdStatus: CivicrmIdStatus;
   bioEmail: BioEmailSummary;
 }
@@ -68,5 +112,26 @@ export interface FellowsDashboardResponse {
     total: number;
     noAccount: number;
     active: number;
+    activeDifferentEmail: number;
+    needsReview: number;
   };
 }
+
+/**
+ * Response shape for GET /api/admin/vit-id-lookup.
+ *
+ * Unified search across Auth0 + CiviCRM. Takes a freeform query and returns
+ * either a list of candidates (name-style search) or a single match verdict
+ * (email-style search).
+ */
+export type VitIdLookupResponse =
+  | {
+      // Name-style search: returns multiple candidates (may be empty)
+      kind: 'name-search';
+      candidates: Auth0Candidate[];
+    }
+  | {
+      // Email-style search: single match verdict via the match ladder
+      kind: 'email-lookup';
+      match: FellowMatch;
+    };

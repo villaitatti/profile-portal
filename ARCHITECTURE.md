@@ -33,9 +33,18 @@ The backend uses Express with:
 
 **Why the backend orchestrates** (not Auth0 Actions):
 - The claim flow is a provisioning workflow, not an authentication event
-- Requires sequential: Auth0 lookup → CiviCRM lookup → eligibility check → user creation → role assignment → password email
+- Requires sequential: Auth0 lookup → CiviCRM lookup → eligibility check → VIT ID match ladder → user creation or password reset → role assignment → password email
 - Auth0 Actions have a 20-second timeout and would require embedding CiviCRM credentials inside Auth0
 - Domain-specific eligibility logic benefits from version control, unit testing, and straightforward deployment
+
+**VIT ID match ladder** (`packages/server/src/services/vit-id-match.ts`):
+Shared 4-tier reconciliation run by the claim flow, the Manage Appointees dashboard, the Has VIT ID? lookup endpoint, and bio-email eligibility. Tiers run in order:
+1. CiviCRM primary email → Auth0 email
+2. Auth0 `app_metadata.civicrm_id` reverse lookup
+3. CiviCRM secondary emails → Auth0 email
+4. Normalized name match (case- and accent-insensitive, first + last)
+
+Outcomes: `no-account`, `active`, `active-different-email`, `needs-review` (with reason). Returning fellows matched via tiers 2-4 get a password reset to their existing Auth0 email and IT is notified — the system never creates a duplicate Auth0 account for a fellow who already has a VIT ID.
 
 **Where Auth0 participates:**
 - Sends the password-setup email via the Authentication API

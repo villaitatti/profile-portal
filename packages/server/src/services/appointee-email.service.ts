@@ -10,6 +10,8 @@ import { getCurrentAcademicYear } from '../utils/academic-year.js';
 import * as civicrmService from './civicrm.service.js';
 import * as auth0Service from './auth0.service.js';
 import * as emailService from './email.service.js';
+import { buildAuth0Maps, reconcile, type LadderFellow } from './vit-id-match.js';
+import { env } from '../env.js';
 
 export type BioEmailIneligibilityReason =
   | 'no_vit_id'
@@ -115,14 +117,48 @@ export async function enqueueBioEmail(args: EnqueueArgs): Promise<{
 /**
  * Re-evaluate eligibility at dispatch time with a fresh lookup:
  *   - contact must still exist in CiviCRM with a primary email
- *   - contact must have a VIT ID (Auth0 user by email) — we never email a JSM
- *     link to someone who can't authenticate
+ *   - contact must have a VIT ID reachable via the full match ladder
+ *     (primary-email → civicrm_id → secondary-email → name). We intentionally
+ *     accept "changed-email" matches: a fellow whose CiviCRM primary email
+ *     changed since they claimed their VIT ID still gets the bio email at
+ *     their current primary, because the ladder can prove they have an
+ *     account to log into. We never email a JSM link to someone who can't
+ *     authenticate, and we refuse to send on 'needs-review' outcomes.
  *   - a current-year fellowship, OR an accepted upcoming-year fellowship,
  *     must still match the target academic year
  *
  * Returns the recipient email + firstName (falling back to the CiviCRM value;
  * the email template further falls back to "Appointee" if blank).
  */
+/**
+ * Returns true when the CiviCRM contact has a VIT ID that the match ladder
+ * resolves to unambiguously (i.e., `'active'` or `'active-different-email'`).
+ * Returns false for `'needs-review'` (we won't send to an ambiguous target)
+ * and for `'no-account'`.
+ */
+async function checkHasVitIdViaLadder(
+  contactId: number,
+  contact: { firstName: string; lastName: string; email: string }
+): Promise<boolean> {
+  const [auth0Users, contactEmails] = await Promise.all([
+    auth0Service.listUsersByRole(env.AUTH0_FELLOWS_ROLE_ID),
+    civicrmService.getEmailsForContacts([contactId]),
+  ]);
+  const maps = buildAuth0Maps(auth0Users);
+  const emails = contactEmails.get(contactId);
+  const ladderFellow: LadderFellow = {
+    civicrmId: contactId,
+    firstName: contact.firstName,
+    lastName: contact.lastName,
+    // No fallback to contact.email — if Email.get returned nothing for this
+    // contact (all on_hold), we don't want to match against the held primary.
+    primaryEmail: emails?.primary ?? null,
+    secondaries: emails?.secondaries ?? [],
+  };
+  const match = reconcile(ladderFellow, maps);
+  return match.status === 'active' || match.status === 'active-different-email';
+}
+
 export async function evaluateBioEmailEligibility(
   contactId: number,
   academicYear: string
@@ -138,9 +174,12 @@ export async function evaluateBioEmailEligibility(
 
   // Backend policy mirrors the UI rule in fellows.service.ts: no Auth0 user =>
   // no VIT ID => bio email would link to a JSM form the contact can't log in
-  // to. Better to short-circuit with a clear reason than send a dead-end email.
-  const auth0User = await auth0Service.findUserByEmail(contact.email);
-  if (!auth0User) {
+  // to. Use the match ladder (primary-email → civicrm_id → secondary-email →
+  // name) so a returning fellow with a changed email still resolves to their
+  // existing VIT ID rather than getting a false 'no_vit_id'. For
+  // 'needs-review' we refuse to send — we won't pick a candidate to deliver to.
+  const hasVitId = await checkHasVitIdViaLadder(contactId, contact);
+  if (!hasVitId) {
     return { eligible: false, reason: 'no_vit_id' };
   }
 

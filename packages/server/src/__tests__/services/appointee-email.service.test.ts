@@ -22,10 +22,12 @@ vi.mock('../../lib/logger.js', () => ({
 vi.mock('../../services/civicrm.service.js', () => ({
   getContactById: vi.fn(),
   getFellowships: vi.fn(),
+  getEmailsForContacts: vi.fn(),
 }));
 
 vi.mock('../../services/auth0.service.js', () => ({
   findUserByEmail: vi.fn(),
+  listUsersByRole: vi.fn(),
 }));
 
 vi.mock('../../services/email.service.js', () => ({
@@ -37,6 +39,7 @@ vi.mock('../../env.js', () => ({
     APPOINTEE_EMAIL_REDIRECT_TO: '',
     APPOINTEE_EMAIL_BCC: '',
     APPOINTEE_EMAIL_CRON_ENABLED: false,
+    AUTH0_FELLOWS_ROLE_ID: 'test-role',
   },
   isDevMode: false,
 }));
@@ -61,12 +64,29 @@ const mockAuth0 = vi.mocked(auth0Service);
 const mockEmail = vi.mocked(emailService);
 
 // Most existing tests assume the contact has a VIT ID (Auth0 user). Install
-// a default "user exists" stub in beforeEach so each test only overrides it
-// when it is specifically testing the no-VIT-ID path.
+// default stubs in beforeEach so each test only overrides when it's
+// specifically testing the no-VIT-ID path.
+//
+// After the match-ladder refactor, the "has VIT ID" check resolves via
+// listUsersByRole() + getEmailsForContacts(). The default match is via
+// tier 2 (civicrm_id), not tier 1 (primary email):
+//   - mockCivicrm.getEmailsForContacts returns new Map(), so the ladder
+//     sees primaryEmail = null and skips tier 1 entirely.
+//   - mockAuth0.listUsersByRole returns one user with civicrmId: '1', so
+//     tier 2 matches whenever the test contact's id is 1.
+//   - The result: reconcile() returns 'active-different-email' via
+//     civicrm-id for contact id 1, which satisfies checkHasVitIdViaLadder.
+//
+// Stubs installed: mockAuth0.findUserByEmail (legacy, still referenced by a
+// few unchanged tests), mockAuth0.listUsersByRole, mockCivicrm.getEmailsForContacts.
+//
+// Tests simulating "no VIT ID" override mockAuth0.listUsersByRole with an
+// empty array so neither tier 1 nor tier 2 can hit and reconcile() returns
+// 'no-account'.
 //
 // We use resetAllMocks (not clearAllMocks) so per-test mockResolvedValue /
 // mockRejectedValue stubs do not leak into subsequent tests via the shared
-// mocked modules above. After reset we re-install the Auth0 default.
+// mocked modules above. The defaults are re-installed here on every iteration.
 beforeEach(() => {
   vi.resetAllMocks();
   mockAuth0.findUserByEmail.mockResolvedValue({
@@ -74,6 +94,17 @@ beforeEach(() => {
     email: 'default@example.com',
     name: 'Default User',
   });
+  mockAuth0.listUsersByRole.mockResolvedValue([
+    {
+      user_id: 'auth0|default',
+      email: 'default@example.com',
+      name: 'Default User',
+      civicrmId: '1',
+    },
+  ]);
+  // Empty map = ladder sees primaryEmail=null (tier 1 skipped). Tier 2 is
+  // the one that resolves the default match via the civicrmId above.
+  mockCivicrm.getEmailsForContacts.mockResolvedValue(new Map());
 });
 
 describe('currentAndNextAcademicYears', () => {
@@ -219,6 +250,62 @@ describe('evaluateBioEmailEligibility', () => {
     expect(result).toEqual({ eligible: false, reason: 'no_primary_email' });
   });
 
+  it('returns eligible when returning fellow has VIT ID under different email (civicrm_id tier)', async () => {
+    // The contact's primary email is new, but Auth0 has the user under an old
+    // email with app_metadata.civicrm_id = 1. The ladder should still say
+    // "has VIT ID" so the bio email can send.
+    mockCivicrm.getContactById.mockResolvedValue({
+      id: 1,
+      firstName: 'Returning',
+      lastName: 'Fellow',
+      email: 'new@x.com',
+    });
+    mockAuth0.listUsersByRole.mockResolvedValue([
+      {
+        user_id: 'auth0|returning',
+        email: 'old@x.com',
+        name: 'Returning Fellow',
+        civicrmId: '1',
+      },
+    ]);
+    mockCivicrm.getFellowships.mockResolvedValue([
+      {
+        id: 10,
+        contactId: 1,
+        startDate: '2026-07-01',
+        endDate: '2027-06-30',
+        fellowshipAccepted: true,
+      },
+    ]);
+
+    const result = await evaluateBioEmailEligibility(1, '2026-2027');
+
+    expect(result).toEqual({
+      eligible: true,
+      email: 'new@x.com',
+      firstName: 'Returning',
+    });
+  });
+
+  it('returns no_vit_id when ladder resolves to needs-review (refuses to send to ambiguous target)', async () => {
+    mockCivicrm.getContactById.mockResolvedValue({
+      id: 1,
+      firstName: 'Maria',
+      lastName: 'Rossi',
+      email: 'new@x.com',
+    });
+    // Ladder fails all deterministic tiers but hits a name-collision on tier 4.
+    mockAuth0.listUsersByRole.mockResolvedValue([
+      { user_id: 'auth0|maria1', email: 'maria1@old.com', name: 'Maria Rossi' },
+      { user_id: 'auth0|maria2', email: 'maria2@old.com', name: 'MARIA ROSSI' },
+    ]);
+
+    const result = await evaluateBioEmailEligibility(1, '2026-2027');
+
+    expect(result).toEqual({ eligible: false, reason: 'no_vit_id' });
+    expect(mockCivicrm.getFellowships).not.toHaveBeenCalled();
+  });
+
   it('returns no_vit_id when contact has an email but no Auth0 user exists', async () => {
     mockCivicrm.getContactById.mockResolvedValue({
       id: 1,
@@ -226,7 +313,9 @@ describe('evaluateBioEmailEligibility', () => {
       lastName: 'B',
       email: 'novitid@example.com',
     });
-    mockAuth0.findUserByEmail.mockResolvedValue(null);
+    // Post-ladder: override the default (one-user) Auth0 list with an empty
+    // list so the match ladder resolves to 'no-account'.
+    mockAuth0.listUsersByRole.mockResolvedValue([]);
 
     const result = await evaluateBioEmailEligibility(1, '2026-2027');
 

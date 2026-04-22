@@ -1,12 +1,21 @@
-import { getFellowsWithContacts } from './civicrm.service.js';
+import { getFellowsWithContacts, getEmailsForContacts } from './civicrm.service.js';
 import { listUsersByRole } from './auth0.service.js';
 import {
   getEmailStatusForContacts,
   currentAndNextAcademicYears,
 } from './appointee-email.service.js';
+import { buildAuth0Maps, reconcile, type LadderFellow } from './vit-id-match.js';
 import { AppointeeEmailStatus } from '@prisma/client';
 import { env } from '../env.js';
-import type { BioEmailSummary, FellowDashboardEntry, FellowsDashboardResponse } from '@itatti/shared';
+import { logger } from '../lib/logger.js';
+import type {
+  BioEmailSummary,
+  FellowDashboardEntry,
+  FellowsDashboardResponse,
+  VitIdStatus,
+  MatchedVia,
+  NeedsReviewReason,
+} from '@itatti/shared';
 
 function buildBioEmailSummary(args: {
   hasVitId: boolean;
@@ -85,10 +94,9 @@ export async function getFellowsDashboard(
     listUsersByRole(env.AUTH0_FELLOWS_ROLE_ID),
   ]);
 
-  // Build a lookup of Auth0 users by email (lowercase)
-  const auth0ByEmail = new Map(
-    auth0Users.map((u) => [u.email.toLowerCase(), u])
-  );
+  // Build the three Auth0 maps (email, civicrm_id, normalized-name) used by
+  // the match ladder.
+  const auth0Maps = buildAuth0Maps(auth0Users);
 
   // Resolve current + next academic-year labels once — used both for the
   // target-year lookup and the batched bio-email status fetch.
@@ -158,19 +166,103 @@ export async function getFellowsDashboard(
 
   // Batched bio-email lookup — ONE query, even for 100+ fellows.
   const contactIds = Array.from(fellowsByContact.keys());
-  const bioEmailMap = await getEmailStatusForContacts(contactIds, [currentAy, nextAy]);
+  const [bioEmailMap, emailsByContact] = await Promise.all([
+    getEmailStatusForContacts(contactIds, [currentAy, nextAy]),
+    getEmailsForContacts(contactIds),
+  ]);
 
-  // Merge with Auth0 data to determine status and civicrm_id check
+  // Build an email→contactIds index from Email.get results. When the same
+  // email string appears on 2+ distinct CiviCRM contacts (a duplicate-contact
+  // data bug), we surface the affected fellows as 'needs-review' with
+  // reason 'duplicate-civicrm-contact' BEFORE running the match ladder —
+  // otherwise reconcile() would happily pick whichever Auth0 user matched
+  // the ambiguous email and route the bio email / "Send" button at a
+  // potentially-wrong account.
+  const contactsByEmail = new Map<string, Set<number>>();
+  for (const [cid, emails] of emailsByContact.entries()) {
+    const allEmails = [
+      ...(emails.primary ? [emails.primary] : []),
+      ...emails.secondaries,
+    ];
+    for (const e of allEmails) {
+      const key = e.toLowerCase();
+      const existing = contactsByEmail.get(key) ?? new Set<number>();
+      existing.add(cid);
+      contactsByEmail.set(key, existing);
+    }
+  }
+
+  function hasCrossContactDuplicate(emails: {
+    primary: string | null;
+    secondaries: string[];
+  } | undefined): boolean {
+    if (!emails) return false;
+    const all = [...(emails.primary ? [emails.primary] : []), ...emails.secondaries];
+    return all.some((e) => {
+      const collisions = contactsByEmail.get(e.toLowerCase());
+      return collisions ? collisions.size > 1 : false;
+    });
+  }
+
+  // Run the match ladder for each fellow.
   const fellows: FellowDashboardEntry[] = [];
   for (const item of fellowsByContact.values()) {
     const { entry, hasCurrentFellowship, hasAcceptedUpcomingFellowship } = item;
-    const auth0User = entry.email ? auth0ByEmail.get(entry.email.toLowerCase()) : undefined;
-    const status = auth0User ? 'active' : 'no-account';
-    const civicrmIdStatus = !auth0User
-      ? 'n/a' as const
-      : auth0User.civicrmId
-        ? 'ok' as const
-        : 'missing' as const;
+
+    const contactEmails = emailsByContact.get(entry.civicrmId);
+
+    // Pre-flight: if any of this fellow's emails is shared across multiple
+    // CiviCRM contacts, short-circuit to 'needs-review' with
+    // 'duplicate-civicrm-contact'. Bypasses the ladder entirely so we don't
+    // pick an arbitrary Auth0 user based on an ambiguous email.
+    if (hasCrossContactDuplicate(contactEmails)) {
+      const base: FellowDashboardEntry = {
+        ...entry,
+        status: 'needs-review',
+        reason: 'duplicate-civicrm-contact',
+        candidates: [],
+        civicrmIdStatus: 'n/a',
+        bioEmail: buildBioEmailSummary({
+          hasVitId: false,
+          targetAcademicYear: hasCurrentFellowship
+            ? currentAy
+            : hasAcceptedUpcomingFellowship
+              ? nextAy
+              : null,
+          event: undefined,
+        }),
+      };
+      fellows.push(base);
+      continue;
+    }
+
+    const ladderFellow: LadderFellow = {
+      civicrmId: entry.civicrmId,
+      firstName: entry.firstName,
+      lastName: entry.lastName,
+      // Use the Email-entity primary. If Email.get returned no rows for this
+      // contact (e.g., every email is on_hold), pass null — the ladder skips
+      // tier 1 and proceeds to civicrm_id. Deliberate: falling back to the
+      // fellow-list row's email_primary.email would match against on_hold
+      // addresses that Email.get excluded on purpose.
+      primaryEmail: contactEmails?.primary ?? null,
+      secondaries: contactEmails?.secondaries ?? [],
+    };
+
+    const match = reconcile(ladderFellow, auth0Maps);
+
+    // For the legacy `civicrmIdStatus` integrity flag, we mirror the previous
+    // behavior: 'ok' when the matched Auth0 user has civicrm_id in metadata,
+    // 'missing' when matched but metadata absent, 'n/a' otherwise.
+    const matchedUser =
+      match.status === 'active' || match.status === 'active-different-email'
+        ? match.matched
+        : null;
+    const civicrmIdStatus = !matchedUser
+      ? ('n/a' as const)
+      : matchedUser.civicrmId
+        ? ('ok' as const)
+        : ('missing' as const);
 
     // Bio-email target year: prefer current, else accepted-upcoming.
     const targetAcademicYear = hasCurrentFellowship
@@ -184,22 +276,46 @@ export async function getFellowsDashboard(
       : undefined;
 
     const bioEmail = buildBioEmailSummary({
-      hasVitId: !!auth0User,
+      // hasVitId is true when the ladder found any active match. For
+      // 'needs-review' we deliberately return false — we won't send to an
+      // ambiguous target.
+      hasVitId: !!matchedUser,
       targetAcademicYear,
       event: existingEvent,
     });
 
-    fellows.push({
+    const base: FellowDashboardEntry = {
       ...entry,
-      status,
+      status: match.status,
       civicrmIdStatus,
       bioEmail,
-    });
+    };
+
+    if (match.status === 'active' || match.status === 'active-different-email') {
+      base.matchedVia = match.matchedVia;
+      base.matched = match.matched;
+      if (match.status === 'active-different-email' && match.matchedViaEmail) {
+        base.matchedViaEmail = match.matchedViaEmail;
+      }
+    } else if (match.status === 'needs-review') {
+      base.reason = match.reason;
+      base.candidates = match.candidates;
+    }
+
+    fellows.push(base);
   }
 
-  // Sort: no-account first, then by last name
+  // Observability: emit structured counts so we can see in 3 months whether
+  // tier 3 / tier 4 fire often enough to have justified the extra CiviCRM
+  // call, and whether any conflict reasons are surfacing data bugs.
+  emitMatchSummaryLog(fellows, academicYear);
+
+  // Sort: appointment asc → lastName asc. Groups Fellows together,
+  // Visiting Professors together, etc., then alphabetical within each group.
+  // Attention is surfaced via the amber/red badges, not via sort position.
   fellows.sort((a, b) => {
-    if (a.status !== b.status) return a.status === 'no-account' ? -1 : 1;
+    const apptCmp = (a.appointment || '').localeCompare(b.appointment || '');
+    if (apptCmp !== 0) return apptCmp;
     return a.lastName.localeCompare(b.lastName);
   });
 
@@ -213,6 +329,51 @@ export async function getFellowsDashboard(
       total: fellows.length,
       noAccount: fellows.filter((f) => f.status === 'no-account').length,
       active: fellows.filter((f) => f.status === 'active').length,
+      activeDifferentEmail: fellows.filter((f) => f.status === 'active-different-email').length,
+      needsReview: fellows.filter((f) => f.status === 'needs-review').length,
     },
   };
+}
+
+function emitMatchSummaryLog(
+  fellows: FellowDashboardEntry[],
+  academicYear: string | undefined
+): void {
+  const byStatus: Record<VitIdStatus, number> = {
+    active: 0,
+    'active-different-email': 0,
+    'needs-review': 0,
+    'no-account': 0,
+  };
+  const byMatchedVia: Record<MatchedVia, number> = {
+    'primary-email': 0,
+    'civicrm-id': 0,
+    'secondary-email': 0,
+    name: 0,
+  };
+  const byNeedsReviewReason: Record<NeedsReviewReason, number> = {
+    'name-collision': 0,
+    'tier-conflict': 0,
+    'primary-conflict': 0,
+    'duplicate-civicrm-contact': 0,
+    'auth0-collision': 0,
+  };
+
+  for (const f of fellows) {
+    byStatus[f.status]++;
+    if (f.matchedVia) byMatchedVia[f.matchedVia]++;
+    if (f.reason) byNeedsReviewReason[f.reason]++;
+  }
+
+  logger.info(
+    {
+      event: 'fellows_dashboard_match_summary',
+      academicYear: academicYear ?? null,
+      totalFellows: fellows.length,
+      byStatus,
+      byMatchedVia,
+      byNeedsReviewReason,
+    },
+    'Fellows dashboard match summary'
+  );
 }

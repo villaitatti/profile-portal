@@ -100,6 +100,103 @@ async function sendEmail(
   return result?.MessageId as string | undefined;
 }
 
+interface ClaimNeedsReconciliationInput {
+  claimantEmail: string;
+  reason:
+    | 'name-collision'
+    | 'tier-conflict'
+    | 'primary-conflict'
+    | 'duplicate-civicrm-contact'
+    | 'auth0-collision'
+    // Informational (not a data bug): returning fellow matched via civicrm_id,
+    // password reset sent to their OLD Auth0 email. IT should intervene if
+    // the claimant reports not receiving it (they may no longer control the
+    // old mailbox).
+    | 'returning-fellow-reset-sent';
+  candidates: {
+    userId: string;
+    email: string;
+    civicrmId: string | null;
+    name: string | null;
+  }[];
+  // Populated when the reason is 'duplicate-civicrm-contact' — the
+  // contactIds of the duplicate CiviCRM contacts IT needs to merge.
+  civicrmContactIds?: number[];
+  // Populated when the reason is 'returning-fellow-reset-sent' — the email
+  // we sent the reset to (the OLD Auth0 email, not the claimant's current).
+  resetSentTo?: string;
+}
+
+/**
+ * IT-facing notification triggered when a VIT ID claim hits a needs-review
+ * state (duplicate CiviCRM contact, name collision, tier conflict, etc.)
+ * and the claim flow refuses to auto-provision. IT reconciles manually.
+ */
+export async function sendClaimNeedsReconciliationNotification(
+  input: ClaimNeedsReconciliationInput
+): Promise<void> {
+  const isReturningFellow = input.reason === 'returning-fellow-reset-sent';
+  const subject = isReturningFellow
+    ? `I Tatti Profile Portal — Returning Fellow Claim (password reset sent to old email)`
+    : `I Tatti Profile Portal — VIT ID Claim Needs Manual Reconciliation (${input.reason})`;
+
+  const lines: string[] = [];
+  if (isReturningFellow) {
+    lines.push(
+      `A returning fellow tried to claim a VIT ID under a new email address. The match ladder found their existing Auth0 account via civicrm_id, and a password reset was sent to their OLD Auth0 email.`
+    );
+    lines.push('');
+    lines.push(`Claimant typed email (new): ${input.claimantEmail}`);
+    if (input.resetSentTo) {
+      lines.push(`Password reset sent to (old Auth0 email): ${input.resetSentTo}`);
+    }
+    if (input.candidates.length > 0) {
+      const c = input.candidates[0];
+      lines.push(`Matched Auth0 account: user_id ${c.userId}, name ${c.name ?? '—'}, civicrm_id ${c.civicrmId ?? '—'}`);
+    }
+    lines.push('');
+    lines.push(
+      `No action is required unless the claimant reports not receiving the reset email. If they no longer control the old mailbox, update the Auth0 account's primary email to the new address manually.`
+    );
+  } else {
+    lines.push(`A VIT ID claim could not be processed automatically — the match ladder found ambiguous candidates.`);
+    lines.push('');
+    lines.push(`Claimant email: ${input.claimantEmail}`);
+    lines.push(`Reason: ${input.reason}`);
+    lines.push('');
+    if (input.civicrmContactIds && input.civicrmContactIds.length > 0) {
+      lines.push(`CiviCRM contact IDs sharing this email: ${input.civicrmContactIds.join(', ')}`);
+      lines.push(`→ Use CiviCRM's "Find and Merge Duplicate Contacts" tool.`);
+      lines.push('');
+    }
+    if (input.candidates.length > 0) {
+      lines.push(`Candidate Auth0 accounts:`);
+      for (const c of input.candidates) {
+        lines.push(`  • ${c.email}  (user_id: ${c.userId}, name: ${c.name ?? '—'}, civicrm_id: ${c.civicrmId ?? '—'})`);
+      }
+      lines.push('');
+    }
+    lines.push(
+      `No Auth0 account was created. Please investigate and either merge the duplicates or manually provision the correct VIT ID for the claimant.`
+    );
+  }
+  const body = lines.join('\n');
+
+  if (!isAdminNotificationEmailConfigured()) {
+    logger.warn(
+      { subject, reason: input.reason },
+      'Skipping claim-needs-reconciliation email: ADMIN_NOTIFICATION_EMAIL (or SES) not configured'
+    );
+    return;
+  }
+
+  try {
+    await sendEmail(env.ADMIN_NOTIFICATION_EMAIL!, subject, body);
+  } catch (err) {
+    logger.error({ err, reason: input.reason }, 'Failed to send claim-needs-reconciliation email');
+  }
+}
+
 export async function sendClaimNotification(input: ClaimNotificationInput): Promise<void> {
   const status = input.hasCurrentFellowship ? 'Current Fellow' : input.hasFellowship ? 'Former Fellow' : 'No Fellowship';
   const subject = `I Tatti Profile Portal — VIT ID Claimed: ${input.firstName} ${input.lastName}`;
