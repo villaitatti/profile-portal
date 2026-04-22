@@ -18,6 +18,10 @@ export function HasVitIdPage() {
   const lookup = useVitIdLookup(searchQuery);
   const trimmed = searchQuery.trim();
   const looksLikeEmail = trimmed.includes('@');
+  // Suppress stale results from a previous query while the debounce is
+  // catching up. Only render lookup.data when it corresponds to the current
+  // trimmed input.
+  const dataIsFresh = lookup.debouncedQuery === trimmed;
 
   return (
     <div>
@@ -44,7 +48,7 @@ export function HasVitIdPage() {
             <p className="text-[0.95rem] text-muted-foreground">
               Type a name or an email address to check.
             </p>
-          ) : lookup.isLoading ? (
+          ) : lookup.isLoading || !dataIsFresh ? (
             <div className="flex items-center gap-2 text-[0.95rem] text-muted-foreground">
               <div className="h-4 w-4 border-2 border-muted-foreground border-t-transparent rounded-full animate-spin" />
               Searching...

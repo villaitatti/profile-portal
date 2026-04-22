@@ -207,6 +207,53 @@ describe('getFellowsDashboard — ladder integration', () => {
   });
 });
 
+describe('getFellowsDashboard — duplicate-civicrm-contact pre-flight', () => {
+  it('short-circuits to needs-review when a fellow email is shared across 2+ CiviCRM contacts', async () => {
+    // Both contacts have 'shared@x.com' on file. Without the pre-flight,
+    // reconcile() would pick whichever Auth0 user happened to be under
+    // 'shared@x.com' for one of them.
+    mockCivicrm.getFellowsWithContacts.mockResolvedValue([
+      fellow({ contactId: 1, firstName: 'Alpha', lastName: 'One', email: 'shared@x.com' }),
+      fellow({ contactId: 2, firstName: 'Beta', lastName: 'Two', email: 'other@x.com' }),
+    ]);
+    mockCivicrm.getEmailsForContacts.mockResolvedValue(new Map([
+      [1, { primary: 'shared@x.com', secondaries: [] }],
+      [2, { primary: 'other@x.com', secondaries: ['shared@x.com'] }], // duplicate
+    ]));
+    mockAuth0.listUsersByRole.mockResolvedValue([
+      { user_id: 'auth0|x', email: 'shared@x.com' },
+    ]);
+
+    const result = await getFellowsDashboard();
+
+    // Both fellows surface as needs-review/duplicate-civicrm-contact,
+    // because each carries an email that appears on a different contact.
+    expect(result.fellows).toHaveLength(2);
+    for (const f of result.fellows) {
+      expect(f.status).toBe('needs-review');
+      expect(f.reason).toBe('duplicate-civicrm-contact');
+    }
+  });
+
+  it('does not false-positive when the same email appears on the SAME contact twice', async () => {
+    // primary and a secondary happening to be the same address — already
+    // handled by getEmailsForContacts' dedup, but belt-and-suspenders.
+    mockCivicrm.getFellowsWithContacts.mockResolvedValue([
+      fellow({ contactId: 1, email: 'only@x.com' }),
+    ]);
+    mockCivicrm.getEmailsForContacts.mockResolvedValue(
+      new Map([[1, { primary: 'only@x.com', secondaries: [] }]])
+    );
+    mockAuth0.listUsersByRole.mockResolvedValue([
+      { user_id: 'auth0|x', email: 'only@x.com' },
+    ]);
+
+    const result = await getFellowsDashboard();
+
+    expect(result.fellows[0].status).toBe('active');
+  });
+});
+
 describe('getFellowsDashboard — dedup by contactId', () => {
   it('collapses multiple fellowships per contact into one row with the latest startDate', async () => {
     mockCivicrm.getFellowsWithContacts.mockResolvedValue([
@@ -304,14 +351,20 @@ describe('getFellowsDashboard — academic year filter', () => {
   });
 
   it('returns all academic years regardless of filter, sorted descending', async () => {
+    // Call WITH a filter to prove the claim: even when the year filter
+    // narrows `fellows`, the `academicYears` dropdown still lists every
+    // year present in the raw CiviCRM data so staff can switch.
     mockCivicrm.getFellowsWithContacts.mockResolvedValue([
       fellow({ contactId: 1, startDate: '2025-09-01', endDate: '2026-06-30' }),
       fellow({ contactId: 2, startDate: '2023-09-01', endDate: '2024-06-30' }),
       fellow({ contactId: 3, startDate: '2024-09-01', endDate: '2025-06-30' }),
     ]);
 
-    const result = await getFellowsDashboard();
+    const result = await getFellowsDashboard('2024-2025');
 
     expect(result.academicYears).toEqual(['2025-2026', '2024-2025', '2023-2024']);
+    // Filter still works: only the 2024-2025 fellowship (contactId 3) in fellows.
+    expect(result.fellows).toHaveLength(1);
+    expect(result.fellows[0].civicrmId).toBe(3);
   });
 });

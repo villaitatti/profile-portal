@@ -269,19 +269,29 @@ export function reconcile(fellow: LadderFellow, maps: Auth0Maps): FellowMatch {
   return { status: 'no-account' };
 }
 
+function assertNever(x: never): never {
+  throw new Error(`Unhandled NeedsReviewReason: ${String(x)}`);
+}
+
 /**
- * Convenience: classify a NeedsReviewReason by whether it's a user-facing
- * "show the candidates and let a human decide" case vs. a data-integrity
- * alert. All four current reasons are the former; this exists so downstream
- * callers (e.g., the claim flow IT notification) can route differently if
- * we add alert-only reasons later.
+ * Classify a NeedsReviewReason by whether it's a user-facing "show the
+ * candidates and let a human decide" case vs. a data-integrity alert.
+ *
+ * Implemented as an exhaustive switch with an `assertNever` default so
+ * TypeScript flags any newly-added `NeedsReviewReason` variant that isn't
+ * explicitly handled here — caller semantics (e.g., the claim flow IT
+ * notification) depend on this classification, so a silent fall-through
+ * would be a real bug.
  */
 export function isHumanPickable(reason: NeedsReviewReason): boolean {
-  return (
-    reason === 'name-collision' ||
-    reason === 'tier-conflict' ||
-    reason === 'primary-conflict' ||
-    reason === 'duplicate-civicrm-contact' ||
-    reason === 'auth0-collision'
-  );
+  switch (reason) {
+    case 'name-collision':
+    case 'tier-conflict':
+    case 'primary-conflict':
+    case 'duplicate-civicrm-contact':
+    case 'auth0-collision':
+      return true;
+    default:
+      return assertNever(reason);
+  }
 }

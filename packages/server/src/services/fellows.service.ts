@@ -171,12 +171,71 @@ export async function getFellowsDashboard(
     getEmailsForContacts(contactIds),
   ]);
 
+  // Build an email→contactIds index from Email.get results. When the same
+  // email string appears on 2+ distinct CiviCRM contacts (a duplicate-contact
+  // data bug), we surface the affected fellows as 'needs-review' with
+  // reason 'duplicate-civicrm-contact' BEFORE running the match ladder —
+  // otherwise reconcile() would happily pick whichever Auth0 user matched
+  // the ambiguous email and route the bio email / "Send" button at a
+  // potentially-wrong account.
+  const contactsByEmail = new Map<string, Set<number>>();
+  for (const [cid, emails] of emailsByContact.entries()) {
+    const allEmails = [
+      ...(emails.primary ? [emails.primary] : []),
+      ...emails.secondaries,
+    ];
+    for (const e of allEmails) {
+      const key = e.toLowerCase();
+      const existing = contactsByEmail.get(key) ?? new Set<number>();
+      existing.add(cid);
+      contactsByEmail.set(key, existing);
+    }
+  }
+
+  function hasCrossContactDuplicate(emails: {
+    primary: string | null;
+    secondaries: string[];
+  } | undefined): boolean {
+    if (!emails) return false;
+    const all = [...(emails.primary ? [emails.primary] : []), ...emails.secondaries];
+    return all.some((e) => {
+      const collisions = contactsByEmail.get(e.toLowerCase());
+      return collisions ? collisions.size > 1 : false;
+    });
+  }
+
   // Run the match ladder for each fellow.
   const fellows: FellowDashboardEntry[] = [];
   for (const item of fellowsByContact.values()) {
     const { entry, hasCurrentFellowship, hasAcceptedUpcomingFellowship } = item;
 
     const contactEmails = emailsByContact.get(entry.civicrmId);
+
+    // Pre-flight: if any of this fellow's emails is shared across multiple
+    // CiviCRM contacts, short-circuit to 'needs-review' with
+    // 'duplicate-civicrm-contact'. Bypasses the ladder entirely so we don't
+    // pick an arbitrary Auth0 user based on an ambiguous email.
+    if (hasCrossContactDuplicate(contactEmails)) {
+      const base: FellowDashboardEntry = {
+        ...entry,
+        status: 'needs-review',
+        reason: 'duplicate-civicrm-contact',
+        candidates: [],
+        civicrmIdStatus: 'n/a',
+        bioEmail: buildBioEmailSummary({
+          hasVitId: false,
+          targetAcademicYear: hasCurrentFellowship
+            ? currentAy
+            : hasAcceptedUpcomingFellowship
+              ? nextAy
+              : null,
+          event: undefined,
+        }),
+      };
+      fellows.push(base);
+      continue;
+    }
+
     const ladderFellow: LadderFellow = {
       civicrmId: entry.civicrmId,
       firstName: entry.firstName,

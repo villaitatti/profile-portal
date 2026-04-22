@@ -223,6 +223,15 @@ async function runClaimLadder(
     return 'proceed';
   }
 
+  // Fetch fellowships so the audit rows below record real hasFellowship /
+  // hasCurrentFellowship flags instead of hard-coded false. Shared between
+  // the 'active'/'active-different-email' and 'needs-review' branches.
+  const fellowships = await civicrmService.getFellowships(contactLookup.contactId);
+  const hasFellowship = fellowships.length > 0;
+  const hasCurrentFellowship = fellowships.some(
+    (f) => classifyFellowship(f.startDate, f.endDate) === 'current'
+  );
+
   if (match.status === 'active' || match.status === 'active-different-email') {
     // Returning fellow — use the matched Auth0 user's email for the reset,
     // not the claimant's typed email. If they no longer control that mailbox,
@@ -253,8 +262,8 @@ async function runClaimLadder(
           firstName: contact.firstName,
           lastName: contact.lastName,
           civicrmId: contactLookup.contactId,
-          hasFellowship: false,
-          hasCurrentFellowship: false,
+          hasFellowship,
+          hasCurrentFellowship,
           rolesAssigned: [],
           orgsAssigned: [],
         },
@@ -292,8 +301,8 @@ async function runClaimLadder(
         firstName: contact.firstName,
         lastName: contact.lastName,
         civicrmId: contactLookup.contactId,
-        hasFellowship: false,
-        hasCurrentFellowship: false,
+        hasFellowship,
+        hasCurrentFellowship,
         rolesAssigned: [],
         orgsAssigned: [],
       },
