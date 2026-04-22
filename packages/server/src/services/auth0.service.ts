@@ -1,7 +1,6 @@
 import { ManagementClient, AuthenticationClient } from 'auth0';
 import { env } from '../env.js';
 import { randomBytes } from 'crypto';
-import type { Auth0UserListItem } from '@itatti/shared';
 
 const management = new ManagementClient({
   domain: env.AUTH0_DOMAIN,
@@ -101,41 +100,6 @@ export async function listRoles(): Promise<Auth0Role[]> {
     name: r.name!,
     description: r.description,
   }));
-}
-
-export type { Auth0UserListItem };
-
-export async function listAllUsers(): Promise<Auth0UserListItem[]> {
-  const allUsers: Auth0UserListItem[] = [];
-  let page = 0;
-  const perPage = 100;
-  const maxPages = 50; // Safety guard: 5000 users max
-
-  while (page < maxPages) {
-    const response = await management.users.getAll({
-      fields: 'user_id,email,name,email_verified,last_login,created_at',
-      include_fields: true,
-      per_page: perPage,
-      page,
-    });
-
-    const users = response.data || [];
-    allUsers.push(
-      ...users.map((u) => ({
-        user_id: u.user_id!,
-        email: u.email!,
-        name: u.name,
-        email_verified: u.email_verified ?? false,
-        last_login: u.last_login ? String(u.last_login) : undefined,
-        created_at: String(u.created_at),
-      }))
-    );
-
-    if (users.length < perPage) break;
-    page++;
-  }
-
-  return allUsers;
 }
 
 export interface Auth0FellowUser {
