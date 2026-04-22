@@ -68,13 +68,25 @@ const mockEmail = vi.mocked(emailService);
 // specifically testing the no-VIT-ID path.
 //
 // After the match-ladder refactor, the "has VIT ID" check resolves via
-// listUsersByRole() + getEmailsForContacts(). We install defaults that
-// produce a successful match: a single Auth0 fellow with email
-// 'default@example.com' matched by primary email.
+// listUsersByRole() + getEmailsForContacts(). The default match is via
+// tier 2 (civicrm_id), not tier 1 (primary email):
+//   - mockCivicrm.getEmailsForContacts returns new Map(), so the ladder
+//     sees primaryEmail = null and skips tier 1 entirely.
+//   - mockAuth0.listUsersByRole returns one user with civicrmId: '1', so
+//     tier 2 matches whenever the test contact's id is 1.
+//   - The result: reconcile() returns 'active-different-email' via
+//     civicrm-id for contact id 1, which satisfies checkHasVitIdViaLadder.
+//
+// Stubs installed: mockAuth0.findUserByEmail (legacy, still referenced by a
+// few unchanged tests), mockAuth0.listUsersByRole, mockCivicrm.getEmailsForContacts.
+//
+// Tests simulating "no VIT ID" override mockAuth0.listUsersByRole with an
+// empty array so neither tier 1 nor tier 2 can hit and reconcile() returns
+// 'no-account'.
 //
 // We use resetAllMocks (not clearAllMocks) so per-test mockResolvedValue /
 // mockRejectedValue stubs do not leak into subsequent tests via the shared
-// mocked modules above.
+// mocked modules above. The defaults are re-installed here on every iteration.
 beforeEach(() => {
   vi.resetAllMocks();
   mockAuth0.findUserByEmail.mockResolvedValue({
@@ -82,11 +94,6 @@ beforeEach(() => {
     email: 'default@example.com',
     name: 'Default User',
   });
-  // Ladder defaults: Auth0 has one fellow whose civicrm_id metadata points
-  // to contact id 1 (used by most tests). This makes reconcile() return
-  // 'active-different-email' via civicrm_id for contact 1, regardless of
-  // the contact's primary email — which is what existing tests exercise.
-  // Tests that want to simulate "no VIT ID" override with an empty list.
   mockAuth0.listUsersByRole.mockResolvedValue([
     {
       user_id: 'auth0|default',
@@ -95,6 +102,8 @@ beforeEach(() => {
       civicrmId: '1',
     },
   ]);
+  // Empty map = ladder sees primaryEmail=null (tier 1 skipped). Tier 2 is
+  // the one that resolves the default match via the civicrmId above.
   mockCivicrm.getEmailsForContacts.mockResolvedValue(new Map());
 });
 

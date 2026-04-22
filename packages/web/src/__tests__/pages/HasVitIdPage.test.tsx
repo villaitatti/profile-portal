@@ -22,13 +22,18 @@ function makeWrapper() {
 }
 
 function setHookState(state: Partial<ReturnType<typeof mockUseVitIdLookup>>) {
-  mockUseVitIdLookup.mockReturnValue({
+  // Default debouncedQuery to the test's typed query via a side-effect:
+  // mockImplementation reads the current argument each call so the hook
+  // appears to have "caught up" to whatever the page typed. Tests that want
+  // to simulate the stale/debouncing window override the impl themselves.
+  mockUseVitIdLookup.mockImplementation((q: string) => ({
     data: undefined,
     isLoading: false,
     isError: false,
     refetch: vi.fn(),
+    debouncedQuery: q.trim(),
     ...state,
-  });
+  }));
 }
 
 beforeEach(() => {
@@ -56,6 +61,32 @@ describe('HasVitIdPage — empty state', () => {
     );
     // Tip only shows when query is typed but doesn't contain @.
     expect(screen.queryByText(/to check a specific email/i)).not.toBeInTheDocument();
+  });
+});
+
+describe('HasVitIdPage — stale data suppression', () => {
+  it('shows "Searching..." when debouncedQuery hasn\'t caught up to the typed input', () => {
+    // Simulate the debounce window: input is "new query" but the hook's
+    // resolved data still reflects "old query".
+    mockUseVitIdLookup.mockReturnValue({
+      data: { kind: 'name-search', candidates: [] },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+      debouncedQuery: 'old query',
+    });
+    const Wrapper = makeWrapper();
+    render(
+      <Wrapper>
+        <HasVitIdPage />
+      </Wrapper>
+    );
+    fireEvent.change(screen.getByLabelText(/search by name or email/i), {
+      target: { value: 'new query' },
+    });
+    expect(screen.getByText(/Searching/i)).toBeInTheDocument();
+    // Stale empty-name-search message should NOT render.
+    expect(screen.queryByText(/No one matching/i)).not.toBeInTheDocument();
   });
 });
 

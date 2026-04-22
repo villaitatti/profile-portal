@@ -33,7 +33,7 @@
 - **How:** Pre-build the Auth0 maps once at the top of `dispatchPendingEmails`, pass them down to `dispatchOne` and into `evaluateBioEmailEligibility` (optional param — falls back to fresh fetch if not supplied, so single-shot callers like `sendBioEmailManually` keep working). Short in-memory TTL (60s) is an acceptable alternative.
 - **Pros:** Makes the cron O(1) on Auth0 list fetches. Matches the dashboard pattern.
 - **Cons:** Adds an optional param that ripples through 2-3 functions. Ergonomic cost.
-- **Context:** Caught by /ship pre-landing review on feat/vit-id-match-ladder (PR #TODO). Flagged as P2 — ship as-is and revisit if dispatch volume grows.
+- **Context:** Caught by /ship pre-landing review on feat/vit-id-match-ladder (PR #12). Flagged as P2 — ship as-is and revisit if dispatch volume grows.
 - **Depends on:** Nothing.
 
 ### Dashboard staleTime + manual refresh button

@@ -117,8 +117,13 @@ export async function enqueueBioEmail(args: EnqueueArgs): Promise<{
 /**
  * Re-evaluate eligibility at dispatch time with a fresh lookup:
  *   - contact must still exist in CiviCRM with a primary email
- *   - contact must have a VIT ID (Auth0 user by email) — we never email a JSM
- *     link to someone who can't authenticate
+ *   - contact must have a VIT ID reachable via the full match ladder
+ *     (primary-email → civicrm_id → secondary-email → name). We intentionally
+ *     accept "changed-email" matches: a fellow whose CiviCRM primary email
+ *     changed since they claimed their VIT ID still gets the bio email at
+ *     their current primary, because the ladder can prove they have an
+ *     account to log into. We never email a JSM link to someone who can't
+ *     authenticate, and we refuse to send on 'needs-review' outcomes.
  *   - a current-year fellowship, OR an accepted upcoming-year fellowship,
  *     must still match the target academic year
  *

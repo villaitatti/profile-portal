@@ -593,14 +593,21 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
                     {fellow.status === 'active-different-email' && fellow.matched && (
                       <span className="text-[0.82rem] leading-5 text-muted-foreground">
                         VIT ID on file under:{' '}
-                        <span className="font-mono">{fellow.matched.email}</span>
+                        <span className="font-mono break-all whitespace-normal">
+                          {fellow.matched.email}
+                        </span>
                       </span>
                     )}
                     {fellow.status === 'needs-review' && fellow.candidates && fellow.candidates.length > 0 && (
                       <ul className="mt-1 space-y-1 text-[0.82rem] leading-5 text-muted-foreground">
                         {fellow.candidates.map((c) => (
-                          <li key={c.userId} className="flex items-center gap-2">
-                            <span className="font-mono">{c.email}</span>
+                          <li
+                            key={c.userId}
+                            className="flex flex-wrap items-center gap-x-2 gap-y-0.5"
+                          >
+                            <span className="font-mono break-all whitespace-normal">
+                              {c.email}
+                            </span>
                             {c.civicrmId && (
                               <span className="text-muted-foreground/70">
                                 (civicrm_id: {c.civicrmId})
