@@ -48,7 +48,7 @@ describe('useVitIdLookup — enabled gate', () => {
       await vi.advanceTimersByTimeAsync(500);
     });
     expect(mockApiFetch).not.toHaveBeenCalled();
-    expect(result.current.isFetching).toBe(false);
+    expect(result.current.isLoading).toBe(false);
   });
 
   it('does NOT fetch for single-character non-email query', async () => {
@@ -68,7 +68,8 @@ describe('useVitIdLookup — enabled gate', () => {
       await Promise.resolve();
     });
     expect(mockApiFetch).toHaveBeenCalledTimes(1);
-    expect(mockApiFetch.mock.calls[0][0]).toContain('q=maria');
+    // Query is in the JSON body, not the URL.
+    expect(JSON.parse(mockApiFetch.mock.calls[0][1].body)).toEqual({ q: 'maria' });
   });
 
   it('fetches for email query (initial mount)', async () => {
@@ -78,7 +79,7 @@ describe('useVitIdLookup — enabled gate', () => {
       await Promise.resolve();
     });
     expect(mockApiFetch).toHaveBeenCalledTimes(1);
-    expect(mockApiFetch.mock.calls[0][0]).toContain('q=x%40y.com');
+    expect(JSON.parse(mockApiFetch.mock.calls[0][1].body)).toEqual({ q: 'x@y.com' });
   });
 });
 
@@ -109,18 +110,48 @@ describe('useVitIdLookup — debounce behavior', () => {
     });
     expect(mockApiFetch).toHaveBeenCalledTimes(1);
     // Fetched with the final value, not intermediate ones.
-    expect(mockApiFetch.mock.calls[0][0]).toContain('q=maria');
+    expect(JSON.parse(mockApiFetch.mock.calls[0][1].body)).toEqual({ q: 'maria' });
   });
 });
 
-describe('useVitIdLookup — URL encoding', () => {
-  it('URL-encodes the query param', async () => {
+describe('useVitIdLookup — POST body (no email in URL)', () => {
+  it('sends q in the JSON body via POST, not the URL', async () => {
     renderHook(() => useVitIdLookup('maria rossi'), { wrapper: makeWrapper() });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(500);
       await Promise.resolve();
     });
     expect(mockApiFetch).toHaveBeenCalledTimes(1);
-    expect(mockApiFetch.mock.calls[0][0]).toContain('q=maria%20rossi');
+    const [path, options] = mockApiFetch.mock.calls[0];
+    // URL carries no query — the email is in the body.
+    expect(path).toBe('/api/admin/vit-id-lookup');
+    expect(options.method).toBe('POST');
+    expect(JSON.parse(options.body)).toEqual({ q: 'maria rossi' });
+  });
+});
+
+describe('useVitIdLookup — debouncedQuery signals freshness', () => {
+  it('exposes the debounced query so consumers can suppress stale renders', async () => {
+    const { result, rerender } = renderHook(({ q }) => useVitIdLookup(q), {
+      wrapper: makeWrapper(),
+      initialProps: { q: 'alpha' },
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+      await Promise.resolve();
+    });
+    expect(result.current.debouncedQuery).toBe('alpha');
+
+    // User types something new. The debounced value lags by up to 400ms,
+    // so for that window debouncedQuery !== current input — consumers use
+    // that to hide stale data.
+    rerender({ q: 'beta' });
+    expect(result.current.debouncedQuery).toBe('alpha');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+      await Promise.resolve();
+    });
+    expect(result.current.debouncedQuery).toBe('beta');
   });
 });

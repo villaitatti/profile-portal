@@ -201,7 +201,12 @@ describe('findContactIdByAnyEmail', () => {
     expect(result).toEqual({ found: false, duplicate: true, contactIds: [10, 20] });
     expect(mockWarn).toHaveBeenCalledTimes(1);
     const [ctx, msg] = mockWarn.mock.calls[0];
-    expect(ctx).toEqual({ email: 'shared@x.com', contactIds: [10, 20] });
+    // Email is hashed in logs, not logged raw — PII protection.
+    expect(ctx.email).toBeUndefined();
+    expect(ctx.contactIds).toEqual([10, 20]);
+    expect(typeof ctx.emailHash).toBe('string');
+    expect(ctx.emailHash).toHaveLength(12); // sha256 truncated to 12 hex chars
+    expect(ctx.emailHash).not.toContain('shared@x.com');
     expect(msg).toContain('multiple contacts');
   });
 

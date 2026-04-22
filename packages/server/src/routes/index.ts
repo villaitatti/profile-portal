@@ -34,9 +34,11 @@ export function registerRoutes(app: Express) {
   );
 
   // Admin routes: Unified VIT ID lookup — "Has VIT ID?" page primary endpoint
-  // (fellows-admin OR staff-it). Accepts ?q=<term>, decides internally whether
-  // to run a reverse match ladder (email-shape) or a name substring search.
-  app.get(
+  // (fellows-admin OR staff-it). POST with body `{ q }` — decides internally
+  // whether to run a reverse match ladder (email-shape) or a name substring
+  // search. POST (not GET) so email addresses never land in access logs,
+  // browser history, or intermediate proxies.
+  app.post(
     '/api/admin/vit-id-lookup',
     authMiddleware,
     extractUser,

@@ -185,14 +185,22 @@ const vitIdLookupQuerySchema = z.object({
   q: z.string().min(1).max(200),
 });
 
+// Shared predicate — used by both the production handler and the dev mock so
+// the two can't drift. '@' catches emails; the length > 3 filter keeps single
+// letters followed by '@' (typing mid-email) on the name-search path.
+function looksLikeEmailQuery(q: string): boolean {
+  return q.includes('@') && q.length > 3;
+}
+
 // The handler below is exported and mounted in routes/index.ts at
-// /api/admin/vit-id-lookup (not under /api/admin/fellows/).
+// /api/admin/vit-id-lookup (POST — body { q }, not a query string — so emails
+// never land in access logs, browser history, or proxy caches).
 export async function handleVitIdLookup(
   req: import('express').Request,
   res: import('express').Response
 ): Promise<void> {
   try {
-    const parsed = vitIdLookupQuerySchema.safeParse(req.query);
+    const parsed = vitIdLookupQuerySchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({
         error: 'invalid_request',
@@ -205,14 +213,15 @@ export async function handleVitIdLookup(
     }
     const q = parsed.data.q.trim();
 
+    // Responses can carry matched fellow data; don't cache anywhere.
+    res.set('Cache-Control', 'no-store');
+
     if (isDevMode) {
       res.json(getDevVitIdLookupMock(q));
       return;
     }
 
-    const looksLikeEmail = q.includes('@') && q.length > 3;
-
-    if (!looksLikeEmail) {
+    if (!looksLikeEmailQuery(q)) {
       // Name search: substring over fellows-role Auth0 users.
       // Use normalize() on both sides so "muller" matches "Müller" and the
       // dev-mode mock and production path stay in sync.
@@ -241,7 +250,17 @@ export async function handleVitIdLookup(
     const response: VitIdLookupResponse = { kind: 'email-lookup', match };
     res.json(response);
   } catch (err) {
-    logger.error({ err, query: req.query }, 'Admin: vit-id-lookup failed');
+    // Do NOT log req.body — it carries the raw email. Log a shape descriptor
+    // that's still useful for debugging but carries no PII.
+    const bodyShape = {
+      keys: req.body && typeof req.body === 'object' ? Object.keys(req.body) : [],
+      qPresent: typeof (req.body as { q?: unknown })?.q === 'string',
+      qLength:
+        typeof (req.body as { q?: unknown })?.q === 'string'
+          ? (req.body as { q: string }).q.length
+          : undefined,
+    };
+    logger.error({ err, bodyShape }, 'Admin: vit-id-lookup failed');
     res.status(500).json({ error: 'internal_error' });
   }
 }
@@ -306,7 +325,8 @@ async function runEmailLookupLadder(email: string): Promise<FellowMatch> {
 }
 
 function getDevVitIdLookupMock(q: string): VitIdLookupResponse {
-  const looksLikeEmail = q.includes('@');
+  // Same predicate as production so dev and prod branch identically.
+  const looksLikeEmail = looksLikeEmailQuery(q);
 
   if (!looksLikeEmail) {
     // Simple substring dev mock.

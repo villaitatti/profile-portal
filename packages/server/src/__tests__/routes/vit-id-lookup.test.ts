@@ -37,12 +37,15 @@ const mockCivicrm = vi.mocked(civicrmService);
 const mockAuth0 = vi.mocked(auth0Service);
 
 // Minimal Express req/res fakes — just enough surface for our handler.
-function makeReq(query: Record<string, string | undefined>) {
-  return { query } as unknown as import('express').Request;
+// Route is POST; query term comes from req.body, not req.query.
+function makeReq(body: Record<string, string | undefined>) {
+  return { body, query: {} } as unknown as import('express').Request;
 }
 
 function makeRes() {
-  const calls: { status?: number; json?: unknown } = {};
+  const calls: { status?: number; json?: unknown; headers?: Record<string, string> } = {
+    headers: {},
+  };
   const res = {
     status(code: number) {
       calls.status = code;
@@ -50,6 +53,10 @@ function makeRes() {
     },
     json(payload: unknown) {
       calls.json = payload;
+      return this;
+    },
+    set(name: string, value: string) {
+      calls.headers![name] = value;
       return this;
     },
   } as unknown as import('express').Response;
@@ -60,7 +67,7 @@ beforeEach(() => {
   vi.resetAllMocks();
 });
 
-describe('GET /api/admin/vit-id-lookup', () => {
+describe('POST /api/admin/vit-id-lookup', () => {
   describe('validation', () => {
     it('400 when q is missing', async () => {
       const { res, calls } = makeRes();
@@ -277,6 +284,40 @@ describe('GET /api/admin/vit-id-lookup', () => {
       await handleVitIdLookup(makeReq({ q: 'x@y.com' }), res);
 
       expect(calls.status).toBe(500);
+    });
+  });
+
+  describe('PII safety', () => {
+    it('sets Cache-Control: no-store on successful responses', async () => {
+      mockAuth0.listUsersByRole.mockResolvedValue([]);
+      mockCivicrm.findContactIdByAnyEmail.mockResolvedValue({ found: false });
+
+      const { res, calls } = makeRes();
+      await handleVitIdLookup(makeReq({ q: 'x@y.com' }), res);
+
+      expect(calls.headers?.['Cache-Control']).toBe('no-store');
+    });
+
+    it('error log does NOT include the raw email — only a shape descriptor', async () => {
+      const loggerModule = await import('../../lib/logger.js');
+      const mockError = vi.mocked(loggerModule.logger.error);
+
+      mockAuth0.listUsersByRole.mockRejectedValue(new Error('boom'));
+
+      const { res } = makeRes();
+      await handleVitIdLookup(makeReq({ q: 'sensitive@example.com' }), res);
+
+      expect(mockError).toHaveBeenCalled();
+      const ctx = mockError.mock.calls[0][0] as Record<string, unknown>;
+      expect(ctx).toHaveProperty('bodyShape');
+      expect(ctx).not.toHaveProperty('query');
+      // The raw email must NOT appear anywhere in the log context.
+      expect(JSON.stringify(ctx)).not.toContain('sensitive@example.com');
+      expect(ctx.bodyShape).toMatchObject({
+        keys: ['q'],
+        qPresent: true,
+        qLength: 'sensitive@example.com'.length,
+      });
     });
   });
 });
