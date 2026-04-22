@@ -4,12 +4,14 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { VitIdStatusBadge } from '@/components/shared/VitIdStatusBadge';
 import { useFellowsDashboard, useSendBioEmail, SendBioEmailError, type SendBioEmailReason } from '@/api/fellows';
 import { getCurrentAcademicYear } from './utils/academic-year';
 import {
   Users,
   UserX,
   UserCheck,
+  UserSearch,
   Search,
   AlertCircle,
   ExternalLink,
@@ -19,14 +21,13 @@ import {
 } from 'lucide-react';
 import type {
   FellowDashboardEntry,
-  FellowStatus,
-  CivicrmIdStatus,
+  VitIdStatus,
   BioEmailStatus,
 } from '@itatti/shared';
 
 const CIVICRM_URL = import.meta.env.VITE_CIVICRM_URL || '';
 
-type FilterTab = 'all' | FellowStatus;
+type FilterTab = 'all' | VitIdStatus;
 
 export function FellowsManagementPage() {
   const currentYear = getCurrentAcademicYear();
@@ -79,11 +80,19 @@ export function FellowsManagementPage() {
     );
   }
 
-  const summary = data?.summary ?? { total: 0, noAccount: 0, active: 0 };
+  const summary = data?.summary ?? {
+    total: 0,
+    noAccount: 0,
+    active: 0,
+    activeDifferentEmail: 0,
+    needsReview: 0,
+  };
   const academicYears = data?.academicYears ?? [];
 
   const tabs: { key: FilterTab; label: string; count: number }[] = [
     { key: 'all', label: 'All', count: summary.total },
+    { key: 'needs-review', label: 'Needs Review', count: summary.needsReview },
+    { key: 'active-different-email', label: 'Different Email', count: summary.activeDifferentEmail },
     { key: 'no-account', label: 'Needs Account', count: summary.noAccount },
     { key: 'active', label: 'Active', count: summary.active },
   ];
@@ -96,11 +105,23 @@ export function FellowsManagementPage() {
       />
 
       {/* Summary Cards */}
-      <div className="mb-10 grid grid-cols-1 gap-5 sm:grid-cols-3">
+      <div className="mb-10 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5">
         <SummaryCard
           label="Total Fellows"
           value={summary.total}
           icon={<Users className="h-5 w-5 text-primary" />}
+        />
+        <SummaryCard
+          label="Needs Review"
+          value={summary.needsReview}
+          icon={<AlertTriangle className="h-5 w-5 text-amber-600" />}
+          valueClassName="text-amber-700"
+        />
+        <SummaryCard
+          label="Different Email"
+          value={summary.activeDifferentEmail}
+          icon={<UserSearch className="h-5 w-5 text-amber-500" />}
+          valueClassName="text-amber-600"
         />
         <SummaryCard
           label="Needs Account"
@@ -279,20 +300,8 @@ function SummaryCard({
   );
 }
 
-function StatusBadge({ status }: { status: FellowStatus }) {
-  if (status === 'active') {
-    return (
-      <span className="inline-flex items-center rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700">
-        Active
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700">
-      No Account
-    </span>
-  );
-}
+// Status badge moved to components/shared/VitIdStatusBadge.tsx (used by both
+// this page and the Has VIT ID? page).
 
 function BioEmailPill({
   status,
@@ -375,8 +384,8 @@ function formatLabel(value?: string): string {
 
 type SortField =
   | 'name'
-  | 'email'
   | 'appointment'
+  | 'email'
   | 'fellowship'
   | 'fellowshipYear'
   | 'status'
@@ -385,7 +394,10 @@ type SortDir = 'asc' | 'desc';
 const FELLOWS_PER_PAGE = 25;
 
 function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
-  const [sortField, setSortField] = useState<SortField>('name');
+  // Default sort: appointment asc → lastName asc. Groups fellows by role type
+  // (Fellow, Visiting Fellow, Visiting Professor, ...), then alphabetical
+  // within each group. Amber/red badges carry the attention signal.
+  const [sortField, setSortField] = useState<SortField>('appointment');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [page, setPage] = useState(1);
   const [confirmTarget, setConfirmTarget] = useState<FellowDashboardEntry | null>(null);
@@ -402,11 +414,15 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
         case 'name':
           cmp = a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName);
           break;
+        case 'appointment':
+          // Primary: appointment. Tie-break: lastName then firstName.
+          cmp =
+            (a.appointment || '').localeCompare(b.appointment || '') ||
+            a.lastName.localeCompare(b.lastName) ||
+            a.firstName.localeCompare(b.firstName);
+          break;
         case 'email':
           cmp = (a.email || '').localeCompare(b.email || '');
-          break;
-        case 'appointment':
-          cmp = (a.appointment || '').localeCompare(b.appointment || '');
           break;
         case 'fellowship':
           cmp = (a.fellowship || '').localeCompare(b.fellowship || '');
@@ -565,12 +581,34 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
                   {fellow.fellowshipYear}
                 </td>
                 <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <StatusBadge status={fellow.status} />
-                    {fellow.civicrmIdStatus === 'missing' && (
-                      <span title="Auth0 account exists but civicrm_id is missing from app_metadata">
-                        <AlertTriangle className="h-4 w-4 text-amber-500" />
+                  <div className="flex flex-col gap-1">
+                    <VitIdStatusBadge
+                      status={fellow.status}
+                      matchedVia={fellow.matchedVia}
+                      matched={fellow.matched}
+                      matchedViaEmail={fellow.matchedViaEmail}
+                      reason={fellow.reason}
+                      candidates={fellow.candidates}
+                    />
+                    {fellow.status === 'active-different-email' && fellow.matched && (
+                      <span className="text-[0.82rem] leading-5 text-muted-foreground">
+                        VIT ID on file under:{' '}
+                        <span className="font-mono">{fellow.matched.email}</span>
                       </span>
+                    )}
+                    {fellow.status === 'needs-review' && fellow.candidates && fellow.candidates.length > 0 && (
+                      <ul className="mt-1 space-y-1 text-[0.82rem] leading-5 text-muted-foreground">
+                        {fellow.candidates.map((c) => (
+                          <li key={c.userId} className="flex items-center gap-2">
+                            <span className="font-mono">{c.email}</span>
+                            {c.civicrmId && (
+                              <span className="text-muted-foreground/70">
+                                (civicrm_id: {c.civicrmId})
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
                     )}
                   </div>
                 </td>
