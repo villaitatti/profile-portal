@@ -422,6 +422,7 @@ describe('dispatchOne', () => {
       id: 'evt_ok',
       contactId: 1,
       academicYear: '2026-2027',
+      fellowshipId: 10,
     });
     mockCivicrm.getContactById.mockResolvedValue({
       id: 1,
@@ -505,6 +506,7 @@ describe('dispatchOne', () => {
       id: 'evt_partial',
       contactId: 1,
       academicYear: '2026-2027',
+      fellowshipId: 10,
     });
     mockCivicrm.getContactById.mockResolvedValue({
       id: 1,
@@ -550,6 +552,7 @@ describe('dispatchOne', () => {
       id: 'evt_fail',
       contactId: 1,
       academicYear: '2026-2027',
+      fellowshipId: 10,
     });
     mockCivicrm.getContactById.mockResolvedValue({
       id: 1,
@@ -588,6 +591,7 @@ describe('dispatchOne', () => {
       emailType: 'VIT_ID_INVITATION',
       contactId: 1,
       academicYear: '2026-2027',
+      fellowshipId: 42,
     });
     // VIT eligibility path: no Auth0 user, contact exists, fellowship accepted.
     mockAuth0.listUsersByRole.mockResolvedValue([]);
@@ -621,6 +625,52 @@ describe('dispatchOne', () => {
     });
     // Bio sender was NOT called (the branching is strict, not a fall-through).
     expect(mockEmail.sendBioProjectDescriptionEmail).not.toHaveBeenCalled();
+  });
+
+  it('SKIPS with fellowship_id_mismatch when the event and eligibility resolve to different fellowships', async () => {
+    // Defensive guard for the "CiviCRM invariant without a DB constraint"
+    // case: if a contact ever has two fellowships in the same year, the
+    // evaluator picks whichever `.find()` hits first — but the event was
+    // enqueued against a specific fellowship id. Dispatching would flip
+    // the wrong fellowship's status to SENT. The guard here short-circuits
+    // that and marks the row SKIPPED with a recognizable reason so
+    // operators see what happened.
+    (mockPrisma.appointeeEmailEvent.updateMany as any).mockResolvedValue({ count: 1 });
+    (mockPrisma.appointeeEmailEvent.findUniqueOrThrow as any).mockResolvedValue({
+      id: 'evt_mismatch',
+      emailType: 'BIO_PROJECT_DESCRIPTION',
+      contactId: 1,
+      academicYear: '2026-2027',
+      fellowshipId: 999, // enqueue against fellowship 999
+    });
+    mockCivicrm.getContactById.mockResolvedValue({
+      id: 1,
+      firstName: 'Ada',
+      lastName: 'L',
+      email: 'ada@example.com',
+    });
+    // Eligibility resolves to fellowship 10 (the default in tests) — not 999.
+    mockCivicrm.getFellowships.mockResolvedValue([
+      {
+        id: 10,
+        contactId: 1,
+        startDate: '2026-07-01',
+        endDate: '2027-06-30',
+        fellowshipAccepted: true,
+      },
+    ]);
+    (mockPrisma.appointeeEmailEvent.update as any).mockResolvedValue({});
+
+    const outcome = await dispatchOne('evt_mismatch');
+
+    expect(outcome).toBe('skipped');
+    // Neither sender was called — the guard kicked in BEFORE SES.
+    expect(mockEmail.sendBioProjectDescriptionEmail).not.toHaveBeenCalled();
+    expect(mockEmail.sendVitIdInvitationEmail).not.toHaveBeenCalled();
+    // The row is marked SKIPPED with a machine-readable reason.
+    const updateCall = (mockPrisma.appointeeEmailEvent.update as any).mock.calls[0][0];
+    expect(updateCall.data.status).toBe('SKIPPED');
+    expect(updateCall.data.failureReason).toBe('fellowship_id_mismatch');
   });
 });
 
@@ -701,6 +751,7 @@ describe('sendBioEmailManually', () => {
       id: 'evt_new',
       contactId: 1,
       academicYear: '2026-2027',
+      fellowshipId: 10,
     });
     mockEmail.sendBioProjectDescriptionEmail.mockRejectedValue(new Error('SES 550'));
     (mockPrisma.appointeeEmailEvent.update as any).mockResolvedValue({});
@@ -1399,6 +1450,7 @@ describe('sendVitIdInvitationManually', () => {
       emailType: 'VIT_ID_INVITATION',
       contactId: 1,
       academicYear: '2026-2027',
+      fellowshipId: 42,
     });
     // Eligibility at dispatch time still holds.
     (mockEmail.sendVitIdInvitationEmail as any).mockRejectedValue(

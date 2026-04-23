@@ -501,6 +501,68 @@ describe('getFellowsDashboard — appointeeStatus composition', () => {
     );
   });
 
+  it('looks up email events against the TARGET-year fellowship, not the display (latest-starting) fellowship', async () => {
+    // Returning-fellow scenario: a contact has a current-year fellowship
+    // (2025-2026, already enrolled — bio email was SENT under its
+    // fellowshipId) AND an upcoming accepted fellowship (2026-2027, display
+    // row because it starts later). The dashboard dedupes on latest-start
+    // so the display row is 2026-2027; but the current-year bio email is
+    // keyed under the 2025-2026 fellowship.
+    //
+    // If the lookup used displayFellowshipId (the 2026-2027 one), the
+    // dashboard would show "bio email: none" for a contact who actually
+    // received it. This test asserts the lookup uses the target-year
+    // fellowshipId so the SENT event surfaces correctly.
+    mockCivicrm.getFellowsWithContacts.mockResolvedValue([
+      // 2025-2026: current, fellowshipId=100, bio email already sent
+      fellow({
+        contactId: 1,
+        fellowshipId: 100,
+        startDate: '2025-09-01',
+        endDate: '2026-06-30',
+        fellowshipAccepted: true,
+      }),
+      // 2026-2027: upcoming accepted, fellowshipId=200, latest-starting
+      fellow({
+        contactId: 1,
+        fellowshipId: 200,
+        startDate: '2026-09-01',
+        endDate: '2027-06-30',
+        fellowshipAccepted: true,
+      }),
+    ]);
+    mockCivicrm.getEmailsForContacts.mockResolvedValue(new Map());
+    mockAuth0.listUsersByRole.mockResolvedValue([
+      { user_id: 'auth0|u', email: 'test@x.com', civicrmId: '1' },
+    ]);
+
+    // Bio email event stored under fellowshipId=100 (the current-year one).
+    // If the code looks up by displayFellowshipId (200), this event
+    // SILENTLY MISSES and the row shows "bio email: none".
+    mockAppointee.getEmailStatusForContacts.mockResolvedValue(
+      new Map([
+        [
+          '100:BIO_PROJECT_DESCRIPTION',
+          {
+            status: 'SENT' as any,
+            sentAt: new Date('2025-10-01'),
+            academicYear: '2025-2026',
+            emailType: 'BIO_PROJECT_DESCRIPTION' as any,
+            fellowshipId: 100,
+          },
+        ],
+      ])
+    );
+
+    const result = await getFellowsDashboard();
+
+    expect(result.fellows).toHaveLength(1);
+    // The bio email must be visible as SENT on the display row, proving the
+    // lookup used the 2025-2026 (current) fellowshipId, not the 2026-2027
+    // (display) one.
+    expect(result.fellows[0].bioEmail.status).toBe('sent');
+  });
+
   it('exposes appointeeStatus and vitIdInvitation on every row (never undefined)', async () => {
     // Guard: if a code path ever drops one of these from the assembly loop,
     // the UI blows up with "Cannot read property 'status' of undefined" on

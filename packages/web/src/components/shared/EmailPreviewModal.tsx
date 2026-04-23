@@ -106,7 +106,10 @@ export function EmailPreviewModal({
             <MetadataRow label="Subject" value={preview?.subject ?? '…'} />
           </section>
 
-          <div className="flex-1 min-h-[320px] overflow-auto bg-muted/30 px-6 py-4">
+          <div
+            className="flex-1 min-h-[320px] overflow-auto bg-muted/30 px-6 py-4"
+            aria-busy={preview === null && !previewError}
+          >
             {preview ? (
               preview.bodyFormat === 'html' ? (
                 <SandboxedHtml body={preview.body} />
@@ -116,8 +119,16 @@ export function EmailPreviewModal({
                 </pre>
               )
             ) : (
-              <div className="flex h-full items-center justify-center text-muted-foreground">
-                <Loader2 className="h-5 w-5 animate-spin" />
+              // Loading affordance for sighted + AT users. aria-busy on the
+              // parent announces the region as loading; the visually-hidden
+              // <span> gives screen readers a concrete label since the
+              // spinner icon alone isn't announced.
+              <div
+                role="status"
+                className="flex h-full items-center justify-center text-muted-foreground"
+              >
+                <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+                <span className="sr-only">Loading email preview…</span>
               </div>
             )}
           </div>
@@ -235,8 +246,14 @@ function SandboxedHtml({ body }: { body: string }) {
   // the iframe 'load' fires synchronously, before React attaches onLoad,
   // and (2) the body prop changes without triggering a new load event
   // (not expected with srcDoc, but cheap insurance).
+  //
+  // Deferred via requestAnimationFrame because srcDoc parsing is async —
+  // reading contentDocument synchronously after the body prop changes
+  // can see the PREVIOUS document. One frame is enough for the browser
+  // to commit the new doc.
   useEffect(() => {
-    measure();
+    const raf = requestAnimationFrame(() => measure());
+    return () => cancelAnimationFrame(raf);
   }, [body]);
 
   return (

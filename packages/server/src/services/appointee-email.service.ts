@@ -554,6 +554,35 @@ export async function dispatchOne(
     return 'deferred';
   }
 
+  // Defensive fellowship-id guard: the evaluator re-runs against CiviCRM and
+  // picks WHICHEVER fellowship matches (contactId, academicYear). If CiviCRM
+  // ever has two fellowships for the same contact+year (the invariant-
+  // without-constraint case), the evaluator could return fellowship A while
+  // this event was enqueued against B. Dispatching in that state would flip
+  // B's status to SENT against A's eligibility, corrupting the audit trail.
+  // Force a SKIPPED outcome when the ids disagree.
+  if (eligibility.eligible && eligibility.fellowshipId !== event.fellowshipId) {
+    logger.error(
+      {
+        eventId,
+        emailType: event.emailType,
+        contactId: event.contactId,
+        academicYear: event.academicYear,
+        eventFellowshipId: event.fellowshipId,
+        evaluatorFellowshipId: eligibility.fellowshipId,
+      },
+      'Appointee email: fellowshipId mismatch between event and eligibility re-check — skipping to preserve audit integrity'
+    );
+    await prisma.appointeeEmailEvent.update({
+      where: { id: eventId },
+      data: {
+        status: AppointeeEmailStatus.SKIPPED,
+        failureReason: 'fellowship_id_mismatch',
+      },
+    });
+    return 'skipped';
+  }
+
   if (!eligibility.eligible) {
     await prisma.appointeeEmailEvent.update({
       where: { id: eventId },

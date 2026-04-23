@@ -11,9 +11,17 @@ import { env } from '../env.js';
  * scripts/build-email-templates.ts). Compiled HTML is committed to the
  * repo so production never depends on `mjml` at runtime.
  *
- * Substitution is a simple `String.replaceAll('{{key}}', value)`. Two
- * tokens per template is well below the threshold where Handlebars /
- * MJML's built-in `mj-style` variables would pay for themselves.
+ * Substitution is a single-pass tokenized replace (see `substitute()` below).
+ * A single RegExp matches any `{{key}}` placeholder in the template and
+ * pulls values from the tokens map. Single-pass guarantees that a token
+ * value containing another placeholder (e.g., `firstName = '{{claimUrl}}'`)
+ * can never re-expand on a subsequent iteration. Templates routinely use
+ * three tokens today: `firstName`, `claimUrl` (VIT invitation only), and
+ * `logoUrl` (shared header).
+ *
+ * HTML output applies `escapeHtml()` to each value; plaintext output
+ * passes the raw value through. The caller picks format via the third
+ * argument to `substitute()`.
  */
 
 const __filename = fileURLToPath(import.meta.url);

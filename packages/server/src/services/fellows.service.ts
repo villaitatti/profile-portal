@@ -180,6 +180,15 @@ export async function getFellowsDashboard(
       displayFellowshipAccepted: boolean;
       hasCurrentFellowship: boolean;
       hasAcceptedUpcomingFellowship: boolean;
+      // The fellowship id for each target-year slot. Email events are stored
+      // keyed by the fellowship that OWNS that year's emails — not by the
+      // display fellowship. A returning fellow with two overlapping rows
+      // (e.g., a 2024-2025 current + a 2026-2027 upcoming) would otherwise
+      // look up events against the display fellowship (latest start = 2026-
+      // 2027) while the current-year bio email is stored under the 2024-
+      // 2025 fellowship id. Keeping a per-slot id avoids that mismatch.
+      currentFellowshipId: number | null;
+      acceptedUpcomingFellowshipId: number | null;
     }
   >();
 
@@ -211,6 +220,8 @@ export async function getFellowsDashboard(
         displayFellowshipAccepted: f.fellowshipAccepted === true,
         hasCurrentFellowship: isCurrent,
         hasAcceptedUpcomingFellowship: isAcceptedUpcoming,
+        currentFellowshipId: isCurrent ? f.fellowshipId : null,
+        acceptedUpcomingFellowshipId: isAcceptedUpcoming ? f.fellowshipId : null,
       });
     } else {
       if (f.startDate > existing.latestStart) {
@@ -228,8 +239,14 @@ export async function getFellowsDashboard(
         existing.displayFellowshipId = f.fellowshipId;
         existing.displayFellowshipAccepted = f.fellowshipAccepted === true;
       }
-      if (isCurrent) existing.hasCurrentFellowship = true;
-      if (isAcceptedUpcoming) existing.hasAcceptedUpcomingFellowship = true;
+      if (isCurrent) {
+        existing.hasCurrentFellowship = true;
+        existing.currentFellowshipId = f.fellowshipId;
+      }
+      if (isAcceptedUpcoming) {
+        existing.hasAcceptedUpcomingFellowship = true;
+        existing.acceptedUpcomingFellowshipId = f.fellowshipId;
+      }
     }
   }
 
@@ -285,10 +302,11 @@ export async function getFellowsDashboard(
   for (const item of fellowsByContact.values()) {
     const {
       entry,
-      displayFellowshipId,
       displayFellowshipAccepted,
       hasCurrentFellowship,
       hasAcceptedUpcomingFellowship,
+      currentFellowshipId,
+      acceptedUpcomingFellowshipId,
     } = item;
 
     const contactEmails = emailsByContact.get(entry.civicrmId);
@@ -301,21 +319,34 @@ export async function getFellowsDashboard(
       : hasAcceptedUpcomingFellowship
         ? nextAy
         : null;
+    // The fellowship ID for THIS target year. When a returning fellow has
+    // both a 2024-2025 current and a 2026-2027 accepted-upcoming row,
+    // targetAcademicYear is currentAy (2024-2025) and the matching
+    // fellowshipId is the 2024-2025 one — NOT the display fellowship
+    // (which is the latest-starting one). Events are stored keyed by the
+    // fellowship that owns the year, so the lookup must use this id.
+    const targetFellowshipId = hasCurrentFellowship
+      ? currentFellowshipId
+      : hasAcceptedUpcomingFellowship
+        ? acceptedUpcomingFellowshipId
+        : null;
 
-    // Look up event rows by (contactId, targetAcademicYear, emailType). The
     // Look up events by (fellowshipId, emailType) — matches the database's
-    // unique key exactly. Pre-codex-review we keyed by (contactId,
-    // academicYear, emailType), but the dashboard dedupes contacts by
-    // latest-starting fellowship; if a contact ever had two fellowships
-    // for the same year, that key would silently collapse their lifecycles.
-    // fellowshipId keying makes every event unambiguously bound to its
-    // originating fellowship.
-    const bioEvent = emailStatusMap.get(
-      `${displayFellowshipId}:${AppointeeEmailType.BIO_PROJECT_DESCRIPTION}`
-    );
-    const vitInvitationEvent = emailStatusMap.get(
-      `${displayFellowshipId}:${AppointeeEmailType.VIT_ID_INVITATION}`
-    );
+    // unique key exactly. Uses targetFellowshipId (not the display one) so
+    // a contact whose display row is a future fellowship still resolves
+    // current-year events to the right fellowship. See the map-shape
+    // comment on `currentFellowshipId` above for the returning-fellow
+    // scenario this guards against.
+    const bioEvent = targetFellowshipId
+      ? emailStatusMap.get(
+          `${targetFellowshipId}:${AppointeeEmailType.BIO_PROJECT_DESCRIPTION}`
+        )
+      : undefined;
+    const vitInvitationEvent = targetFellowshipId
+      ? emailStatusMap.get(
+          `${targetFellowshipId}:${AppointeeEmailType.VIT_ID_INVITATION}`
+        )
+      : undefined;
 
     // Pre-flight: if any of this fellow's emails is shared across multiple
     // CiviCRM contacts, short-circuit to 'needs-review' with
