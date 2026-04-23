@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.8.0] - 2026-04-23
+
+### Added
+- **Five-state appointee lifecycle on Manage Appointees.** A new "Appointee Status" column tells Angela at a glance what step each appointee is on: *Nominated* (waiting on her external nomination-letter flow), *Accepted* (ready for the VIT ID invitation), *VIT ID Sent* (waiting on the appointee to claim), *VIT ID Claimed* (ready for the bio email), *Enrolled* (done). State is derived purely from `(fellowshipAccepted, VIT ID match tier, invitation event, bio email event)`. No manual transitions; Angela just acts on the chip she sees. Returning fellows (who already have a VIT ID) skip straight from Nominated → VIT ID Claimed the moment their fellowship is accepted.
+- **New "Send VIT ID email" action.** When an appointee sits in *Accepted*, Angela clicks the crimson button, reviews the rendered email in a preview modal (To, BCC locked to `APPOINTEE_EMAIL_BCC`, full HTML body), and sends. The email goes to the appointee with Angela's office in BCC. The row flips to *VIT ID Sent* on the next dashboard refresh.
+- **HTML-styled email for both appointee-facing emails.** MJML pipeline with a shared layout (I Tatti logo header, institutional-grey frame, white body card, footer with Florence address). Georgia serif body + Arial UI, squared 4px-radius crimson CTA button, dark-mode handling via `prefers-color-scheme` + meta tags, multipart/alternative plaintext fallback for spam scoring. Both the new VIT ID invitation and the existing bio & project description email ship together so the cohort sees consistent branding. Friendly sender display names in the inbox: "I Tatti - VIT ID" and "I Tatti - Bio & Project".
+- **Email preview modal.** Replaces the old confirmation dialog for the bio email send and powers the new VIT invitation flow. Sandboxed iframe renders the real compiled HTML at full height. Inline error banners for preview-render failures (missing first name in CiviCRM → CiviCRM deep link) and send failures (Angela retries in place without reopening). CiviCRM 503s surface as "CiviCRM is temporarily unavailable. Try again in a moment." — a specific, actionable error instead of a generic server failure.
+- **Dev-only email preview routes** at `/__dev__/email-preview/vit-id-invitation?firstName=…` and `/__dev__/email-preview/bio-project-description?firstName=…`. Renders the real compiled HTML inline, no auth, gated on `NODE_ENV !== 'production'`. Lets developers iterate on the MJML without triggering real sends.
+
+### Changed
+- **Page renamed from "Fellows Management" to "Manage Appointees"** to match the sidebar label. The year dropdown moves up next to a dynamic H2 subtitle ("2025–2026 Appointees" / "All appointees") — the year becomes the hero control. The Year column drops from the table (redundant with the subtitle).
+- **Email-status query widened to ALL academic years** present in the dashboard scope (previously hardcoded to current + next). Past-year filters now surface their real send history when the data accumulates — no more silent blank pills.
+- **Bio email send button now opens the same preview modal** as the new VIT ID action. Angela sees exactly what the appointee will receive before she hits Send.
+- **`needs-review` rows disable both send buttons** with a tooltip pointing to the VIT ID Status column. Server-side endpoints also refuse these sends with `{reason: 'needs_review'}` — defense in depth.
+- **CI runs the full monorepo test suite** (`pnpm -r test`) instead of server-only. Web-side component regressions now gate merges. A new CI step re-runs the MJML compile and fails if the committed `*.compiled.html` files are stale, so developers can't forget to regenerate after editing templates.
+
+### Fixed
+- **"We have already created your VIT ID" was a lie.** The previous copy contradicted the actual claim flow, which creates the Auth0 account on first claim. Reworded to "you will need an I Tatti ID (VIT ID) linked to this email address" — now the email describes what actually happens. Caught in outside-voice review.
+
+### Database
+- Add `VIT_ID_INVITATION` to the `appointee_email_type` enum.
+- Rekey `appointee_email_events` from `(contactId, academicYear, emailType)` to `(fellowshipId, emailType)`. The old key assumed a business invariant ("one fellowship per appointee per year" is CiviCRM policy, not a schema constraint); keying by `fellowshipId` makes every fellowship its own lifecycle bucket. `contactId` and `academicYear` stay as non-unique columns for audit queries (you can still ask "what emails were sent in 2024-2025?" without a join). Migration includes a `DO $$` guard that refuses to run if the table is non-empty, so the documented "prod has zero rows" assumption can't silently fail.
+
+### For contributors
+- **New env vars**: `CLAIM_VIT_ID_URL` (URL the invitation CTA links to), `PORTAL_PUBLIC_URL` (origin for the email logo asset), `APPOINTEE_EMAIL_FROM_NAME_VIT_ID` and `APPOINTEE_EMAIL_FROM_NAME_BIO` (friendly inbox display names, default to "I Tatti - VIT ID" / "I Tatti - Bio & Project"). `APPOINTEE_EMAIL_BCC` is reused unchanged. All four new vars have sensible defaults except the URLs, which fail-fast at boot.
+- **MJML 5 templates live at `packages/server/src/templates/emails/*.mjml`.** Run `pnpm --filter @itatti/server build:email-templates` after editing. The compiled HTML is checked in; production never loads MJML at runtime.
+- **Shared `EmailPreviewModal` + `AppointeeStatusBadge` components** under `packages/web/src/components/shared/`. The modal reuses the existing radix Dialog primitive and renders HTML in a sandboxed iframe (`sandbox="allow-same-origin"`, no scripts).
+- **Strict `escapeHtml()` guard** on template substitutions. CiviCRM first names containing `<`, `>`, `&`, `"`, or `'` now render correctly in HTML output (plaintext path unchanged). Pre-landing review caught this before ship.
+- **Cron filter** (`dispatchPendingEmails`) excludes `VIT_ID_INVITATION` rows. The daily cron only dispatches bio emails. VIT invitations are manual-only (Angela clicks Send). The filter is the load-bearing guard; there's a dedicated regression test.
+- **Test suite**: 351 tests total (277 server + 74 web), +70 new since main. Coverage on the new surface area ≈ 90%.
+
+### Known follow-ups
+- Bio-email route should return 503 for `civicrm_unavailable` to match the VIT route (currently returns generic 500). Cosmetic UX drift, no correctness bug. Tracked in TODOS.md.
+- Manual-send retry paths have a tiny delete+create race window (worker could insert a row between the delete and the re-enqueue). No data-integrity impact; close via transaction or upsert later. Tracked in TODOS.md.
+- Claim-page visual review — the appointee's first interactive portal impression after clicking the CTA is the claim page; worth aligning it with the email's institutional design. Tracked in TODOS.md.
+
 ## [0.7.0] - 2026-04-22
 
 ### Added
