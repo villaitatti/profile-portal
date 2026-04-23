@@ -53,11 +53,23 @@
     </style>
      
     <style type="text/css">
-@media (prefers-color-scheme: dark) {
+/*
+     * Dark-mode palette. MJML inlines text color as `style="color:..."` on
+     * the inner <div> that wraps mj-text content, not on the <td class="it-text">
+     * wrapper. That inline declaration beats any class-scoped rule —
+     * !important at the class level loses to inline on the child. The
+     * `.it-text div` / `.it-muted div` selectors below explicitly target
+     * those inner divs so dark mode can override the baked-in color.
+     * Apple Mail (where this media query is honored most reliably) applies
+     * these correctly.
+     */
+    @media (prefers-color-scheme: dark) {
       .it-frame { background-color: #1d252c !important; }
       .it-card { background-color: #1d252c !important; }
       .it-text { color: #eef1f3 !important; }
+      .it-text div { color: #eef1f3 !important; }
       .it-muted { color: #b3bec5 !important; }
+      .it-muted div { color: #b3bec5 !important; }
       .it-footer-border td { border-top-color: #3a4450 !important; }
     }
     </style>
@@ -165,7 +177,7 @@
                   
       <div style="font-family:'brandon-grotesque', Georgia, 'Times New Roman', serif;font-size:16px;line-height:1.6;text-align:left;color:#1d252c;"><ol style="margin: 0; padding-left: 20px;">
             <li style="margin-bottom: 8px;">Click on the button below.</li>
-            <li style="margin-bottom: 8px;">In the &ldquo;Claim your VIT ID&rdquo; section, enter your email (the one you received this email) and click on &ldquo;Claim VIT ID&rdquo; &mdash; you will receive an email with a link.</li>
+            <li style="margin-bottom: 8px;">In the &ldquo;Claim your VIT ID&rdquo; section, enter your email (the address this email was sent to) and click on &ldquo;Claim VIT ID&rdquo; &mdash; you will receive an email with a link.</li>
             <li style="margin-bottom: 8px;">Click the link in the email, which will take you to a secure page where you can set a password of your choice.</li>
             <li style="margin-bottom: 0;">Once your password is set, your VIT ID will be active. Your VIT ID credentials will be the email address where you received this message and your newly set password.</li>
           </ol></div>

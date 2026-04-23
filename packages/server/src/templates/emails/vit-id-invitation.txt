@@ -5,7 +5,7 @@ Please note that I Tatti provides access to an intranet site where you can find 
 To set up and activate your VIT ID please follow the instructions below:
 
 1. Click on this link: {{claimUrl}}
-2. In the "Claim your VIT ID" section, enter your email (the one you received this email) and click on "Claim VIT ID" — you will receive an email with a link.
+2. In the "Claim your VIT ID" section, enter your email (the address this email was sent to) and click on "Claim VIT ID" — you will receive an email with a link.
 3. Click the link in the email, which will take you to a secure page where you can set a password of your choice.
 4. Once your password is set, your VIT ID will be active. Your VIT ID credentials will be the email address where you received this message and your newly set password.
 

@@ -23,14 +23,38 @@ import { logger } from '../../lib/logger.js';
  */
 export const devEmailPreviewRoutes = Router();
 
+/**
+ * Coerce an Express query param that might be undefined, a string, an array,
+ * or a ParsedQs into a plain string. Express gives us `string | string[] |
+ * ParsedQs | ParsedQs[]` via typing; `?firstName=a&firstName=b` arrives as
+ * an array at runtime. Pick the first element and cast to string; anything
+ * falsy falls back to the default.
+ */
+function firstQueryValue(raw: unknown, fallback: string): string {
+  if (raw === undefined || raw === null) return fallback;
+  if (Array.isArray(raw)) {
+    const first = raw[0];
+    return first !== undefined && first !== null ? String(first) : fallback;
+  }
+  return String(raw) || fallback;
+}
+
 devEmailPreviewRoutes.get('/vit-id-invitation', (req, res) => {
-  const firstName = (req.query.firstName as string) || 'Sofia';
+  const firstName = firstQueryValue(req.query.firstName, 'Sofia');
   try {
     const rendered = renderVitIdInvitation({ firstName });
     res.set('Content-Type', 'text/html; charset=utf-8').send(rendered.html);
   } catch (err) {
     if (err instanceof TemplateRenderError) {
-      res.status(400).send(`<h1>Template render error</h1><p>${err.reason}</p>`);
+      // Render reason codes from a safe static map so future additions to the
+      // reason union can't silently become an XSS sink. This is a dev-only
+      // route, but treating the render as trusted-output would be a footgun
+      // if it ever got promoted.
+      const reasonCopy: Record<string, string> = {
+        missing_first_name: 'Template requires a firstName — pass ?firstName=YourName in the query string.',
+      };
+      const message = reasonCopy[err.reason] ?? 'Template render failed.';
+      res.status(400).send(`<h1>Template render error</h1><p>${message}</p>`);
       return;
     }
     logger.error({ err }, 'Dev email preview: VIT ID invitation render failed');
@@ -39,7 +63,7 @@ devEmailPreviewRoutes.get('/vit-id-invitation', (req, res) => {
 });
 
 devEmailPreviewRoutes.get('/bio-project-description', (req, res) => {
-  const firstName = (req.query.firstName as string) || 'Marco';
+  const firstName = firstQueryValue(req.query.firstName, 'Marco');
   try {
     const rendered = renderBioProjectDescription({ firstName });
     res.set('Content-Type', 'text/html; charset=utf-8').send(rendered.html);

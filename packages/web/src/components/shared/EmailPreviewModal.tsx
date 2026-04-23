@@ -184,6 +184,12 @@ function InlineBanner({
 }) {
   return (
     <div
+      // role="alert" + aria-live="assertive" announces the message to
+      // screen-reader users when the banner appears. Without this, an
+      // Angela using VoiceOver would silently see Send disable with no
+      // feedback about why.
+      role="alert"
+      aria-live="assertive"
       className={cn(
         'mx-6 mt-4 flex items-start gap-2 rounded-md border px-3 py-2 text-[0.88rem]',
         tone === 'destructive' && 'border-destructive/30 bg-destructive/10 text-destructive'
@@ -205,27 +211,32 @@ function SandboxedHtml({ body }: { body: string }) {
   const ref = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(600);
 
-  useEffect(() => {
+  const measure = () => {
     const iframe = ref.current;
     if (!iframe) return;
-    const update = () => {
-      try {
-        const doc = iframe.contentDocument;
-        if (!doc) return;
-        // Use the tallest element available so tables + outer div both count.
-        const h = Math.max(
-          doc.documentElement?.scrollHeight ?? 0,
-          doc.body?.scrollHeight ?? 0,
-          320
-        );
-        setHeight(h);
-      } catch {
-        // same-origin sandbox can still throw on some clients; fall back.
-        setHeight(600);
-      }
-    };
-    iframe.addEventListener('load', update);
-    return () => iframe.removeEventListener('load', update);
+    try {
+      const doc = iframe.contentDocument;
+      if (!doc) return;
+      // Use the tallest element available so tables + outer div both count.
+      const h = Math.max(
+        doc.documentElement?.scrollHeight ?? 0,
+        doc.body?.scrollHeight ?? 0,
+        320
+      );
+      setHeight(h);
+    } catch {
+      // same-origin sandbox can still throw on some clients; fall back.
+      setHeight(600);
+    }
+  };
+
+  // React's onLoad prop (below) is the primary measurement path. This
+  // useEffect handles two extra cases: (1) the srcDoc is tiny enough that
+  // the iframe 'load' fires synchronously, before React attaches onLoad,
+  // and (2) the body prop changes without triggering a new load event
+  // (not expected with srcDoc, but cheap insurance).
+  useEffect(() => {
+    measure();
   }, [body]);
 
   return (
@@ -236,6 +247,7 @@ function SandboxedHtml({ body }: { body: string }) {
       title="Email preview"
       className="w-full rounded-md border bg-white"
       style={{ height }}
+      onLoad={measure}
     />
   );
 }

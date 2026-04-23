@@ -109,17 +109,31 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
+/**
+ * Single-pass token substitution. Builds one RegExp that matches any
+ * `{{keyName}}` placeholder present in the tokens map, then walks the source
+ * with String.replace so no token value can re-expand into another token —
+ * e.g., if firstName were ever "{{claimUrl}}", sequential replaceAll would
+ * re-substitute it on the next iteration. Single-pass eliminates that
+ * attack/accident surface.
+ *
+ * Keys are regex-escaped defensively. In practice token names are
+ * lowerCamelCase word characters, but the escape keeps the contract safe
+ * for future additions.
+ */
 function substitute(
   source: string,
   tokens: Record<string, string>,
   format: 'html' | 'text'
 ): string {
-  let out = source;
-  for (const [key, value] of Object.entries(tokens)) {
-    const safeValue = format === 'html' ? escapeHtml(value) : value;
-    out = out.replaceAll(`{{${key}}}`, safeValue);
-  }
-  return out;
+  const keys = Object.keys(tokens);
+  if (keys.length === 0) return source;
+  const escapedKeys = keys.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const pattern = new RegExp(`\\{\\{(${escapedKeys.join('|')})\\}\\}`, 'g');
+  return source.replace(pattern, (_match, key: string) => {
+    const value = tokens[key] ?? '';
+    return format === 'html' ? escapeHtml(value) : value;
+  });
 }
 
 /**

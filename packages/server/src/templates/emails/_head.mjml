@@ -30,11 +30,23 @@
     a { color: #ab192d; text-decoration: underline; }
   </mj-style>
   <mj-style>
+    /*
+     * Dark-mode palette. MJML inlines text color as `style="color:..."` on
+     * the inner <div> that wraps mj-text content, not on the <td class="it-text">
+     * wrapper. That inline declaration beats any class-scoped rule —
+     * !important at the class level loses to inline on the child. The
+     * `.it-text div` / `.it-muted div` selectors below explicitly target
+     * those inner divs so dark mode can override the baked-in color.
+     * Apple Mail (where this media query is honored most reliably) applies
+     * these correctly.
+     */
     @media (prefers-color-scheme: dark) {
       .it-frame { background-color: #1d252c !important; }
       .it-card { background-color: #1d252c !important; }
       .it-text { color: #eef1f3 !important; }
+      .it-text div { color: #eef1f3 !important; }
       .it-muted { color: #b3bec5 !important; }
+      .it-muted div { color: #b3bec5 !important; }
       .it-footer-border td { border-top-color: #3a4450 !important; }
     }
   </mj-style>

@@ -31,12 +31,17 @@ describe('AppointeeStatusBadge', () => {
     expect(sub).toHaveClass('text-destructive');
   });
 
-  it('has a descriptive title (tooltip) for each state to orient Angela', () => {
-    const { container } = render(<AppointeeStatusBadge status="vit-id-sent" />);
-    const chip = container.querySelector('[title]');
-    expect(chip).toBeTruthy();
-    // The exact copy is brand-voiced and may be tuned later; just assert it
-    // is not an empty string.
-    expect(chip?.getAttribute('title')?.length).toBeGreaterThan(10);
-  });
+  it.each(expectations)(
+    'has a descriptive title (tooltip) for $status',
+    ({ status }) => {
+      // Every lifecycle state renders a non-trivial title. If the tooltip
+      // map ever loses a state's copy, this test catches it before the
+      // regression reaches Angela's dashboard.
+      const { container } = render(<AppointeeStatusBadge status={status} />);
+      const chip = container.querySelector('[title]');
+      expect(chip).toBeTruthy();
+      const title = chip?.getAttribute('title') ?? '';
+      expect(title.length).toBeGreaterThan(10);
+    }
+  );
 });

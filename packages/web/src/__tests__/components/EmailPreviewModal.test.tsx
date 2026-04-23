@@ -30,6 +30,13 @@ describe('EmailPreviewModal', () => {
     // Send is disabled because preview hasn't loaded yet.
     const send = screen.getByRole('button', { name: /send email/i });
     expect(send).toBeDisabled();
+    // Loading affordance visible. Lucide's Loader2 renders as an <svg>
+    // with the `animate-spin` utility class — assert that one is present
+    // so Angela sees a spinner, not just a frozen disabled button. Radix
+    // Dialog portals its content, so we query document.body rather than
+    // the Testing Library container.
+    const spinners = document.body.querySelectorAll('.animate-spin');
+    expect(spinners.length).toBeGreaterThan(0);
   });
 
   it('renders To, BCC list, and Subject in the metadata strip when preview loads', () => {
@@ -68,9 +75,10 @@ describe('EmailPreviewModal', () => {
         onConfirm={() => {}}
       />
     );
-    expect(
-      screen.getByText(/missing a first name/i)
-    ).toBeInTheDocument();
+    // role="alert" + aria-live announces the error to screen readers.
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent(/missing a first name/i);
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
     expect(
       screen.getByRole('button', { name: /send email/i })
     ).toBeDisabled();
