@@ -26,8 +26,20 @@ jobs:
       - name: Generate Prisma client
         run: pnpm db:generate
 
+      - name: Build email templates
+        # MJML-compiled HTML is checked into the repo so production never
+        # depends on mjml at runtime. Re-running the compile and failing on
+        # a non-empty diff catches the case where a developer edits an .mjml
+        # source without committing the refreshed .compiled.html.
+        run: |
+          pnpm --filter @itatti/server build:email-templates
+          git diff --exit-code packages/server/src/templates/emails/
+
       - name: Typecheck
-        run: pnpm typecheck
+        run: pnpm -r typecheck
 
       - name: Test
-        run: pnpm test
+        # `-r` runs the test script in every workspace (server + web). Web
+        # tests previously didn't gate merges; codex review 2026-04-23 flagged
+        # this as a tight-feedback-loop gap. Fixed here.
+        run: pnpm -r test
