@@ -859,12 +859,13 @@ describe('getEmailStatusForContacts', () => {
     expect(mockPrisma.appointeeEmailEvent.findMany).not.toHaveBeenCalled();
   });
 
-  it('keys the returned map by `${contactId}:${academicYear}:${emailType}`', async () => {
+  it('keys the returned map by `${fellowshipId}:${emailType}` (matches the DB unique key)', async () => {
     const sent = new Date('2026-04-10');
     (mockPrisma.appointeeEmailEvent.findMany as any).mockResolvedValue([
       {
         contactId: 1,
         academicYear: '2026-2027',
+        fellowshipId: 101,
         status: 'SENT',
         sentAt: sent,
         emailType: 'BIO_PROJECT_DESCRIPTION',
@@ -872,6 +873,7 @@ describe('getEmailStatusForContacts', () => {
       {
         contactId: 2,
         academicYear: '2026-2027',
+        fellowshipId: 202,
         status: 'PENDING',
         sentAt: null,
         emailType: 'VIT_ID_INVITATION',
@@ -881,19 +883,50 @@ describe('getEmailStatusForContacts', () => {
     const result = await getEmailStatusForContacts([1, 2, 3], ['2026-2027']);
 
     expect(result.size).toBe(2);
-    expect(result.get('1:2026-2027:BIO_PROJECT_DESCRIPTION')).toEqual({
+    expect(result.get('101:BIO_PROJECT_DESCRIPTION')).toEqual({
       status: 'SENT',
       sentAt: sent,
       academicYear: '2026-2027',
       emailType: 'BIO_PROJECT_DESCRIPTION',
+      fellowshipId: 101,
     });
-    expect(result.get('2:2026-2027:VIT_ID_INVITATION')).toEqual({
+    expect(result.get('202:VIT_ID_INVITATION')).toEqual({
       status: 'PENDING',
       sentAt: null,
       academicYear: '2026-2027',
       emailType: 'VIT_ID_INVITATION',
+      fellowshipId: 202,
     });
-    expect(result.get('3:2026-2027:BIO_PROJECT_DESCRIPTION')).toBeUndefined();
+    expect(result.get('303:BIO_PROJECT_DESCRIPTION')).toBeUndefined();
+  });
+
+  it('keeps two fellowships for the same contact+year as distinct entries (no silent collapse)', async () => {
+    // Defense against the business-invariant-without-constraint scenario:
+    // if CiviCRM ever has two fellowships for the same (contactId, year),
+    // the dashboard events must not merge them. Keying by fellowshipId
+    // preserves one entry per fellowship.
+    (mockPrisma.appointeeEmailEvent.findMany as any).mockResolvedValue([
+      {
+        contactId: 1,
+        academicYear: '2026-2027',
+        fellowshipId: 501,
+        status: 'SENT',
+        sentAt: new Date(),
+        emailType: 'BIO_PROJECT_DESCRIPTION',
+      },
+      {
+        contactId: 1,
+        academicYear: '2026-2027',
+        fellowshipId: 502, // same contact + year, DIFFERENT fellowship
+        status: 'PENDING',
+        sentAt: null,
+        emailType: 'BIO_PROJECT_DESCRIPTION',
+      },
+    ]);
+    const result = await getEmailStatusForContacts([1], ['2026-2027']);
+    expect(result.size).toBe(2);
+    expect(result.get('501:BIO_PROJECT_DESCRIPTION')?.status).toBe('SENT');
+    expect(result.get('502:BIO_PROJECT_DESCRIPTION')?.status).toBe('PENDING');
   });
 
   it('filters by the types argument — bio only when requested', async () => {
@@ -1184,11 +1217,11 @@ describe('sendVitIdInvitationManually', () => {
     expect(result).toEqual({ ok: false, reason: 'already_sent' });
   });
 
-  it('returns existing PENDING event without creating a duplicate (in-flight short-circuit)', async () => {
+  it('returns existing SENDING event without creating a duplicate (in-flight short-circuit)', async () => {
     primeEligibleContactNoVitId();
     (mockPrisma.appointeeEmailEvent.findUnique as any).mockResolvedValue({
-      id: 'evt_pending',
-      status: 'PENDING',
+      id: 'evt_sending',
+      status: 'SENDING',
       sentAt: null,
     });
     const result = await sendVitIdInvitationManually({
@@ -1198,11 +1231,59 @@ describe('sendVitIdInvitationManually', () => {
     });
     expect(result).toEqual({
       ok: true,
-      eventId: 'evt_pending',
-      status: 'PENDING',
+      eventId: 'evt_sending',
+      status: 'SENDING',
       sentAt: null,
     });
     expect(mockPrisma.appointeeEmailEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('RE-DISPATCHES an existing PENDING row instead of short-circuiting', async () => {
+    // Unlike bio email, the cron NEVER picks up VIT invitations, so a
+    // PENDING VIT row would be stranded forever if sendVitIdInvitationManually
+    // short-circuited on it. This test asserts the row gets re-dispatched
+    // through the normal dispatchOne pipeline.
+    primeEligibleContactNoVitId();
+    const pendingEvt = {
+      id: 'evt_stuck_pending',
+      status: 'PENDING',
+      emailType: 'VIT_ID_INVITATION',
+      contactId: 1,
+      academicYear: '2026-2027',
+      fellowshipId: 42,
+      sentAt: null,
+      failureReason: null,
+      sesMessageId: null,
+      sendAfter: new Date(),
+    };
+    (mockPrisma.appointeeEmailEvent.findUnique as any).mockResolvedValue(
+      pendingEvt
+    );
+    // dispatchOne: atomic flip succeeds against the existing row, eligibility
+    // holds, SES accepts.
+    (mockPrisma.appointeeEmailEvent.updateMany as any).mockResolvedValue({ count: 1 });
+    (mockPrisma.appointeeEmailEvent.findUniqueOrThrow as any)
+      .mockResolvedValueOnce({ ...pendingEvt, status: 'SENDING' })
+      .mockResolvedValueOnce({ ...pendingEvt, status: 'SENT', sentAt: new Date() });
+    (mockPrisma.appointeeEmailEvent.update as any).mockResolvedValue(pendingEvt);
+    (mockEmail.sendVitIdInvitationEmail as any).mockResolvedValue({ messageId: 'ses-2' });
+
+    const result = await sendVitIdInvitationManually({
+      contactId: 1,
+      academicYear: '2026-2027',
+      triggeredBy: 'admin_manual:u1',
+    });
+
+    // Row was NOT deleted and NOT re-created — it was the same id.
+    expect(mockPrisma.appointeeEmailEvent.delete).not.toHaveBeenCalled();
+    expect(mockPrisma.appointeeEmailEvent.create).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      ok: true,
+      eventId: 'evt_stuck_pending',
+      status: 'SENT',
+    });
+    // dispatchOne was called via the shared code path.
+    expect(mockEmail.sendVitIdInvitationEmail).toHaveBeenCalled();
   });
 
   it('deletes a FAILED row and retries fresh', async () => {

@@ -799,14 +799,14 @@ export async function sendVitIdInvitationManually(args: {
     },
   });
 
+  let eventId: string;
   if (existing) {
     if (existing.status === AppointeeEmailStatus.SENT) {
       return { ok: false, reason: 'already_sent' };
     }
-    if (
-      existing.status === AppointeeEmailStatus.PENDING ||
-      existing.status === AppointeeEmailStatus.SENDING
-    ) {
+    if (existing.status === AppointeeEmailStatus.SENDING) {
+      // Another invocation is currently dispatching this row. Tell the admin
+      // UI it's in-flight; don't duplicate.
       return {
         ok: true,
         eventId: existing.id,
@@ -814,18 +814,40 @@ export async function sendVitIdInvitationManually(args: {
         sentAt: existing.sentAt,
       };
     }
-    // FAILED or SKIPPED — retry fresh.
-    await prisma.appointeeEmailEvent.delete({ where: { id: existing.id } });
+    if (existing.status === AppointeeEmailStatus.PENDING) {
+      // Unlike bio email, the cron NEVER dispatches VIT invitations. A
+      // PENDING VIT row only exists if a previous manual send crashed
+      // between enqueue and dispatch (or the stale-SENDING reclaim demoted
+      // a previous SENDING row). Fall through to dispatchOne so the row
+      // actually gets sent — short-circuiting with ok:true here would
+      // strand the row forever since no cron picks it up.
+      eventId = existing.id;
+    } else {
+      // FAILED or SKIPPED — delete and enqueue fresh so the caller sees a
+      // clean dispatch (preserves the status-flip semantics of the
+      // happy-path insert).
+      await prisma.appointeeEmailEvent.delete({ where: { id: existing.id } });
+      const enqueued = await enqueueAppointeeEmail({
+        contactId,
+        academicYear,
+        fellowshipId: eligibility.fellowshipId,
+        triggeredBy,
+        delayHours: 0,
+        emailType: AppointeeEmailType.VIT_ID_INVITATION,
+      });
+      eventId = enqueued.eventId;
+    }
+  } else {
+    const enqueued = await enqueueAppointeeEmail({
+      contactId,
+      academicYear,
+      fellowshipId: eligibility.fellowshipId,
+      triggeredBy,
+      delayHours: 0,
+      emailType: AppointeeEmailType.VIT_ID_INVITATION,
+    });
+    eventId = enqueued.eventId;
   }
-
-  const { eventId } = await enqueueAppointeeEmail({
-    contactId,
-    academicYear,
-    fellowshipId: eligibility.fellowshipId,
-    triggeredBy,
-    delayHours: 0,
-    emailType: AppointeeEmailType.VIT_ID_INVITATION,
-  });
 
   const outcome = await dispatchOne(eventId);
 
@@ -878,9 +900,14 @@ export async function sendVitIdInvitationManually(args: {
  * ALL email events across the given contacts, years, and types. Caller bins
  * the results by `emailType` into per-type maps.
  *
- * Key format: `${contactId}:${academicYear}:${emailType}`. The trailing
- * emailType allows callers to disambiguate bio vs VIT invitation rows with
- * O(1) lookups.
+ * Key format: `${fellowshipId}:${emailType}`. This mirrors the database's
+ * actual unique key on the events table (see migration 20260423120001 —
+ * codex review 2026-04-23 moved the key from contactId+year to fellowshipId
+ * because CiviCRM "one fellowship per contact per year" is policy, not a
+ * schema constraint). Keying the in-memory Map the same way means two
+ * fellowships for the same contact+year would surface as two independent
+ * entries, not collapse into one. `fellowshipId` is also present on the
+ * value payload so callers can double-check the binding.
  */
 export async function getEmailStatusForContacts(
   contactIds: number[],
@@ -897,6 +924,7 @@ export async function getEmailStatusForContacts(
       sentAt: Date | null;
       academicYear: string;
       emailType: AppointeeEmailType;
+      fellowshipId: number;
     }
   >
 > {
@@ -907,6 +935,7 @@ export async function getEmailStatusForContacts(
       sentAt: Date | null;
       academicYear: string;
       emailType: AppointeeEmailType;
+      fellowshipId: number;
     }
   >();
   if (
@@ -928,15 +957,17 @@ export async function getEmailStatusForContacts(
       status: true,
       sentAt: true,
       emailType: true,
+      fellowshipId: true,
     },
   });
 
   for (const row of rows) {
-    result.set(`${row.contactId}:${row.academicYear}:${row.emailType}`, {
+    result.set(`${row.fellowshipId}:${row.emailType}`, {
       status: row.status,
       sentAt: row.sentAt,
       academicYear: row.academicYear,
       emailType: row.emailType,
+      fellowshipId: row.fellowshipId,
     });
   }
   return result;

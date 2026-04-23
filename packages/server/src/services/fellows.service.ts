@@ -178,7 +178,6 @@ export async function getFellowsDashboard(
       latestStart: string;
       displayFellowshipId: number;
       displayFellowshipAccepted: boolean;
-      displayYearLabel: string;
       hasCurrentFellowship: boolean;
       hasAcceptedUpcomingFellowship: boolean;
     }
@@ -210,7 +209,6 @@ export async function getFellowsDashboard(
         latestStart: f.startDate,
         displayFellowshipId: f.fellowshipId,
         displayFellowshipAccepted: f.fellowshipAccepted === true,
-        displayYearLabel: yearLabel,
         hasCurrentFellowship: isCurrent,
         hasAcceptedUpcomingFellowship: isAcceptedUpcoming,
       });
@@ -229,7 +227,6 @@ export async function getFellowsDashboard(
         existing.latestStart = f.startDate;
         existing.displayFellowshipId = f.fellowshipId;
         existing.displayFellowshipAccepted = f.fellowshipAccepted === true;
-        existing.displayYearLabel = yearLabel;
       }
       if (isCurrent) existing.hasCurrentFellowship = true;
       if (isAcceptedUpcoming) existing.hasAcceptedUpcomingFellowship = true;
@@ -290,7 +287,6 @@ export async function getFellowsDashboard(
       entry,
       displayFellowshipId,
       displayFellowshipAccepted,
-      displayYearLabel,
       hasCurrentFellowship,
       hasAcceptedUpcomingFellowship,
     } = item;
@@ -307,22 +303,19 @@ export async function getFellowsDashboard(
         : null;
 
     // Look up event rows by (contactId, targetAcademicYear, emailType). The
-    // event store uses fellowshipId as its unique key, but the dashboard
-    // doesn't have a 1:1 contact→fellowship mapping here (we display the
-    // latest-starting fellowship); contactId+year+type is still sufficient
-    // for DISPLAY because the business invariant ("one fellowship per year
-    // per contact" — see codex finding #5, 2026-04-23) is enforced at the
-    // write layer via fellowshipId uniqueness.
-    const bioEvent = targetAcademicYear
-      ? emailStatusMap.get(
-          `${entry.civicrmId}:${targetAcademicYear}:${AppointeeEmailType.BIO_PROJECT_DESCRIPTION}`
-        )
-      : undefined;
-    const vitInvitationEvent = targetAcademicYear
-      ? emailStatusMap.get(
-          `${entry.civicrmId}:${targetAcademicYear}:${AppointeeEmailType.VIT_ID_INVITATION}`
-        )
-      : undefined;
+    // Look up events by (fellowshipId, emailType) — matches the database's
+    // unique key exactly. Pre-codex-review we keyed by (contactId,
+    // academicYear, emailType), but the dashboard dedupes contacts by
+    // latest-starting fellowship; if a contact ever had two fellowships
+    // for the same year, that key would silently collapse their lifecycles.
+    // fellowshipId keying makes every event unambiguously bound to its
+    // originating fellowship.
+    const bioEvent = emailStatusMap.get(
+      `${displayFellowshipId}:${AppointeeEmailType.BIO_PROJECT_DESCRIPTION}`
+    );
+    const vitInvitationEvent = emailStatusMap.get(
+      `${displayFellowshipId}:${AppointeeEmailType.VIT_ID_INVITATION}`
+    );
 
     // Pre-flight: if any of this fellow's emails is shared across multiple
     // CiviCRM contacts, short-circuit to 'needs-review' with
@@ -436,11 +429,6 @@ export async function getFellowsDashboard(
       base.reason = match.reason;
       base.candidates = match.candidates;
     }
-
-    // Silence "unused" lint on displayFellowshipId — it's reserved for an
-    // upcoming refactor (dashboard-side preview routes key by fellowship).
-    void displayFellowshipId;
-    void displayYearLabel;
 
     fellows.push(base);
   }
