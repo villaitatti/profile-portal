@@ -20,15 +20,42 @@ export type BioEmailIneligibilityReason =
   | 'no_primary_email'
   | 'already_sent';
 
+/**
+ * Reasons the VIT ID invitation send endpoint rejects a request. Overlaps
+ * with bio-email reasons where the underlying checks are identical
+ * (no_matching_fellowship, fellowship_not_accepted, no_primary_email,
+ * already_sent) but adds its own specifics:
+ *
+ *   - missing_first_name: template render throws without a first name
+ *   - already_has_vit_id: invitation would be misleading — they can sign in already
+ *   - needs_review: match ladder returned an ambiguous result; Angela must resolve first
+ *   - civicrm_unavailable: upstream fetch failed at validation time
+ */
+export type VitIdInvitationIneligibilityReason =
+  | 'no_matching_fellowship'
+  | 'fellowship_not_accepted'
+  | 'no_primary_email'
+  | 'missing_first_name'
+  | 'already_has_vit_id'
+  | 'needs_review'
+  | 'already_sent'
+  | 'civicrm_unavailable';
+
 export type EligibilityEvaluation =
-  | { eligible: true; email: string; firstName: string }
+  | { eligible: true; email: string; firstName: string; fellowshipId: number }
   | { eligible: false; reason: BioEmailIneligibilityReason };
+
+export type VitIdInvitationEligibilityEvaluation =
+  | { eligible: true; email: string; firstName: string; fellowshipId: number }
+  | { eligible: false; reason: VitIdInvitationIneligibilityReason };
 
 interface EnqueueArgs {
   contactId: number;
   academicYear: string;
+  fellowshipId: number;
   triggeredBy: string;
   delayHours?: number;
+  emailType?: AppointeeEmailType; // defaults to BIO_PROJECT_DESCRIPTION for back-compat
 }
 
 /**
@@ -45,38 +72,68 @@ export async function enqueueBioEmail(args: EnqueueArgs): Promise<{
   status: AppointeeEmailStatus;
   created: boolean;
 }> {
-  const { contactId, academicYear, triggeredBy, delayHours = 24 } = args;
+  return enqueueAppointeeEmail({
+    ...args,
+    emailType: args.emailType ?? AppointeeEmailType.BIO_PROJECT_DESCRIPTION,
+  });
+}
+
+/**
+ * Generic event-queue primitive for any appointee-facing email type.
+ * Race-safe: P2002 on (fellowshipId, emailType) is treated as "another
+ * worker got there first", and the winner's row is returned to the caller.
+ */
+export async function enqueueAppointeeEmail(args: {
+  contactId: number;
+  academicYear: string;
+  fellowshipId: number;
+  triggeredBy: string;
+  delayHours?: number;
+  emailType: AppointeeEmailType;
+}): Promise<{
+  eventId: string;
+  status: AppointeeEmailStatus;
+  created: boolean;
+}> {
+  const {
+    contactId,
+    academicYear,
+    fellowshipId,
+    triggeredBy,
+    delayHours = 24,
+    emailType,
+  } = args;
   const now = new Date();
   const sendAfter = new Date(now.getTime() + delayHours * 60 * 60 * 1000);
 
   const existing = await prisma.appointeeEmailEvent.findUnique({
     where: {
-      contactId_academicYear_emailType: {
-        contactId,
-        academicYear,
-        emailType: AppointeeEmailType.BIO_PROJECT_DESCRIPTION,
-      },
+      fellowshipId_emailType: { fellowshipId, emailType },
     },
   });
 
   if (existing) {
     logger.info(
-      { contactId, academicYear, existingStatus: existing.status, triggeredBy },
-      'Bio email: existing event found, not enqueuing duplicate'
+      {
+        fellowshipId,
+        contactId,
+        academicYear,
+        emailType,
+        existingStatus: existing.status,
+        triggeredBy,
+      },
+      'Appointee email: existing event found, not enqueuing duplicate'
     );
     return { eventId: existing.id, status: existing.status, created: false };
   }
 
-  // Race-safe create: another worker may have inserted the same
-  // (contactId, academicYear, emailType) tuple after our findUnique but before
-  // our create. Handle the resulting P2002 unique-constraint violation by
-  // re-reading the row the winner inserted, returning created:false.
   try {
     const created = await prisma.appointeeEmailEvent.create({
       data: {
+        fellowshipId,
         contactId,
         academicYear,
-        emailType: AppointeeEmailType.BIO_PROJECT_DESCRIPTION,
+        emailType,
         status: AppointeeEmailStatus.PENDING,
         sendAfter,
         triggeredBy,
@@ -84,8 +141,16 @@ export async function enqueueBioEmail(args: EnqueueArgs): Promise<{
     });
 
     logger.info(
-      { eventId: created.id, contactId, academicYear, sendAfter, triggeredBy },
-      'Bio email: event enqueued'
+      {
+        eventId: created.id,
+        fellowshipId,
+        contactId,
+        academicYear,
+        emailType,
+        sendAfter,
+        triggeredBy,
+      },
+      'Appointee email: event enqueued'
     );
 
     return { eventId: created.id, status: created.status, created: true };
@@ -93,22 +158,23 @@ export async function enqueueBioEmail(args: EnqueueArgs): Promise<{
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
       const winner = await prisma.appointeeEmailEvent.findUnique({
         where: {
-          contactId_academicYear_emailType: {
-            contactId,
-            academicYear,
-            emailType: AppointeeEmailType.BIO_PROJECT_DESCRIPTION,
-          },
+          fellowshipId_emailType: { fellowshipId, emailType },
         },
       });
       if (winner) {
         logger.info(
-          { contactId, academicYear, winnerStatus: winner.status, triggeredBy },
-          'Bio email: P2002 race lost, returning existing event'
+          {
+            fellowshipId,
+            contactId,
+            academicYear,
+            emailType,
+            winnerStatus: winner.status,
+            triggeredBy,
+          },
+          'Appointee email: P2002 race lost, returning existing event'
         );
         return { eventId: winner.id, status: winner.status, created: false };
       }
-      // P2002 without a re-fetched row is pathological — a row was deleted
-      // between the constraint hit and the re-read. Fall through to re-throw.
     }
     throw err;
   }
@@ -219,6 +285,126 @@ export async function evaluateBioEmailEligibility(
     eligible: true,
     email: contact.email,
     firstName: contact.firstName,
+    fellowshipId: eligibleFellowship.id,
+  };
+}
+
+/**
+ * Check the match-ladder match status for a contact. Returns the full
+ * FellowMatch so callers can distinguish needs-review (refuse politely)
+ * from no-account (VIT invitation is appropriate).
+ */
+async function classifyLadderMatch(
+  contactId: number,
+  contact: { firstName: string; lastName: string; email: string }
+) {
+  const [auth0Users, contactEmails] = await Promise.all([
+    auth0Service.listUsersByRole(env.AUTH0_FELLOWS_ROLE_ID),
+    civicrmService.getEmailsForContacts([contactId]),
+  ]);
+  const maps = buildAuth0Maps(auth0Users);
+  const emails = contactEmails.get(contactId);
+  const ladderFellow: LadderFellow = {
+    civicrmId: contactId,
+    firstName: contact.firstName,
+    lastName: contact.lastName,
+    primaryEmail: emails?.primary ?? null,
+    secondaries: emails?.secondaries ?? [],
+  };
+  return reconcile(ladderFellow, maps);
+}
+
+/**
+ * Eligibility for the VIT ID invitation email. Mirrors the bio-email
+ * eligibility check but with INVERTED VIT-ID semantics:
+ *   - bio requires that a VIT ID ALREADY exists
+ *   - VIT invitation requires that a VIT ID does NOT yet exist
+ *
+ * Other invariants are the same: CiviCRM contact must exist with a primary
+ * email, the targeted academic year must correspond to an accepted fellowship
+ * that is either current or upcoming, and upstream CiviCRM/Auth0 fetches must
+ * succeed (otherwise the caller re-tries later).
+ *
+ * Separate from bio because the error-reason union + CTA semantics differ.
+ */
+export async function evaluateVitIdInvitationEligibility(
+  contactId: number,
+  academicYear: string
+): Promise<VitIdInvitationEligibilityEvaluation> {
+  let contact: Awaited<ReturnType<typeof civicrmService.getContactById>>;
+  try {
+    contact = await civicrmService.getContactById(contactId);
+  } catch {
+    return { eligible: false, reason: 'civicrm_unavailable' };
+  }
+
+  if (!contact) {
+    return { eligible: false, reason: 'no_matching_fellowship' };
+  }
+
+  if (!contact.firstName || contact.firstName.trim().length === 0) {
+    return { eligible: false, reason: 'missing_first_name' };
+  }
+
+  if (!contact.email) {
+    return { eligible: false, reason: 'no_primary_email' };
+  }
+
+  let match;
+  try {
+    match = await classifyLadderMatch(contactId, contact);
+  } catch {
+    return { eligible: false, reason: 'civicrm_unavailable' };
+  }
+
+  if (match.status === 'needs-review') {
+    return { eligible: false, reason: 'needs_review' };
+  }
+  // hasVitId check: if the ladder found an account (active OR
+  // active-different-email), the invitation would be misleading — they
+  // can already sign in. Bio email is the appropriate follow-up.
+  if (match.status === 'active' || match.status === 'active-different-email') {
+    return { eligible: false, reason: 'already_has_vit_id' };
+  }
+
+  let fellowships;
+  try {
+    fellowships = await civicrmService.getFellowships(contactId);
+  } catch {
+    return { eligible: false, reason: 'civicrm_unavailable' };
+  }
+
+  const matching = fellowships.filter(
+    (f) => academicYearLabelForFellowship(f) === academicYear
+  );
+  if (matching.length === 0) {
+    return { eligible: false, reason: 'no_matching_fellowship' };
+  }
+
+  // Fellowship must be accepted AND current-or-upcoming. Rejecting past
+  // fellowships covers the operator-error case (Angela accidentally selects
+  // last year's cohort).
+  const eligibleFellowship = matching.find((f) => {
+    if (!f.fellowshipAccepted) return false;
+    const temporal = classifyFellowship(f.startDate, f.endDate);
+    return temporal === 'current' || temporal === 'upcoming';
+  });
+
+  if (!eligibleFellowship) {
+    const hasUnacceptedMatch = matching.some(
+      (f) => !f.fellowshipAccepted
+    );
+    if (hasUnacceptedMatch) {
+      return { eligible: false, reason: 'fellowship_not_accepted' };
+    }
+    return { eligible: false, reason: 'no_matching_fellowship' };
+  }
+
+  return {
+    eligible: true,
+    email: contact.email,
+    firstName: contact.firstName,
+    fellowshipId: eligibleFellowship.id,
   };
 }
 
@@ -281,10 +467,15 @@ export async function dispatchPendingEmails(opts?: {
     );
   }
 
+  // Cron dispatches bio emails only. VIT ID invitations are manual-only
+  // (Angela clicks Send after reviewing each case) and must never be
+  // auto-sent by the daily cron — the eligibility window is different and
+  // the copy includes a CTA the sender should be consciously issuing.
   const due = await prisma.appointeeEmailEvent.findMany({
     where: {
       status: AppointeeEmailStatus.PENDING,
       sendAfter: { lte: now },
+      emailType: AppointeeEmailType.BIO_PROJECT_DESCRIPTION,
     },
     orderBy: { sendAfter: 'asc' },
     take: limit,
@@ -339,10 +530,17 @@ export async function dispatchOne(
     where: { id: eventId },
   });
 
-  // Re-evaluate eligibility (contact may have changed since enqueue).
-  let eligibility: EligibilityEvaluation;
+  // Re-evaluate eligibility (contact may have changed since enqueue). Branch
+  // on email type — bio and VIT invitation share the contact/year/fellowship
+  // checks but have INVERTED VIT-ID preconditions.
+  let eligibility:
+    | { eligible: true; email: string; firstName: string; fellowshipId: number }
+    | { eligible: false; reason: string };
   try {
-    eligibility = await evaluateBioEmailEligibility(event.contactId, event.academicYear);
+    eligibility =
+      event.emailType === AppointeeEmailType.VIT_ID_INVITATION
+        ? await evaluateVitIdInvitationEligibility(event.contactId, event.academicYear)
+        : await evaluateBioEmailEligibility(event.contactId, event.academicYear);
   } catch (err) {
     // Upstream failure (CiviCRM down). Leave as deferred — revert to PENDING.
     await prisma.appointeeEmailEvent.update({
@@ -350,8 +548,8 @@ export async function dispatchOne(
       data: { status: AppointeeEmailStatus.PENDING },
     });
     logger.warn(
-      { err, eventId, contactId: event.contactId },
-      'Bio email: eligibility check failed, deferring to next run'
+      { err, eventId, emailType: event.emailType, contactId: event.contactId },
+      'Appointee email: eligibility check failed, deferring to next run'
     );
     return 'deferred';
   }
@@ -365,8 +563,8 @@ export async function dispatchOne(
       },
     });
     logger.info(
-      { eventId, reason: eligibility.reason },
-      'Bio email: eligibility lost, skipping'
+      { eventId, emailType: event.emailType, reason: eligibility.reason },
+      'Appointee email: eligibility lost, skipping'
     );
     return 'skipped';
   }
@@ -375,10 +573,16 @@ export async function dispatchOne(
   // send, so FAILED is the correct terminal state (admin can retry).
   let messageId: string | undefined;
   try {
-    const result = await emailService.sendBioProjectDescriptionEmail({
-      to: eligibility.email,
-      firstName: eligibility.firstName,
-    });
+    const result =
+      event.emailType === AppointeeEmailType.VIT_ID_INVITATION
+        ? await emailService.sendVitIdInvitationEmail({
+            to: eligibility.email,
+            firstName: eligibility.firstName,
+          })
+        : await emailService.sendBioProjectDescriptionEmail({
+            to: eligibility.email,
+            firstName: eligibility.firstName,
+          });
     messageId = result.messageId;
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
@@ -389,7 +593,7 @@ export async function dispatchOne(
         failureReason: reason.slice(0, 500),
       },
     });
-    logger.error({ err, eventId }, 'Bio email: SES send failed');
+    logger.error({ err, eventId, emailType: event.emailType }, 'Appointee email: SES send failed');
     return 'failed';
   }
 
@@ -475,9 +679,8 @@ export async function sendBioEmailManually(args: {
   // but guard at the API layer too).
   const existing = await prisma.appointeeEmailEvent.findUnique({
     where: {
-      contactId_academicYear_emailType: {
-        contactId,
-        academicYear,
+      fellowshipId_emailType: {
+        fellowshipId: eligibility.fellowshipId,
         emailType: AppointeeEmailType.BIO_PROJECT_DESCRIPTION,
       },
     },
@@ -506,6 +709,7 @@ export async function sendBioEmailManually(args: {
   const { eventId } = await enqueueBioEmail({
     contactId,
     academicYear,
+    fellowshipId: eligibility.fellowshipId,
     triggeredBy,
     delayHours: 0,
   });
@@ -564,27 +768,157 @@ export async function sendBioEmailManually(args: {
 }
 
 /**
- * Batched lookup for the Fellows Management dashboard. Given N contacts and
- * the [current, next] academic-year labels, returns a Map keyed by
- * `${contactId}:${academicYear}` → {status, sentAt, academicYear}.
+ * Manual admin path for the VIT ID invitation email. Same shape and
+ * idempotency guarantees as sendBioEmailManually, but:
+ *   - preconditions are inverted (no existing VIT ID, not needs-review)
+ *   - eligibility returns the richer VitIdInvitationIneligibilityReason union
+ *   - cron does NOT pick up VIT_ID_INVITATION rows — this function is the
+ *     only path that ever enqueues + dispatches one
+ */
+export async function sendVitIdInvitationManually(args: {
+  contactId: number;
+  academicYear: string;
+  triggeredBy: string;
+}): Promise<
+  | { ok: true; eventId: string; status: AppointeeEmailStatus; sentAt: Date | null }
+  | { ok: false; reason: VitIdInvitationIneligibilityReason }
+> {
+  const { contactId, academicYear, triggeredBy } = args;
+
+  const eligibility = await evaluateVitIdInvitationEligibility(contactId, academicYear);
+  if (!eligibility.eligible) {
+    return { ok: false, reason: eligibility.reason };
+  }
+
+  const existing = await prisma.appointeeEmailEvent.findUnique({
+    where: {
+      fellowshipId_emailType: {
+        fellowshipId: eligibility.fellowshipId,
+        emailType: AppointeeEmailType.VIT_ID_INVITATION,
+      },
+    },
+  });
+
+  if (existing) {
+    if (existing.status === AppointeeEmailStatus.SENT) {
+      return { ok: false, reason: 'already_sent' };
+    }
+    if (
+      existing.status === AppointeeEmailStatus.PENDING ||
+      existing.status === AppointeeEmailStatus.SENDING
+    ) {
+      return {
+        ok: true,
+        eventId: existing.id,
+        status: existing.status,
+        sentAt: existing.sentAt,
+      };
+    }
+    // FAILED or SKIPPED — retry fresh.
+    await prisma.appointeeEmailEvent.delete({ where: { id: existing.id } });
+  }
+
+  const { eventId } = await enqueueAppointeeEmail({
+    contactId,
+    academicYear,
+    fellowshipId: eligibility.fellowshipId,
+    triggeredBy,
+    delayHours: 0,
+    emailType: AppointeeEmailType.VIT_ID_INVITATION,
+  });
+
+  const outcome = await dispatchOne(eventId);
+
+  if (outcome === 'deferred') {
+    throw new Error('upstream_fetch_failed');
+  }
+  if (outcome === 'failed') {
+    throw new Error('ses_send_failed');
+  }
+
+  const finalEvent = await prisma.appointeeEmailEvent.findUniqueOrThrow({
+    where: { id: eventId },
+  });
+
+  if (outcome === 'skipped') {
+    const reason = finalEvent.failureReason;
+    const validReasons: readonly VitIdInvitationIneligibilityReason[] = [
+      'no_matching_fellowship',
+      'fellowship_not_accepted',
+      'no_primary_email',
+      'missing_first_name',
+      'already_has_vit_id',
+      'needs_review',
+      'already_sent',
+      'civicrm_unavailable',
+    ];
+    if (reason && (validReasons as readonly string[]).includes(reason)) {
+      return {
+        ok: false,
+        reason: reason as VitIdInvitationIneligibilityReason,
+      };
+    }
+    logger.warn(
+      { eventId, failureReason: reason },
+      'VIT ID invitation: dispatch returned skipped with unrecognized failureReason'
+    );
+    throw new Error('dispatch_skipped_unexpected');
+  }
+
+  return {
+    ok: true,
+    eventId: finalEvent.id,
+    status: finalEvent.status,
+    sentAt: finalEvent.sentAt,
+  };
+}
+
+/**
+ * Batched lookup for the Fellows Management dashboard. One query returns
+ * ALL email events across the given contacts, years, and types. Caller bins
+ * the results by `emailType` into per-type maps.
  *
- * Always use this instead of per-row queries to avoid the N+1 problem.
+ * Key format: `${contactId}:${academicYear}:${emailType}`. The trailing
+ * emailType allows callers to disambiguate bio vs VIT invitation rows with
+ * O(1) lookups.
  */
 export async function getEmailStatusForContacts(
   contactIds: number[],
-  academicYears: string[]
+  academicYears: string[],
+  emailTypes: AppointeeEmailType[] = [
+    AppointeeEmailType.BIO_PROJECT_DESCRIPTION,
+    AppointeeEmailType.VIT_ID_INVITATION,
+  ]
 ): Promise<
-  Map<string, { status: AppointeeEmailStatus; sentAt: Date | null; academicYear: string }>
+  Map<
+    string,
+    {
+      status: AppointeeEmailStatus;
+      sentAt: Date | null;
+      academicYear: string;
+      emailType: AppointeeEmailType;
+    }
+  >
 > {
   const result = new Map<
     string,
-    { status: AppointeeEmailStatus; sentAt: Date | null; academicYear: string }
+    {
+      status: AppointeeEmailStatus;
+      sentAt: Date | null;
+      academicYear: string;
+      emailType: AppointeeEmailType;
+    }
   >();
-  if (contactIds.length === 0 || academicYears.length === 0) return result;
+  if (
+    contactIds.length === 0 ||
+    academicYears.length === 0 ||
+    emailTypes.length === 0
+  )
+    return result;
 
   const rows = await prisma.appointeeEmailEvent.findMany({
     where: {
-      emailType: AppointeeEmailType.BIO_PROJECT_DESCRIPTION,
+      emailType: { in: emailTypes },
       contactId: { in: contactIds },
       academicYear: { in: academicYears },
     },
@@ -593,14 +927,16 @@ export async function getEmailStatusForContacts(
       academicYear: true,
       status: true,
       sentAt: true,
+      emailType: true,
     },
   });
 
   for (const row of rows) {
-    result.set(`${row.contactId}:${row.academicYear}`, {
+    result.set(`${row.contactId}:${row.academicYear}:${row.emailType}`, {
       status: row.status,
       sentAt: row.sentAt,
       academicYear: row.academicYear,
+      emailType: row.emailType,
     });
   }
   return result;

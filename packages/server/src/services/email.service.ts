@@ -1,5 +1,9 @@
 import { env, isDevMode } from '../env.js';
 import { logger } from '../lib/logger.js';
+import {
+  renderVitIdInvitation,
+  renderBioProjectDescription,
+} from '../templates/render.js';
 
 interface ClaimNotificationInput {
   email: string;
@@ -48,6 +52,29 @@ async function getSesClient() {
 
 interface SendEmailOptions {
   bccAddresses?: string[];
+  /**
+   * Friendly sender name. Rendered into SES `Source` as
+   *   "<fromName> <AWS_SES_FROM_EMAIL>"
+   * Email clients display this in the inbox. Undefined falls back to the
+   * raw from-address, which shows up as "no-reply@mail.itatti.harvard.edu"
+   * and signals "automated" to the recipient.
+   */
+  fromName?: string;
+  /**
+   * HTML body for multipart/alternative delivery. When provided alongside
+   * the required plaintext `body`, SES sends BOTH as Body.Html + Body.Text
+   * and the client picks whichever it can render. Omit to send plaintext-only.
+   */
+  html?: string;
+}
+
+function buildSesSource(fromName?: string): string {
+  const address = env.AWS_SES_FROM_EMAIL!;
+  if (!fromName) return address;
+  // Quote the display name per RFC 5322. Also scrub any embedded " or \n
+  // that would break the header.
+  const safe = fromName.replace(/[\r\n"]/g, '');
+  return `"${safe}" <${address}>`;
 }
 
 async function sendEmail(
@@ -61,7 +88,14 @@ async function sendEmail(
   // "would send" semantics — NOT this function's return value.
   if (isDevMode) {
     logger.info(
-      { to, subject, bccAddresses: options?.bccAddresses, bodyLength: body.length },
+      {
+        to,
+        subject,
+        bccAddresses: options?.bccAddresses,
+        fromName: options?.fromName,
+        hasHtml: !!options?.html,
+        bodyLength: body.length,
+      },
       'Email (dev mode): would send'
     );
     logger.debug({ body }, 'Email body');
@@ -80,21 +114,40 @@ async function sendEmail(
   // Lazy import + cached client to avoid loading AWS SDK in dev mode
   const client = await getSesClient();
   const { SendEmailCommand } = await import('@aws-sdk/client-ses');
+
+  // Body shape: plaintext-only when html is absent, multipart/alternative
+  // (HTML + plaintext fallback) when html is provided.
+  const messageBody = options?.html
+    ? {
+        Text: { Data: body, Charset: 'UTF-8' },
+        Html: { Data: options.html, Charset: 'UTF-8' },
+      }
+    : {
+        Text: { Data: body, Charset: 'UTF-8' },
+      };
+
   const command = new SendEmailCommand({
-    Source: env.AWS_SES_FROM_EMAIL,
+    Source: buildSesSource(options?.fromName),
     Destination: {
       ToAddresses: [to],
       ...(options?.bccAddresses?.length ? { BccAddresses: options.bccAddresses } : {}),
     },
     Message: {
       Subject: { Data: subject, Charset: 'UTF-8' },
-      Body: { Text: { Data: body, Charset: 'UTF-8' } },
+      Body: messageBody,
     },
   });
 
   const result = await client.send(command);
   logger.info(
-    { to, subject, bccAddresses: options?.bccAddresses, messageId: result?.MessageId },
+    {
+      to,
+      subject,
+      bccAddresses: options?.bccAddresses,
+      fromName: options?.fromName,
+      hasHtml: !!options?.html,
+      messageId: result?.MessageId,
+    },
     'Email sent via SES'
   );
   return result?.MessageId as string | undefined;
@@ -225,73 +278,101 @@ export async function sendClaimNotification(input: ClaimNotificationInput): Prom
   }
 }
 
-const BIO_EMAIL_SUBJECT = 'Biography and Project Description';
-const BIO_EMAIL_JSM_URL =
-  'https://helpdesk.itatti.harvard.edu/servicedesk/customer/portal/4/group/5/create/10';
-const BIO_EMAIL_EXAMPLE_URL = 'https://itatti.harvard.edu/people/giovanni-vito-distefano';
+/**
+ * Computes the appointee-email delivery envelope: actual `to`, BCC list,
+ * and whether a redirect is active. Shared by the VIT ID invitation and
+ * bio emails so both paths honor APPOINTEE_EMAIL_REDIRECT_TO identically.
+ *
+ * A redirect is in effect whenever APPOINTEE_EMAIL_REDIRECT_TO is set,
+ * even if it happens to equal the intended recipient. Basing the flag on
+ * actualTo !== to would silently re-enable production BCCs whenever a
+ * developer's test redirect address matches the real appointee's address.
+ *
+ * Redirect is ALL-OR-NOTHING: if APPOINTEE_EMAIL_REDIRECT_TO is set on a
+ * staging box that also inherits a production APPOINTEE_EMAIL_BCC (Angela
+ * + Andrea), the BCC list would otherwise leak test emails to real admins.
+ * Drop BCCs entirely when redirected.
+ */
+function buildAppointeeEnvelope(
+  to: string,
+  label: 'VIT ID invitation' | 'bio'
+): { actualTo: string; bccAddresses: string[]; isRedirected: boolean } {
+  const redirectTarget = env.APPOINTEE_EMAIL_REDIRECT_TO?.trim();
+  const isRedirected = !!redirectTarget;
+  const actualTo = redirectTarget || to;
+  const bccAddresses = isRedirected ? [] : parseBccList(env.APPOINTEE_EMAIL_BCC);
+
+  if (isRedirected) {
+    logger.info(
+      {
+        intended: to,
+        redirectedTo: actualTo,
+        droppedBcc: parseBccList(env.APPOINTEE_EMAIL_BCC).length,
+      },
+      `${label} email redirected via APPOINTEE_EMAIL_REDIRECT_TO (BCC list dropped)`
+    );
+  }
+
+  return { actualTo, bccAddresses, isRedirected };
+}
 
 /**
  * Sends the "Biography and Project Description" email to an Appointee.
  * Returns the SES MessageId when delivered, or undefined in dev/no-config mode.
  *
- * Honors two env knobs:
+ * Honors env knobs:
  *   - APPOINTEE_EMAIL_REDIRECT_TO: if set, overrides the recipient (dev/staging
  *     safety valve; production refuses to boot with it set).
- *   - APPOINTEE_EMAIL_BCC: comma-separated BCC list (Angela + Andrea typically).
+ *   - APPOINTEE_EMAIL_BCC: comma-separated BCC list.
+ *   - APPOINTEE_EMAIL_FROM_NAME_BIO: inbox display name (default "I Tatti - Bio & Project").
+ *
+ * Body is rendered from the MJML template at compile time; this function
+ * dispatches HTML + plaintext fallback via SES multipart/alternative.
  */
 export async function sendBioProjectDescriptionEmail(args: {
   to: string;
   firstName: string;
 }): Promise<{ messageId: string | undefined }> {
   const { to, firstName } = args;
-  const greetingName = firstName && firstName.trim().length > 0 ? firstName.trim() : 'Appointee';
+  const { actualTo, bccAddresses } = buildAppointeeEnvelope(to, 'bio');
+  const rendered = renderBioProjectDescription({ firstName });
 
-  // A redirect is in effect whenever APPOINTEE_EMAIL_REDIRECT_TO is set,
-  // even if it happens to equal the intended recipient. Basing the flag on
-  // actualTo !== to would silently re-enable production BCCs whenever a
-  // developer's test redirect address matches the real appointee's address.
-  const redirectTarget = env.APPOINTEE_EMAIL_REDIRECT_TO?.trim();
-  const isRedirected = !!redirectTarget;
-  const actualTo = redirectTarget || to;
-
-  // Redirect must be ALL-OR-NOTHING: if a developer sets
-  // APPOINTEE_EMAIL_REDIRECT_TO on a staging box that also inherits a
-  // production APPOINTEE_EMAIL_BCC (Angela + Andrea), the BCC list would
-  // otherwise leak test emails to real admins. Drop BCCs entirely when
-  // redirected.
-  const bccAddresses = isRedirected ? [] : parseBccList(env.APPOINTEE_EMAIL_BCC);
-
-  if (isRedirected) {
-    logger.info(
-      { intended: to, redirectedTo: actualTo, droppedBcc: parseBccList(env.APPOINTEE_EMAIL_BCC).length },
-      'Bio email redirected via APPOINTEE_EMAIL_REDIRECT_TO (BCC list dropped)'
-    );
-  }
-
-  const body = [
-    `Dear ${greetingName},`,
-    ``,
-    `As an I Tatti appointee, you will be featured on the I Tatti website. To complete your page, we kindly ask you to submit the following materials:`,
-    ``,
-    `  • A short biography (maximum 760 characters)`,
-    `  • A project description (maximum 1,500 characters)`,
-    ``,
-    `Both should be written in English, in the third person, and presented as complete sentences (please do not use bullet points).`,
-    ``,
-    `We would be grateful if you could submit your materials as soon as possible, by using the following link:`,
-    BIO_EMAIL_JSM_URL,
-    ``,
-    `To log in, please use your VIT ID: enter your email address, click Next, then select Continue with single sign-on. If prompted, enter your email and VIT ID password to complete the process.`,
-    ``,
-    `If you would like to see an example of what we are looking for, please view this entry for one of this year's appointees:`,
-    BIO_EMAIL_EXAMPLE_URL,
-    ``,
-    `Best regards,`,
-    `I Tatti — The Harvard University Center for Italian Renaissance Studies`,
-  ].join('\n');
-
-  const messageId = await sendEmail(actualTo, BIO_EMAIL_SUBJECT, body, {
+  const messageId = await sendEmail(actualTo, rendered.subject, rendered.text, {
     bccAddresses: bccAddresses.length > 0 ? bccAddresses : undefined,
+    fromName: env.APPOINTEE_EMAIL_FROM_NAME_BIO,
+    html: rendered.html,
+  });
+
+  return { messageId };
+}
+
+/**
+ * Sends the VIT ID invitation email — Angela clicks Send after the fellowship
+ * is accepted, the appointee receives step-by-step claim instructions plus
+ * a prominent "Claim your VIT ID" CTA that links to CLAIM_VIT_ID_URL.
+ *
+ * Throws TemplateRenderError('missing_first_name') when the CiviCRM contact
+ * is missing a first name (route handlers map this to a structured UI error).
+ *
+ * Honors the same env knobs as sendBioProjectDescriptionEmail plus:
+ *   - APPOINTEE_EMAIL_FROM_NAME_VIT_ID: inbox display name (default "I Tatti - VIT ID").
+ *   - CLAIM_VIT_ID_URL: interpolated into the CTA button and plaintext link.
+ */
+export async function sendVitIdInvitationEmail(args: {
+  to: string;
+  firstName: string;
+}): Promise<{ messageId: string | undefined }> {
+  const { to, firstName } = args;
+  const { actualTo, bccAddresses } = buildAppointeeEnvelope(
+    to,
+    'VIT ID invitation'
+  );
+  const rendered = renderVitIdInvitation({ firstName });
+
+  const messageId = await sendEmail(actualTo, rendered.subject, rendered.text, {
+    bccAddresses: bccAddresses.length > 0 ? bccAddresses : undefined,
+    fromName: env.APPOINTEE_EMAIL_FROM_NAME_VIT_ID,
+    html: rendered.html,
   });
 
   return { messageId };

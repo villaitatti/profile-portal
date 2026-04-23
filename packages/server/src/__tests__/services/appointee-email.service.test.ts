@@ -130,6 +130,7 @@ describe('enqueueBioEmail', () => {
     const result = await enqueueBioEmail({
       contactId: 100,
       academicYear: '2026-2027',
+      fellowshipId: 7001,
       triggeredBy: 'claim_auto',
     });
 
@@ -140,6 +141,7 @@ describe('enqueueBioEmail', () => {
     const createCall = (mockPrisma.appointeeEmailEvent.create as any).mock.calls[0][0];
     expect(createCall.data.contactId).toBe(100);
     expect(createCall.data.academicYear).toBe('2026-2027');
+    expect(createCall.data.fellowshipId).toBe(7001);
     expect(createCall.data.triggeredBy).toBe('claim_auto');
     expect(createCall.data.emailType).toBe('BIO_PROJECT_DESCRIPTION');
     const deltaMs = createCall.data.sendAfter.getTime() - before;
@@ -158,6 +160,7 @@ describe('enqueueBioEmail', () => {
     await enqueueBioEmail({
       contactId: 200,
       academicYear: '2026-2027',
+      fellowshipId: 7002,
       triggeredBy: 'admin_manual:user-1',
       delayHours: 0,
     });
@@ -177,6 +180,7 @@ describe('enqueueBioEmail', () => {
     const result = await enqueueBioEmail({
       contactId: 300,
       academicYear: '2026-2027',
+      fellowshipId: 7003,
       triggeredBy: 'claim_auto',
     });
 
@@ -201,6 +205,7 @@ describe('enqueueBioEmail', () => {
     const result = await enqueueBioEmail({
       contactId: 400,
       academicYear: '2026-2027',
+      fellowshipId: 7004,
       triggeredBy: 'claim_auto',
     });
 
@@ -221,6 +226,7 @@ describe('enqueueBioEmail', () => {
       enqueueBioEmail({
         contactId: 500,
         academicYear: '2026-2027',
+        fellowshipId: 7005,
         triggeredBy: 'claim_auto',
       })
     ).rejects.toBe(other);
@@ -280,10 +286,11 @@ describe('evaluateBioEmailEligibility', () => {
 
     const result = await evaluateBioEmailEligibility(1, '2026-2027');
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       eligible: true,
       email: 'new@x.com',
       firstName: 'Returning',
+      fellowshipId: expect.any(Number),
     });
   });
 
@@ -365,10 +372,11 @@ describe('evaluateBioEmailEligibility', () => {
 
     const result = await evaluateBioEmailEligibility(1, '2026-2027');
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       eligible: true,
       email: 'ada@example.com',
       firstName: 'Ada',
+      fellowshipId: expect.any(Number),
     });
   });
 
@@ -779,26 +787,60 @@ describe('getEmailStatusForContacts', () => {
     expect(mockPrisma.appointeeEmailEvent.findMany).not.toHaveBeenCalled();
   });
 
-  it('keys the returned map by `${contactId}:${academicYear}`', async () => {
+  it('keys the returned map by `${contactId}:${academicYear}:${emailType}`', async () => {
     const sent = new Date('2026-04-10');
     (mockPrisma.appointeeEmailEvent.findMany as any).mockResolvedValue([
-      { contactId: 1, academicYear: '2026-2027', status: 'SENT', sentAt: sent },
-      { contactId: 2, academicYear: '2026-2027', status: 'PENDING', sentAt: null },
+      {
+        contactId: 1,
+        academicYear: '2026-2027',
+        status: 'SENT',
+        sentAt: sent,
+        emailType: 'BIO_PROJECT_DESCRIPTION',
+      },
+      {
+        contactId: 2,
+        academicYear: '2026-2027',
+        status: 'PENDING',
+        sentAt: null,
+        emailType: 'VIT_ID_INVITATION',
+      },
     ]);
 
     const result = await getEmailStatusForContacts([1, 2, 3], ['2026-2027']);
 
     expect(result.size).toBe(2);
-    expect(result.get('1:2026-2027')).toEqual({
+    expect(result.get('1:2026-2027:BIO_PROJECT_DESCRIPTION')).toEqual({
       status: 'SENT',
       sentAt: sent,
       academicYear: '2026-2027',
+      emailType: 'BIO_PROJECT_DESCRIPTION',
     });
-    expect(result.get('2:2026-2027')).toEqual({
+    expect(result.get('2:2026-2027:VIT_ID_INVITATION')).toEqual({
       status: 'PENDING',
       sentAt: null,
       academicYear: '2026-2027',
+      emailType: 'VIT_ID_INVITATION',
     });
-    expect(result.get('3:2026-2027')).toBeUndefined();
+    expect(result.get('3:2026-2027:BIO_PROJECT_DESCRIPTION')).toBeUndefined();
+  });
+
+  it('filters by the types argument — bio only when requested', async () => {
+    (mockPrisma.appointeeEmailEvent.findMany as any).mockResolvedValue([]);
+    await getEmailStatusForContacts(
+      [1],
+      ['2026-2027'],
+      ['BIO_PROJECT_DESCRIPTION']
+    );
+    const call = (mockPrisma.appointeeEmailEvent.findMany as any).mock.calls[0][0];
+    expect(call.where.emailType).toEqual({ in: ['BIO_PROJECT_DESCRIPTION'] });
+  });
+
+  it('defaults to querying both types when types is omitted', async () => {
+    (mockPrisma.appointeeEmailEvent.findMany as any).mockResolvedValue([]);
+    await getEmailStatusForContacts([1], ['2026-2027']);
+    const call = (mockPrisma.appointeeEmailEvent.findMany as any).mock.calls[0][0];
+    expect(call.where.emailType).toEqual({
+      in: ['BIO_PROJECT_DESCRIPTION', 'VIT_ID_INVITATION'],
+    });
   });
 });
