@@ -87,10 +87,37 @@ function buildLogoUrl(): string {
   return `${base}/itatti-logo-email.png`;
 }
 
-function substitute(source: string, tokens: Record<string, string>): string {
+/**
+ * HTML-escape the five characters that can corrupt an email body when a
+ * value is substituted directly into HTML context. A CiviCRM first name
+ * like `O'Brien <Jr>` or `Smith & Jones` would otherwise break entity
+ * parsing downstream (angle brackets spawn dangling tags; ampersands
+ * break the entity stream). Plaintext substitutions are untouched —
+ * plaintext email bodies are plain text and don't need escaping.
+ *
+ * Defense in depth: the EmailPreviewModal renders HTML inside an iframe
+ * sandboxed with allow-same-origin (no scripts), so portal-side risk is
+ * already bounded. The recipient's inbox has no such sandbox — a malformed
+ * body is what they see.
+ */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function substitute(
+  source: string,
+  tokens: Record<string, string>,
+  format: 'html' | 'text'
+): string {
   let out = source;
   for (const [key, value] of Object.entries(tokens)) {
-    out = out.replaceAll(`{{${key}}}`, value);
+    const safeValue = format === 'html' ? escapeHtml(value) : value;
+    out = out.replaceAll(`{{${key}}}`, safeValue);
   }
   return out;
 }
@@ -119,8 +146,8 @@ export function renderVitIdInvitation(args: {
 
   return {
     subject: 'Welcome to I Tatti — Claim your VIT ID',
-    html: substitute(vitIdHtml, tokens),
-    text: substitute(vitIdText, tokens),
+    html: substitute(vitIdHtml, tokens, 'html'),
+    text: substitute(vitIdText, tokens, 'text'),
   };
 }
 
@@ -143,7 +170,7 @@ export function renderBioProjectDescription(args: {
 
   return {
     subject: 'Biography and Project Description',
-    html: substitute(bioHtml, tokens),
-    text: substitute(bioText, tokens),
+    html: substitute(bioHtml, tokens, 'html'),
+    text: substitute(bioText, tokens, 'text'),
   };
 }

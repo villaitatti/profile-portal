@@ -14,7 +14,16 @@
   <mj-title>I Tatti</mj-title>
   <mj-preview>Villa I Tatti — The Harvard University Center for Italian Renaissance Studies</mj-preview>
   <mj-attributes>
-    <mj-all font-family='"brandon-grotesque", Georgia, "Times New Roman", serif' />
+    <!--
+      Quoting: inner font names use SINGLE quotes so MJML's inliner can safely
+      emit this inside style="..." without terminating the attribute.
+      The previous value (inner double quotes) collided with the outer
+      attribute quoting and produced `style="font-family:"` (terminated
+      early), stripping every subsequent declaration from the div.
+      Regression guard: no `style="font-family:"` should appear in the
+      compiled HTML — assert in CI or in a render test.
+    -->
+    <mj-all font-family="'brandon-grotesque', Georgia, 'Times New Roman', serif" />
     <mj-text font-size="16px" line-height="1.6" color="#1d252c" padding="0 24px" />
   </mj-attributes>
   <mj-style inline="inline">

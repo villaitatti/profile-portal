@@ -16,6 +16,16 @@
 -- run a modified version of this migration that skips the TRUNCATE.
 
 -- 1. Clear existing rows (safe per above — no production data).
+-- Safety assertion: refuse to truncate if the table has any rows. This is
+-- belt-and-suspenders against the scenario where someone enables the
+-- bio-email cron between "today" (migration authored) and deploy, then
+-- runs this migration against populated data. The documented fix is to
+-- backfill fellowship_id manually via a CiviCRM lookup script first.
+DO $$ BEGIN
+  IF (SELECT COUNT(*) FROM "appointee_email_events") > 0 THEN
+    RAISE EXCEPTION 'refusing to truncate non-empty appointee_email_events — backfill fellowship_id manually via a CiviCRM lookup script, then edit this migration to skip the TRUNCATE';
+  END IF;
+END $$;
 TRUNCATE TABLE "appointee_email_events";
 
 -- 2. Add fellowship_id as NOT NULL (safe after truncate).

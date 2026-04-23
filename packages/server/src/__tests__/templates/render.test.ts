@@ -118,3 +118,55 @@ describe('renderBioProjectDescription', () => {
     expect(out.text).toContain(exampleUrl);
   });
 });
+
+describe('HTML escaping guard (pre-ship finding)', () => {
+  it('escapes <, >, &, " and \' in firstName for the HTML output ONLY', () => {
+    // An admin pastes a name with HTML-unsafe characters into CiviCRM. The
+    // recipient's inbox must see a correctly-rendered literal, not a
+    // dangling tag or broken entity.
+    const out = renderBioProjectDescription({
+      firstName: 'O\'Brien <Smith & Jones> "test"',
+    });
+
+    // HTML: every unsafe char is encoded.
+    expect(out.html).toContain(
+      'O&#39;Brien &lt;Smith &amp; Jones&gt; &quot;test&quot;'
+    );
+    // Neither raw `<` nor raw `&` should reach HTML output alongside the
+    // substitution — the raw `<` check below specifically targets the
+    // substitution context, not the surrounding template markup.
+    expect(out.html).not.toContain('<Smith');
+    expect(out.html).not.toContain('& Jones');
+
+    // Plaintext: characters pass through unescaped. Plaintext MIME is plain
+    // text; entities would be rendered literally by the client (ugly).
+    expect(out.text).toContain('O\'Brien <Smith & Jones> "test"');
+  });
+
+  it('VIT invitation also escapes firstName in HTML', () => {
+    const out = renderVitIdInvitation({ firstName: 'Dangerous <evil>' });
+    expect(out.html).toContain('Dear Dangerous &lt;evil&gt;,');
+    expect(out.html).not.toContain('<evil>');
+    expect(out.text).toContain('Dear Dangerous <evil>,');
+  });
+});
+
+describe('compiled HTML style-attribute integrity (pre-ship finding)', () => {
+  it('does not produce the broken `style="font-family:"` pattern that would strip body styling', () => {
+    // Regression guard for the quoting bug that surfaced during pre-landing
+    // review: when mj-all font-family used single-quoted outer with
+    // double-quoted inner ('"brandon-grotesque", ...'), MJML inlined it as
+    // `style="font-family:"` which terminated the attribute early and
+    // orphaned every subsequent declaration. The fix is to use single-
+    // quoted inner font names. This test asserts the output shape so the
+    // bug cannot silently return.
+    const out = renderVitIdInvitation({ firstName: 'Sofia' });
+    // The early-termination pattern: `style="font-family:"` immediately
+    // followed by whitespace + orphan attributes.
+    expect(out.html).not.toMatch(/style="font-family:"\s/);
+    // A well-formed font-family declaration has the closing `;` or `"`.
+    expect(out.html).toMatch(
+      /style="[^"]*font-family:[^"]*'brandon-grotesque'[^"]*;/
+    );
+  });
+});
