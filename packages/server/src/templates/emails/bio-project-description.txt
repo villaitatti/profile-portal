@@ -1,0 +1,23 @@
+Dear {{firstName}},
+
+As an I Tatti appointee, you will be featured on the I Tatti website. To complete your page, we kindly ask you to submit the following materials:
+
+  • A short biography (maximum 760 characters)
+  • A project description (maximum 1,500 characters)
+
+Both should be written in English, in the third person, and presented as complete sentences (please do not use bullet points).
+
+We would be grateful if you could submit your materials as soon as possible, by using the following link:
+https://helpdesk.itatti.harvard.edu/servicedesk/customer/portal/4/group/5/create/10
+
+To log in, please use your VIT ID: enter your email address, click Next, then select Continue with single sign-on. If prompted, enter your email and VIT ID password to complete the process.
+
+If you would like to see an example of what we are looking for, please view this entry for one of this year's appointees:
+https://itatti.harvard.edu/people/giovanni-vito-distefano
+
+Best regards,
+I Tatti — The Harvard University Center for Italian Renaissance Studies
+
+--
+I Tatti, The Harvard University Center for Italian Renaissance Studies
+Via di Vincigliata 26, 50135 Florence Italy

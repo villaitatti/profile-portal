@@ -98,9 +98,25 @@ const envSchema = z.object({
   // APPOINTEE_EMAIL_ALLOW_REDIRECT=true. Real production leaves both unset.
   APPOINTEE_EMAIL_REDIRECT_TO: z.string().email().optional().or(z.literal('')),
   APPOINTEE_EMAIL_ALLOW_REDIRECT: booleanFlag(),
-  // Comma-separated list of addresses BCC'd on every outgoing appointee bio
-  // email (Angela + Andrea, typically). Empty disables BCC.
+  // Comma-separated list of addresses BCC'd on every outgoing appointee
+  // email (Angela + Andrea, typically). Shared across bio & VIT ID invitation.
+  // Empty disables BCC.
   APPOINTEE_EMAIL_BCC: z.string().optional(),
+
+  // VIT ID claim page URL — interpolated into the VIT ID invitation email.
+  // Single URL, required when SES is configured. Server fails fast if unset
+  // under production unless DEV_SKIP_EXTERNAL_SERVICES=true.
+  CLAIM_VIT_ID_URL: requiredUrl,
+  // Public-facing URL of the profile-portal web app. Used to construct
+  // absolute URLs for assets referenced from outgoing email (e.g., the
+  // I Tatti logo header at ${PORTAL_PUBLIC_URL}/itatti-logo-email.png).
+  // Must be HTTPS in production.
+  PORTAL_PUBLIC_URL: requiredUrl,
+  // Friendly "From" names rendered in the recipient's inbox for each
+  // appointee-facing email type. Defaults match the sender-identity
+  // decisions from /plan-design-review 2026-04-22.
+  APPOINTEE_EMAIL_FROM_NAME_VIT_ID: z.string().min(1).default('I Tatti - VIT ID'),
+  APPOINTEE_EMAIL_FROM_NAME_BIO: z.string().min(1).default('I Tatti - Bio & Project'),
 });
 
 function loadEnv() {

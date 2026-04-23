@@ -1,0 +1,21 @@
+<!--
+  Shared institutional footer. Copy locked in /plan-design-review 2026-04-22:
+    Line 1: I Tatti, The Harvard University Center for Italian Renaissance Studies
+    Line 2: Via di Vincigliata 26, 50135 Florence Italy
+-->
+<mj-section background-color="#ffffff" padding="24px 0 0 0" css-class="it-card it-footer-border">
+  <mj-column border-top="1px solid #cfd5db" padding-top="24px">
+    <mj-text
+      font-family='Arial, Helvetica, sans-serif'
+      font-size="13px"
+      line-height="1.5"
+      color="#556170"
+      align="center"
+      css-class="it-muted"
+      padding="0 24px 32px 24px"
+    >
+      I Tatti, The Harvard University Center for Italian Renaissance Studies<br/>
+      Via di Vincigliata 26, 50135 Florence Italy
+    </mj-text>
+  </mj-column>
+</mj-section>

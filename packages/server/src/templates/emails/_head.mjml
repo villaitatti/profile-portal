@@ -1,0 +1,36 @@
+<!--
+  Shared <mj-head> block. Every appointee-facing template includes this first
+  via <mj-include path="./_head.mjml" />.
+
+  Brand tokens mirror packages/web/src/styles/globals.css:
+    crimson       #ab192d   primary / links / CTAs
+    anthracite    #1d252c   body text
+    frame bg      #eef1f3   institutional warm grey
+    body card     #ffffff   (NOT #f8f9fb — Outlook mangles near-white)
+    muted footer  #556170
+    border        #cfd5db
+-->
+<mj-head>
+  <mj-title>I Tatti</mj-title>
+  <mj-preview>Villa I Tatti — The Harvard University Center for Italian Renaissance Studies</mj-preview>
+  <mj-attributes>
+    <mj-all font-family='"brandon-grotesque", Georgia, "Times New Roman", serif' />
+    <mj-text font-size="16px" line-height="1.6" color="#1d252c" padding="0 24px" />
+  </mj-attributes>
+  <mj-style inline="inline">
+    a { color: #ab192d; text-decoration: underline; }
+  </mj-style>
+  <mj-style>
+    @media (prefers-color-scheme: dark) {
+      .it-frame { background-color: #1d252c !important; }
+      .it-card { background-color: #1d252c !important; }
+      .it-text { color: #eef1f3 !important; }
+      .it-muted { color: #b3bec5 !important; }
+      .it-footer-border td { border-top-color: #3a4450 !important; }
+    }
+  </mj-style>
+  <mj-raw>
+    <meta name="color-scheme" content="light dark" />
+    <meta name="supported-color-schemes" content="light dark" />
+  </mj-raw>
+</mj-head>
