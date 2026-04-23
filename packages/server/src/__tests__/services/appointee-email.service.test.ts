@@ -32,6 +32,7 @@ vi.mock('../../services/auth0.service.js', () => ({
 
 vi.mock('../../services/email.service.js', () => ({
   sendBioProjectDescriptionEmail: vi.fn(),
+  sendVitIdInvitationEmail: vi.fn(),
 }));
 
 vi.mock('../../env.js', () => ({
@@ -49,7 +50,9 @@ import {
   dispatchOne,
   dispatchPendingEmails,
   evaluateBioEmailEligibility,
+  evaluateVitIdInvitationEligibility,
   sendBioEmailManually,
+  sendVitIdInvitationManually,
   getEmailStatusForContacts,
   currentAndNextAcademicYears,
 } from '../../services/appointee-email.service.js';
@@ -573,6 +576,52 @@ describe('dispatchOne', () => {
     expect(updateCall.data.status).toBe('FAILED');
     expect(updateCall.data.failureReason).toContain('SES bounce');
   });
+
+  it('routes emailType=VIT_ID_INVITATION to sendVitIdInvitationEmail and the VIT eligibility check', async () => {
+    // Guards the emailType branching in dispatchOne. If this regresses, a
+    // VIT invitation event would be evaluated against bio-email eligibility
+    // (wrong preconditions) and/or sent via sendBioProjectDescriptionEmail
+    // (wrong template, wrong fromName).
+    (mockPrisma.appointeeEmailEvent.updateMany as any).mockResolvedValue({ count: 1 });
+    (mockPrisma.appointeeEmailEvent.findUniqueOrThrow as any).mockResolvedValue({
+      id: 'evt_vit',
+      emailType: 'VIT_ID_INVITATION',
+      contactId: 1,
+      academicYear: '2026-2027',
+    });
+    // VIT eligibility path: no Auth0 user, contact exists, fellowship accepted.
+    mockAuth0.listUsersByRole.mockResolvedValue([]);
+    mockCivicrm.getContactById.mockResolvedValue({
+      id: 1,
+      firstName: 'Sofia',
+      lastName: 'Rossi',
+      email: 'sofia@example.com',
+    });
+    mockCivicrm.getFellowships.mockResolvedValue([
+      {
+        id: 42,
+        contactId: 1,
+        startDate: '2026-07-01',
+        endDate: '2027-06-30',
+        fellowshipAccepted: true,
+      },
+    ]);
+    (mockEmail.sendVitIdInvitationEmail as any).mockResolvedValue({
+      messageId: 'ses-vit-1',
+    });
+    (mockPrisma.appointeeEmailEvent.update as any).mockResolvedValue({});
+
+    const outcome = await dispatchOne('evt_vit');
+
+    expect(outcome).toBe('sent');
+    // Correct sender was called.
+    expect(mockEmail.sendVitIdInvitationEmail).toHaveBeenCalledWith({
+      to: 'sofia@example.com',
+      firstName: 'Sofia',
+    });
+    // Bio sender was NOT called (the branching is strict, not a fall-through).
+    expect(mockEmail.sendBioProjectDescriptionEmail).not.toHaveBeenCalled();
+  });
 });
 
 describe('sendBioEmailManually', () => {
@@ -772,6 +821,29 @@ describe('dispatchPendingEmails', () => {
     expect(result.reclaimed).toBe(0);
     expect(result.processed).toBe(0);
   });
+
+  it('scans ONLY BIO_PROJECT_DESCRIPTION rows — VIT_ID_INVITATION is manual-only (IRON INVARIANT)', async () => {
+    // The cron must never auto-send a VIT ID invitation. Angela's manual
+    // click is the only dispatch path for that type. If this filter
+    // regresses, the 24h-delay cron will start mailing every pending
+    // invitation without Angela's review — the exact opposite of the
+    // whole "manual-only" design. This test is the load-bearing guard.
+    (mockPrisma.appointeeEmailEvent.updateMany as any).mockResolvedValueOnce({ count: 0 });
+    (mockPrisma.appointeeEmailEvent.findMany as any).mockResolvedValue([]);
+
+    await dispatchPendingEmails({ now: new Date('2026-04-10T12:00:00Z') });
+
+    // findMany was called once with a where clause that filters by emailType.
+    const findManyCall = (mockPrisma.appointeeEmailEvent.findMany as any).mock.calls[0][0];
+    expect(findManyCall.where.emailType).toBe('BIO_PROJECT_DESCRIPTION');
+    // Defense-in-depth: the filter must be a direct equality check, not an
+    // `in` or a negation. A `not` filter would silently allow any new email
+    // type added in the future to leak into the cron. Equality on BIO is
+    // the whitelist pattern and must stay that way.
+    expect(findManyCall.where.emailType).not.toEqual(
+      expect.objectContaining({ not: expect.anything() })
+    );
+  });
 });
 
 describe('getEmailStatusForContacts', () => {
@@ -841,6 +913,509 @@ describe('getEmailStatusForContacts', () => {
     const call = (mockPrisma.appointeeEmailEvent.findMany as any).mock.calls[0][0];
     expect(call.where.emailType).toEqual({
       in: ['BIO_PROJECT_DESCRIPTION', 'VIT_ID_INVITATION'],
+    });
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────
+// VIT ID invitation eligibility — inverted preconditions vs bio email.
+// Key difference: VIT invitation requires the contact NOT to have a VIT ID
+// already (the opposite of bio), plus strict missing_first_name handling
+// and a 3-throw civicrm_unavailable fallback.
+// ───────────────────────────────────────────────────────────────────────
+
+describe('evaluateVitIdInvitationEligibility', () => {
+  // For "no VIT ID" path, override listUsersByRole to empty so the ladder
+  // returns 'no-account' by default. Individual tests override further for
+  // needs-review / already-has-VIT-ID scenarios.
+  beforeEach(() => {
+    mockAuth0.listUsersByRole.mockResolvedValue([]);
+  });
+
+  it('returns civicrm_unavailable when getContactById throws', async () => {
+    mockCivicrm.getContactById.mockRejectedValue(new Error('ECONNREFUSED'));
+    const result = await evaluateVitIdInvitationEligibility(1, '2026-2027');
+    expect(result).toEqual({ eligible: false, reason: 'civicrm_unavailable' });
+    // Must NOT call downstream CiviCRM lookups after the first failure.
+    expect(mockCivicrm.getFellowships).not.toHaveBeenCalled();
+  });
+
+  it('returns no_matching_fellowship when contact does not exist', async () => {
+    mockCivicrm.getContactById.mockResolvedValue(null);
+    const result = await evaluateVitIdInvitationEligibility(1, '2026-2027');
+    expect(result).toEqual({ eligible: false, reason: 'no_matching_fellowship' });
+  });
+
+  it('returns missing_first_name when firstName is empty', async () => {
+    mockCivicrm.getContactById.mockResolvedValue({
+      id: 1,
+      firstName: '',
+      lastName: 'Smith',
+      email: 'smith@example.com',
+    });
+    const result = await evaluateVitIdInvitationEligibility(1, '2026-2027');
+    expect(result).toEqual({ eligible: false, reason: 'missing_first_name' });
+  });
+
+  it('returns missing_first_name when firstName is whitespace-only', async () => {
+    mockCivicrm.getContactById.mockResolvedValue({
+      id: 1,
+      firstName: '   ',
+      lastName: 'Smith',
+      email: 'smith@example.com',
+    });
+    const result = await evaluateVitIdInvitationEligibility(1, '2026-2027');
+    expect(result).toEqual({ eligible: false, reason: 'missing_first_name' });
+  });
+
+  it('returns no_primary_email when contact has no email', async () => {
+    mockCivicrm.getContactById.mockResolvedValue({
+      id: 1,
+      firstName: 'Sofia',
+      lastName: 'Rossi',
+      email: '',
+    });
+    const result = await evaluateVitIdInvitationEligibility(1, '2026-2027');
+    expect(result).toEqual({ eligible: false, reason: 'no_primary_email' });
+  });
+
+  it('returns civicrm_unavailable when the ladder fetch (listUsersByRole) throws', async () => {
+    mockCivicrm.getContactById.mockResolvedValue({
+      id: 1,
+      firstName: 'Sofia',
+      lastName: 'Rossi',
+      email: 'sofia@example.com',
+    });
+    mockAuth0.listUsersByRole.mockRejectedValue(new Error('Auth0 down'));
+    const result = await evaluateVitIdInvitationEligibility(1, '2026-2027');
+    expect(result).toEqual({ eligible: false, reason: 'civicrm_unavailable' });
+  });
+
+  it('returns needs_review when match ladder resolves to needs-review (name collision)', async () => {
+    mockCivicrm.getContactById.mockResolvedValue({
+      id: 1,
+      firstName: 'Maria',
+      lastName: 'Rossi',
+      email: 'maria@example.com',
+    });
+    // Two Auth0 users with the same normalized name, no email or civicrm_id
+    // match — ladder falls to tier 4 (name) and sees a collision.
+    mockAuth0.listUsersByRole.mockResolvedValue([
+      { user_id: 'auth0|maria1', email: 'maria1@old.com', name: 'Maria Rossi' },
+      { user_id: 'auth0|maria2', email: 'maria2@old.com', name: 'MARIA ROSSI' },
+    ]);
+    const result = await evaluateVitIdInvitationEligibility(1, '2026-2027');
+    expect(result).toEqual({ eligible: false, reason: 'needs_review' });
+    expect(mockCivicrm.getFellowships).not.toHaveBeenCalled();
+  });
+
+  it('returns already_has_vit_id when ladder resolves to active (contact already has VIT ID)', async () => {
+    mockCivicrm.getContactById.mockResolvedValue({
+      id: 1,
+      firstName: 'Sofia',
+      lastName: 'Rossi',
+      email: 'sofia@example.com',
+    });
+    // Contact's email matches an Auth0 user via tier 1 — status 'active'.
+    mockCivicrm.getEmailsForContacts.mockResolvedValue(
+      new Map([[1, { primary: 'sofia@example.com', secondaries: [] }]])
+    );
+    mockAuth0.listUsersByRole.mockResolvedValue([
+      { user_id: 'auth0|sofia', email: 'sofia@example.com', name: 'Sofia Rossi' },
+    ]);
+    const result = await evaluateVitIdInvitationEligibility(1, '2026-2027');
+    expect(result).toEqual({ eligible: false, reason: 'already_has_vit_id' });
+    expect(mockCivicrm.getFellowships).not.toHaveBeenCalled();
+  });
+
+  it('returns already_has_vit_id when ladder resolves to active-different-email', async () => {
+    mockCivicrm.getContactById.mockResolvedValue({
+      id: 1,
+      firstName: 'Thomas',
+      lastName: 'Mueller',
+      email: 't.mueller.new@example.com',
+    });
+    // Returning fellow: civicrm_id tier matches under an old email.
+    mockAuth0.listUsersByRole.mockResolvedValue([
+      {
+        user_id: 'auth0|thomas',
+        email: 't.mueller@old.com',
+        name: 'Thomas Mueller',
+        civicrmId: '1',
+      },
+    ]);
+    const result = await evaluateVitIdInvitationEligibility(1, '2026-2027');
+    expect(result).toEqual({ eligible: false, reason: 'already_has_vit_id' });
+  });
+
+  it('returns civicrm_unavailable when getFellowships throws', async () => {
+    mockCivicrm.getContactById.mockResolvedValue({
+      id: 1,
+      firstName: 'Sofia',
+      lastName: 'Rossi',
+      email: 'sofia@example.com',
+    });
+    mockAuth0.listUsersByRole.mockResolvedValue([]); // ladder: no-account
+    mockCivicrm.getFellowships.mockRejectedValue(new Error('DB timeout'));
+    const result = await evaluateVitIdInvitationEligibility(1, '2026-2027');
+    expect(result).toEqual({ eligible: false, reason: 'civicrm_unavailable' });
+  });
+
+  it('returns no_matching_fellowship when no fellowship matches the target year', async () => {
+    mockCivicrm.getContactById.mockResolvedValue({
+      id: 1,
+      firstName: 'Sofia',
+      lastName: 'Rossi',
+      email: 'sofia@example.com',
+    });
+    mockCivicrm.getFellowships.mockResolvedValue([
+      {
+        id: 99,
+        contactId: 1,
+        startDate: '2024-07-01',
+        endDate: '2025-06-30',
+        fellowshipAccepted: true,
+      },
+    ]);
+    const result = await evaluateVitIdInvitationEligibility(1, '2026-2027');
+    expect(result).toEqual({ eligible: false, reason: 'no_matching_fellowship' });
+  });
+
+  it('returns fellowship_not_accepted when a matching fellowship exists but is unaccepted', async () => {
+    mockCivicrm.getContactById.mockResolvedValue({
+      id: 1,
+      firstName: 'Sofia',
+      lastName: 'Rossi',
+      email: 'sofia@example.com',
+    });
+    mockCivicrm.getFellowships.mockResolvedValue([
+      {
+        id: 77,
+        contactId: 1,
+        startDate: '2026-07-01',
+        endDate: '2027-06-30',
+        fellowshipAccepted: false,
+      },
+    ]);
+    const result = await evaluateVitIdInvitationEligibility(1, '2026-2027');
+    expect(result).toEqual({ eligible: false, reason: 'fellowship_not_accepted' });
+  });
+
+  it('returns eligible with fellowshipId on the happy path (accepted upcoming fellowship)', async () => {
+    mockCivicrm.getContactById.mockResolvedValue({
+      id: 1,
+      firstName: 'Sofia',
+      lastName: 'Rossi',
+      email: 'sofia@example.com',
+    });
+    mockCivicrm.getFellowships.mockResolvedValue([
+      {
+        id: 42,
+        contactId: 1,
+        startDate: '2026-07-01',
+        endDate: '2027-06-30',
+        fellowshipAccepted: true,
+      },
+    ]);
+    const result = await evaluateVitIdInvitationEligibility(1, '2026-2027');
+    expect(result).toEqual({
+      eligible: true,
+      email: 'sofia@example.com',
+      firstName: 'Sofia',
+      fellowshipId: 42,
+    });
+  });
+});
+
+describe('sendVitIdInvitationManually', () => {
+  // Install the common "eligible contact with no VIT ID, accepted fellowship"
+  // baseline. Individual tests override to drive specific dispatch outcomes.
+  function primeEligibleContactNoVitId() {
+    mockAuth0.listUsersByRole.mockResolvedValue([]); // ladder: no-account
+    mockCivicrm.getContactById.mockResolvedValue({
+      id: 1,
+      firstName: 'Sofia',
+      lastName: 'Rossi',
+      email: 'sofia@example.com',
+    });
+    mockCivicrm.getFellowships.mockResolvedValue([
+      {
+        id: 42,
+        contactId: 1,
+        startDate: '2026-07-01',
+        endDate: '2027-06-30',
+        fellowshipAccepted: true,
+      },
+    ]);
+  }
+
+  it('returns {ok: false, reason} when the contact is ineligible', async () => {
+    mockCivicrm.getContactById.mockResolvedValue(null);
+    const result = await sendVitIdInvitationManually({
+      contactId: 99,
+      academicYear: '2026-2027',
+      triggeredBy: 'admin_manual:u1',
+    });
+    expect(result).toEqual({ ok: false, reason: 'no_matching_fellowship' });
+  });
+
+  it('returns {ok: false, reason: "civicrm_unavailable"} when the eligibility fetch throws', async () => {
+    mockCivicrm.getContactById.mockRejectedValue(new Error('ECONNREFUSED'));
+    const result = await sendVitIdInvitationManually({
+      contactId: 1,
+      academicYear: '2026-2027',
+      triggeredBy: 'admin_manual:u1',
+    });
+    expect(result).toEqual({ ok: false, reason: 'civicrm_unavailable' });
+  });
+
+  it('returns already_sent when a SENT event already exists for this fellowship', async () => {
+    primeEligibleContactNoVitId();
+    (mockPrisma.appointeeEmailEvent.findUnique as any).mockResolvedValue({
+      id: 'evt_sent',
+      status: 'SENT',
+      sentAt: new Date(),
+    });
+    const result = await sendVitIdInvitationManually({
+      contactId: 1,
+      academicYear: '2026-2027',
+      triggeredBy: 'admin_manual:u1',
+    });
+    expect(result).toEqual({ ok: false, reason: 'already_sent' });
+  });
+
+  it('returns existing PENDING event without creating a duplicate (in-flight short-circuit)', async () => {
+    primeEligibleContactNoVitId();
+    (mockPrisma.appointeeEmailEvent.findUnique as any).mockResolvedValue({
+      id: 'evt_pending',
+      status: 'PENDING',
+      sentAt: null,
+    });
+    const result = await sendVitIdInvitationManually({
+      contactId: 1,
+      academicYear: '2026-2027',
+      triggeredBy: 'admin_manual:u1',
+    });
+    expect(result).toEqual({
+      ok: true,
+      eventId: 'evt_pending',
+      status: 'PENDING',
+      sentAt: null,
+    });
+    expect(mockPrisma.appointeeEmailEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('deletes a FAILED row and retries fresh', async () => {
+    primeEligibleContactNoVitId();
+    // findUnique is called twice: once for existence check, once inside
+    // enqueue. First call returns the FAILED row; second call (after delete)
+    // returns null so the new create succeeds.
+    (mockPrisma.appointeeEmailEvent.findUnique as any)
+      .mockResolvedValueOnce({
+        id: 'evt_failed',
+        status: 'FAILED',
+        sentAt: null,
+      })
+      .mockResolvedValueOnce(null);
+
+    // Mock dispatch path: atomic PENDING→SENDING succeeds, eligibility holds,
+    // SES returns a message id.
+    (mockPrisma.appointeeEmailEvent.updateMany as any).mockResolvedValue({ count: 1 });
+    const newEvt = {
+      id: 'evt_retry',
+      status: 'PENDING',
+      emailType: 'VIT_ID_INVITATION',
+      contactId: 1,
+      academicYear: '2026-2027',
+      fellowshipId: 42,
+      sentAt: null,
+      failureReason: null,
+      sesMessageId: null,
+      sendAfter: new Date(),
+    };
+    (mockPrisma.appointeeEmailEvent.create as any).mockResolvedValue(newEvt);
+    (mockPrisma.appointeeEmailEvent.findUniqueOrThrow as any)
+      .mockResolvedValueOnce(newEvt)
+      .mockResolvedValueOnce({ ...newEvt, status: 'SENT', sentAt: new Date() });
+    (mockPrisma.appointeeEmailEvent.update as any).mockImplementation((args: any) =>
+      Promise.resolve({ ...newEvt, ...args.data })
+    );
+    (mockEmail.sendVitIdInvitationEmail as any).mockResolvedValue({ messageId: 'ses-1' });
+
+    const result = await sendVitIdInvitationManually({
+      contactId: 1,
+      academicYear: '2026-2027',
+      triggeredBy: 'admin_manual:u1',
+    });
+    expect(mockPrisma.appointeeEmailEvent.delete).toHaveBeenCalledWith({
+      where: { id: 'evt_failed' },
+    });
+    expect(result).toMatchObject({ ok: true, eventId: 'evt_retry' });
+  });
+
+  it('maps civicrm_unavailable at dispatch time back to {ok: false, reason} (no deferred path for VIT)', async () => {
+    // For bio emails, dispatchOne catches throws from evaluateBioEmailEligibility
+    // and marks the row deferred (PENDING again) so the cron retries later.
+    // For VIT invitations, evaluateVitIdInvitationEligibility catches CiviCRM
+    // errors internally and returns { eligible: false, reason: 'civicrm_unavailable' }
+    // — the row is marked SKIPPED with that reason and sendVitIdInvitationManually
+    // maps it back. Angela's modal surfaces it as the 503-worthy reason,
+    // rather than the cron-style deferral bio uses.
+    primeEligibleContactNoVitId();
+    (mockPrisma.appointeeEmailEvent.findUnique as any).mockResolvedValue(null);
+    (mockPrisma.appointeeEmailEvent.create as any).mockResolvedValue({
+      id: 'evt_new',
+      status: 'PENDING',
+      emailType: 'VIT_ID_INVITATION',
+    });
+    (mockPrisma.appointeeEmailEvent.updateMany as any).mockResolvedValue({ count: 1 });
+    (mockPrisma.appointeeEmailEvent.findUniqueOrThrow as any)
+      .mockResolvedValueOnce({
+        id: 'evt_new',
+        status: 'SENDING',
+        emailType: 'VIT_ID_INVITATION',
+        contactId: 1,
+        academicYear: '2026-2027',
+      })
+      .mockResolvedValueOnce({
+        id: 'evt_new',
+        status: 'SKIPPED',
+        emailType: 'VIT_ID_INVITATION',
+        sentAt: null,
+        failureReason: 'civicrm_unavailable',
+      });
+    // Dispatch-time eligibility re-check throws inside the eval, which catches
+    // and returns { reason: 'civicrm_unavailable' }.
+    mockCivicrm.getContactById
+      .mockResolvedValueOnce({
+        id: 1,
+        firstName: 'Sofia',
+        lastName: 'Rossi',
+        email: 'sofia@example.com',
+      })
+      .mockRejectedValueOnce(new Error('CiviCRM unreachable at dispatch'));
+
+    const result = await sendVitIdInvitationManually({
+      contactId: 1,
+      academicYear: '2026-2027',
+      triggeredBy: 'admin_manual:u1',
+    });
+    expect(result).toEqual({ ok: false, reason: 'civicrm_unavailable' });
+  });
+
+  it('throws ses_send_failed when SES rejects the send', async () => {
+    primeEligibleContactNoVitId();
+    (mockPrisma.appointeeEmailEvent.findUnique as any).mockResolvedValue(null);
+    (mockPrisma.appointeeEmailEvent.create as any).mockResolvedValue({
+      id: 'evt_new',
+      status: 'PENDING',
+      emailType: 'VIT_ID_INVITATION',
+    });
+    (mockPrisma.appointeeEmailEvent.updateMany as any).mockResolvedValue({ count: 1 });
+    (mockPrisma.appointeeEmailEvent.findUniqueOrThrow as any).mockResolvedValue({
+      id: 'evt_new',
+      status: 'SENDING',
+      emailType: 'VIT_ID_INVITATION',
+      contactId: 1,
+      academicYear: '2026-2027',
+    });
+    // Eligibility at dispatch time still holds.
+    (mockEmail.sendVitIdInvitationEmail as any).mockRejectedValue(
+      new Error('SES rejected')
+    );
+
+    await expect(
+      sendVitIdInvitationManually({
+        contactId: 1,
+        academicYear: '2026-2027',
+        triggeredBy: 'admin_manual:u1',
+      })
+    ).rejects.toThrow('ses_send_failed');
+  });
+
+  it('maps a skipped-dispatch with a recognized reason back to {ok: false, reason}', async () => {
+    primeEligibleContactNoVitId();
+    (mockPrisma.appointeeEmailEvent.findUnique as any).mockResolvedValue(null);
+    (mockPrisma.appointeeEmailEvent.create as any).mockResolvedValue({
+      id: 'evt_new',
+      status: 'PENDING',
+      emailType: 'VIT_ID_INVITATION',
+    });
+    (mockPrisma.appointeeEmailEvent.updateMany as any).mockResolvedValue({ count: 1 });
+    // Inside dispatchOne: findUniqueOrThrow returns the claimed row,
+    // eligibility re-check fails with a recognized reason, row is marked SKIPPED.
+    (mockPrisma.appointeeEmailEvent.findUniqueOrThrow as any)
+      .mockResolvedValueOnce({
+        id: 'evt_new',
+        status: 'SENDING',
+        emailType: 'VIT_ID_INVITATION',
+        contactId: 1,
+        academicYear: '2026-2027',
+      })
+      .mockResolvedValueOnce({
+        id: 'evt_new',
+        status: 'SKIPPED',
+        emailType: 'VIT_ID_INVITATION',
+        sentAt: null,
+        failureReason: 'needs_review',
+      });
+    // Second getContactById call (inside dispatchOne eligibility) returns a
+    // contact whose ladder now says needs-review.
+    mockAuth0.listUsersByRole
+      .mockResolvedValueOnce([]) // first eligibility pre-check in send path
+      .mockResolvedValueOnce([
+        { user_id: 'auth0|a', email: 'a@x.com', name: 'Sofia Rossi' },
+        { user_id: 'auth0|b', email: 'b@x.com', name: 'SOFIA ROSSI' },
+      ]); // dispatch-time re-check: name collision
+
+    const result = await sendVitIdInvitationManually({
+      contactId: 1,
+      academicYear: '2026-2027',
+      triggeredBy: 'admin_manual:u1',
+    });
+    expect(result).toEqual({ ok: false, reason: 'needs_review' });
+  });
+
+  it('happy path returns {ok: true, ...} when dispatch succeeds', async () => {
+    primeEligibleContactNoVitId();
+    (mockPrisma.appointeeEmailEvent.findUnique as any).mockResolvedValue(null);
+    const newEvt = {
+      id: 'evt_new',
+      status: 'PENDING',
+      emailType: 'VIT_ID_INVITATION',
+      contactId: 1,
+      academicYear: '2026-2027',
+      fellowshipId: 42,
+      sentAt: null,
+      failureReason: null,
+      sesMessageId: null,
+      sendAfter: new Date(),
+    };
+    (mockPrisma.appointeeEmailEvent.create as any).mockResolvedValue(newEvt);
+    (mockPrisma.appointeeEmailEvent.updateMany as any).mockResolvedValue({ count: 1 });
+    (mockPrisma.appointeeEmailEvent.findUniqueOrThrow as any)
+      .mockResolvedValueOnce(newEvt)
+      .mockResolvedValueOnce({ ...newEvt, status: 'SENT', sentAt: new Date() });
+    (mockPrisma.appointeeEmailEvent.update as any).mockResolvedValue({
+      ...newEvt,
+      status: 'SENT',
+      sentAt: new Date(),
+    });
+    (mockEmail.sendVitIdInvitationEmail as any).mockResolvedValue({ messageId: 'ses-123' });
+
+    const result = await sendVitIdInvitationManually({
+      contactId: 1,
+      academicYear: '2026-2027',
+      triggeredBy: 'admin_manual:u1',
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      eventId: 'evt_new',
+      status: 'SENT',
+    });
+    expect(mockEmail.sendVitIdInvitationEmail).toHaveBeenCalledWith({
+      to: 'sofia@example.com',
+      firstName: 'Sofia',
     });
   });
 });
