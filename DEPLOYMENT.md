@@ -65,6 +65,8 @@ All configuration is in `.env` at the project root. See `.env.example` for the f
 | `CIVICRM_BASE_URL` | CiviCRM instance URL |
 | `CIVICRM_API_KEY` | CiviCRM API key |
 | `CORS_ORIGIN` | Required in production (e.g., `https://dev-profile.itatti.net`) |
+| `CLAIM_VIT_ID_URL` | Destination of the "Claim your VIT ID" button in the invitation email (e.g., `https://community.itatti.harvard.edu/claim-vit-id`) |
+| `PORTAL_PUBLIC_URL` | Origin used to serve the I Tatti logo asset referenced from outgoing HTML emails |
 
 ### Optional services (features disabled if not set)
 
@@ -75,18 +77,22 @@ All configuration is in `.env` at the project root. See `.env.example` for the f
 | `SSE_SECRET` | HMAC key for SSE tokens (random fallback if not set, but tokens won't survive restarts) |
 | `AWS_SES_REGION` + `AWS_SES_FROM_EMAIL` + AWS credentials | Appointee bio/project email sending via SES |
 
-### Appointee bio email workflow (dev server vs. production)
+### Appointee email workflow (dev server vs. production)
 
-The bio email system has three environment-specific knobs. Defaults are safe (nothing fires), so real production typically only sets the cron flag.
+The appointee email system covers both the **bio & project description** email (24h automated send after claim, dispatched by a daily cron) and the **VIT ID invitation** email (manual-only send from the Manage Appointees dashboard). Defaults are safe (nothing fires), so real production typically only sets the cron flag.
 
 | Variable | Dev server (`civicrm-dev`) | Real production |
 |----------|----------------------------|-----------------|
-| `APPOINTEE_EMAIL_CRON_ENABLED` | `false` (do not auto-send) | `true` |
+| `APPOINTEE_EMAIL_CRON_ENABLED` | `false` (do not auto-send bio emails) | `true` |
 | `APPOINTEE_EMAIL_REDIRECT_TO` | developer inbox (e.g. `andrea@…`) | **unset** |
 | `APPOINTEE_EMAIL_ALLOW_REDIRECT` | `true` (required when redirect is set under `NODE_ENV=production`) | **unset** / `false` |
 | `APPOINTEE_EMAIL_BCC` | optional, suppressed automatically when redirect is active | optional |
+| `APPOINTEE_EMAIL_FROM_NAME_VIT_ID` | `I Tatti - VIT ID` (default) | `I Tatti - VIT ID` (default) |
+| `APPOINTEE_EMAIL_FROM_NAME_BIO` | `I Tatti - Bio & Project` (default) | `I Tatti - Bio & Project` (default) |
 
 The server refuses to start if `APPOINTEE_EMAIL_REDIRECT_TO` is set under `NODE_ENV=production` without `APPOINTEE_EMAIL_ALLOW_REDIRECT=true`. This is an intentional guard against accidentally leaving the redirect on in real production.
+
+The cron dispatches **only** bio-email rows; VIT ID invitations are manual-send-only. `CLAIM_VIT_ID_URL` and `PORTAL_PUBLIC_URL` are required for the invitation email's CTA and logo asset respectively — the server refuses to start without them.
 
 ### Frontend variables (VITE_ prefix, baked into the build)
 

@@ -42,6 +42,8 @@ auth0/       # Auth0 configuration reference files
 - **Admin Section** — `staff-it` users manage the applications catalog and assign role visibility
 - **Claim VIT ID** — Self-service flow: email → CiviCRM eligibility check → 4-tier VIT ID match ladder (primary email, Auth0 `civicrm_id`, CiviCRM secondary emails, normalized name) → Auth0 account creation or password reset to the existing account. Returning fellows whose email changed between fellowships are routed to their existing account instead of spawning a duplicate.
 - **VIT ID lookup** — Staff-only `/admin/has-vitid` page with unified server-side search (`GET /api/admin/vit-id-lookup?q=...`). Handles email-style queries (full reverse ladder) and name-style queries (substring match) so staff can find a fellow's VIT ID even when it's stored under an older email.
+- **Manage Appointees** — Staff dashboard with a five-state lifecycle column (*Nominated* → *Accepted* → *VIT ID Sent* → *VIT ID Claimed* → *Enrolled*) derived from `(fellowshipAccepted, VIT ID match tier, invitation event, bio email event)`. Two manual send actions per row — **Send VIT ID email** (invites a new appointee to claim) and **Send bio email** (requests bio + project description from a claimed appointee) — both route through a shared email preview modal so Angela sees the full rendered HTML before hitting Send.
+- **HTML appointee emails** — Both appointee-facing emails (VIT ID invitation + bio & project description) ship as brand-styled HTML via an MJML 5 template pipeline. I Tatti logo header, Georgia serif body, squared crimson CTA, multipart/alternative plaintext fallback for spam scoring. Compiled HTML is checked in; production never loads MJML at runtime.
 - **Help Form** — Creates a Jira Service Management ticket for manual assistance
 
 ## Auth0 Setup
@@ -126,3 +128,10 @@ The Docker setup includes:
 3. Jira SM uses REST API with Basic auth (email + API token)
 4. Application logos are stored as URLs (not file uploads)
 5. Auth0 custom claim namespace: `https://itatti.harvard.edu`
+
+## Documentation
+
+- [`ARCHITECTURE.md`](./ARCHITECTURE.md) — Stack choices, claim flow, VIT ID match ladder, appointee email pipeline, security model.
+- [`DEPLOYMENT.md`](./DEPLOYMENT.md) — Dev server setup, env var reference, migrations, troubleshooting.
+- [`CHANGELOG.md`](./CHANGELOG.md) — Every shipped version with a user-facing summary.
+- [`TODOS.md`](./TODOS.md) — Deferred work and known follow-ups.
