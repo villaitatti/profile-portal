@@ -32,12 +32,14 @@ TRUNCATE TABLE "appointee_email_events";
 ALTER TABLE "appointee_email_events"
   ADD COLUMN "fellowship_id" INTEGER NOT NULL;
 
--- 3. Drop the old composite unique index.
-ALTER TABLE "appointee_email_events"
-  DROP CONSTRAINT "appointee_email_events_contact_id_academic_year_email_type_key";
+-- 3. Drop the old composite unique index. Prisma created it via
+-- `CREATE UNIQUE INDEX` (not `ALTER TABLE ... ADD CONSTRAINT`), so
+-- `DROP INDEX` is the right statement here — `DROP CONSTRAINT` would
+-- fail. IF EXISTS makes the migration idempotent against partial replays.
+DROP INDEX IF EXISTS "appointee_email_events_contact_id_academic_year_email_type_key";
 
 -- 4. Drop the old contact_id-only index (we create a composite below).
-DROP INDEX "appointee_email_events_contact_id_idx";
+DROP INDEX IF EXISTS "appointee_email_events_contact_id_idx";
 
 -- 5. New unique index on (fellowship_id, email_type).
 CREATE UNIQUE INDEX "appointee_email_events_fellowship_id_email_type_key"
