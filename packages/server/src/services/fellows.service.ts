@@ -5,11 +5,13 @@ import {
   currentAndNextAcademicYears,
 } from './appointee-email.service.js';
 import { buildAuth0Maps, reconcile, type LadderFellow } from './vit-id-match.js';
-import { AppointeeEmailStatus } from '@prisma/client';
+import { computeAppointeeStatus, type EmailEventStatus } from './appointee-status.js';
+import { AppointeeEmailStatus, AppointeeEmailType } from '@prisma/client';
 import { env } from '../env.js';
 import { logger } from '../lib/logger.js';
 import type {
   BioEmailSummary,
+  VitIdInvitationSummary,
   FellowDashboardEntry,
   FellowsDashboardResponse,
   VitIdStatus,
@@ -17,49 +19,103 @@ import type {
   NeedsReviewReason,
 } from '@itatti/shared';
 
+/**
+ * Map a persisted AppointeeEmailStatus to the UI pill state + ISO sent-at.
+ * Shared by the bio-email and VIT-ID-invitation summaries since both use
+ * the same pill vocabulary ('none' / 'pending' / 'sent' / 'failed').
+ */
+function toPillState(
+  event:
+    | { status: AppointeeEmailStatus; sentAt: Date | null }
+    | undefined
+): { status: 'none' | 'pending' | 'sent' | 'failed'; sentAt: string | null } {
+  if (!event) return { status: 'none', sentAt: null };
+  switch (event.status) {
+    case AppointeeEmailStatus.SENT:
+      return {
+        status: 'sent',
+        sentAt: event.sentAt ? event.sentAt.toISOString() : null,
+      };
+    case AppointeeEmailStatus.PENDING:
+    case AppointeeEmailStatus.SENDING:
+      return { status: 'pending', sentAt: null };
+    case AppointeeEmailStatus.FAILED:
+      return { status: 'failed', sentAt: null };
+    case AppointeeEmailStatus.SKIPPED:
+      // Treat SKIPPED as "none" — the target-year pick already accounts for
+      // eligibility; the admin can re-send manually if appropriate.
+      return { status: 'none', sentAt: null };
+  }
+}
+
+/**
+ * Event → EmailEventStatus bridge for computeAppointeeStatus. 'NONE' when
+ * no event row exists for this (fellowshipId, emailType).
+ */
+function toEventStatus(
+  event: { status: AppointeeEmailStatus } | undefined
+): EmailEventStatus {
+  return event ? event.status : 'NONE';
+}
+
 function buildBioEmailSummary(args: {
   hasVitId: boolean;
+  needsReview: boolean;
   targetAcademicYear: string | null;
   event:
     | { status: AppointeeEmailStatus; sentAt: Date | null; academicYear: string }
     | undefined;
 }): BioEmailSummary {
-  const { hasVitId, targetAcademicYear, event } = args;
-
-  // Map DB status → UI pill status.
-  let pillStatus: BioEmailSummary['status'] = 'none';
-  let sentAt: string | null = null;
-
-  if (event) {
-    switch (event.status) {
-      case AppointeeEmailStatus.SENT:
-        pillStatus = 'sent';
-        sentAt = event.sentAt ? event.sentAt.toISOString() : null;
-        break;
-      case AppointeeEmailStatus.PENDING:
-      case AppointeeEmailStatus.SENDING:
-        pillStatus = 'pending';
-        break;
-      case AppointeeEmailStatus.FAILED:
-        pillStatus = 'failed';
-        break;
-      case AppointeeEmailStatus.SKIPPED:
-        // Treat SKIPPED as "none" in the UI — the target-year pick already
-        // accounts for current/accepted-upcoming eligibility, and the admin
-        // can re-send manually if appropriate.
-        pillStatus = 'none';
-        break;
-    }
-  }
+  const { hasVitId, needsReview, targetAcademicYear, event } = args;
+  const pill = toPillState(event);
 
   // Manual-send button eligibility: VIT ID exists, a current/accepted-upcoming
-  // target year exists, and the email has not already been SENT.
+  // target year exists, the email has not already been SENT or PENDING, and
+  // the match ladder is not in needs-review (sending could deliver to the
+  // wrong inbox until Angela resolves the ambiguity).
   const canManuallySend =
-    hasVitId && targetAcademicYear !== null && pillStatus !== 'sent' && pillStatus !== 'pending';
+    hasVitId &&
+    !needsReview &&
+    targetAcademicYear !== null &&
+    pill.status !== 'sent' &&
+    pill.status !== 'pending';
 
   return {
-    status: pillStatus,
-    sentAt,
+    status: pill.status,
+    sentAt: pill.sentAt,
+    targetAcademicYear,
+    canManuallySend,
+  };
+}
+
+function buildVitIdInvitationSummary(args: {
+  hasVitId: boolean;
+  needsReview: boolean;
+  fellowshipAccepted: boolean;
+  targetAcademicYear: string | null;
+  event:
+    | { status: AppointeeEmailStatus; sentAt: Date | null; academicYear: string }
+    | undefined;
+}): VitIdInvitationSummary {
+  const { hasVitId, needsReview, fellowshipAccepted, targetAcademicYear, event } =
+    args;
+  const pill = toPillState(event);
+
+  // Inverted precondition vs bio: VIT invitation is meaningful ONLY when the
+  // appointee does NOT yet have a VIT ID. Additional gates match bio:
+  // needs-review suppresses the button; SENT/PENDING suppresses it; a target
+  // academic year must exist; fellowship must be accepted.
+  const canManuallySend =
+    fellowshipAccepted &&
+    !hasVitId &&
+    !needsReview &&
+    targetAcademicYear !== null &&
+    pill.status !== 'sent' &&
+    pill.status !== 'pending';
+
+  return {
+    status: pill.status,
+    sentAt: pill.sentAt,
     targetAcademicYear,
     canManuallySend,
   };
@@ -103,16 +159,26 @@ export async function getFellowsDashboard(
   const [currentAy, nextAy] = currentAndNextAcademicYears();
 
   // Deduplicate fellows by contactId (a fellow may have multiple fellowships).
-  // Keep the most recent fellowship per contact for the dashboard display,
-  // but ALSO record whether the contact has a current-year or an
-  // accepted-upcoming fellowship — the manual "send bio email" button only
-  // appears when one of those is true.
+  // Keep the LATEST-STARTING fellowship per contact for dashboard display, AND
+  // track `fellowshipId` + `fellowshipAccepted` of that display row so we can
+  // key email-event lookups and compute the lifecycle state below.
   const academicYearsSet = new Set<string>();
   const fellowsByContact = new Map<
     number,
     {
-      entry: Omit<FellowDashboardEntry, 'status' | 'accountCreatedAt' | 'civicrmIdStatus' | 'bioEmail'>;
+      entry: Omit<
+        FellowDashboardEntry,
+        | 'status'
+        | 'accountCreatedAt'
+        | 'civicrmIdStatus'
+        | 'bioEmail'
+        | 'vitIdInvitation'
+        | 'appointeeStatus'
+      >;
       latestStart: string;
+      displayFellowshipId: number;
+      displayFellowshipAccepted: boolean;
+      displayYearLabel: string;
       hasCurrentFellowship: boolean;
       hasAcceptedUpcomingFellowship: boolean;
     }
@@ -142,6 +208,9 @@ export async function getFellowsDashboard(
           fellowshipYear: yearLabel,
         },
         latestStart: f.startDate,
+        displayFellowshipId: f.fellowshipId,
+        displayFellowshipAccepted: f.fellowshipAccepted === true,
+        displayYearLabel: yearLabel,
         hasCurrentFellowship: isCurrent,
         hasAcceptedUpcomingFellowship: isAcceptedUpcoming,
       });
@@ -158,16 +227,23 @@ export async function getFellowsDashboard(
           fellowshipYear: yearLabel,
         };
         existing.latestStart = f.startDate;
+        existing.displayFellowshipId = f.fellowshipId;
+        existing.displayFellowshipAccepted = f.fellowshipAccepted === true;
+        existing.displayYearLabel = yearLabel;
       }
       if (isCurrent) existing.hasCurrentFellowship = true;
       if (isAcceptedUpcoming) existing.hasAcceptedUpcomingFellowship = true;
     }
   }
 
-  // Batched bio-email lookup — ONE query, even for 100+ fellows.
+  // Batched email-status lookup. Scope to ALL academic years in play so
+  // past-year filters surface historical send data (codex finding #2,
+  // 2026-04-23). Both BIO_PROJECT_DESCRIPTION and VIT_ID_INVITATION types
+  // come back in one query; the caller bins them.
   const contactIds = Array.from(fellowsByContact.keys());
-  const [bioEmailMap, emailsByContact] = await Promise.all([
-    getEmailStatusForContacts(contactIds, [currentAy, nextAy]),
+  const yearsInScope = Array.from(academicYearsSet);
+  const [emailStatusMap, emailsByContact] = await Promise.all([
+    getEmailStatusForContacts(contactIds, yearsInScope),
     getEmailsForContacts(contactIds),
   ]);
 
@@ -204,32 +280,84 @@ export async function getFellowsDashboard(
     });
   }
 
-  // Run the match ladder for each fellow.
+  // Run the match ladder for each fellow and assemble lifecycle + email
+  // summaries. All derived state (appointeeStatus, canManuallySend gates)
+  // flows from the same three signals: ladder tier, fellowshipAccepted, and
+  // persisted email-event rows.
   const fellows: FellowDashboardEntry[] = [];
   for (const item of fellowsByContact.values()) {
-    const { entry, hasCurrentFellowship, hasAcceptedUpcomingFellowship } = item;
+    const {
+      entry,
+      displayFellowshipId,
+      displayFellowshipAccepted,
+      displayYearLabel,
+      hasCurrentFellowship,
+      hasAcceptedUpcomingFellowship,
+    } = item;
 
     const contactEmails = emailsByContact.get(entry.civicrmId);
+
+    // Bio-email target year: prefer current, else accepted-upcoming (matches
+    // the cron's eligibility window). For the VIT invitation preview we use
+    // the same target — it's the year Angela is onboarding the fellow into.
+    const targetAcademicYear = hasCurrentFellowship
+      ? currentAy
+      : hasAcceptedUpcomingFellowship
+        ? nextAy
+        : null;
+
+    // Look up event rows by (contactId, targetAcademicYear, emailType). The
+    // event store uses fellowshipId as its unique key, but the dashboard
+    // doesn't have a 1:1 contact→fellowship mapping here (we display the
+    // latest-starting fellowship); contactId+year+type is still sufficient
+    // for DISPLAY because the business invariant ("one fellowship per year
+    // per contact" — see codex finding #5, 2026-04-23) is enforced at the
+    // write layer via fellowshipId uniqueness.
+    const bioEvent = targetAcademicYear
+      ? emailStatusMap.get(
+          `${entry.civicrmId}:${targetAcademicYear}:${AppointeeEmailType.BIO_PROJECT_DESCRIPTION}`
+        )
+      : undefined;
+    const vitInvitationEvent = targetAcademicYear
+      ? emailStatusMap.get(
+          `${entry.civicrmId}:${targetAcademicYear}:${AppointeeEmailType.VIT_ID_INVITATION}`
+        )
+      : undefined;
 
     // Pre-flight: if any of this fellow's emails is shared across multiple
     // CiviCRM contacts, short-circuit to 'needs-review' with
     // 'duplicate-civicrm-contact'. Bypasses the ladder entirely so we don't
     // pick an arbitrary Auth0 user based on an ambiguous email.
     if (hasCrossContactDuplicate(contactEmails)) {
+      const bioEmail = buildBioEmailSummary({
+        hasVitId: false,
+        needsReview: true,
+        targetAcademicYear,
+        event: bioEvent,
+      });
+      const vitIdInvitation = buildVitIdInvitationSummary({
+        hasVitId: false,
+        needsReview: true,
+        fellowshipAccepted: displayFellowshipAccepted,
+        targetAcademicYear,
+        event: vitInvitationEvent,
+      });
       const base: FellowDashboardEntry = {
         ...entry,
         status: 'needs-review',
         reason: 'duplicate-civicrm-contact',
         candidates: [],
         civicrmIdStatus: 'n/a',
-        bioEmail: buildBioEmailSummary({
-          hasVitId: false,
-          targetAcademicYear: hasCurrentFellowship
-            ? currentAy
-            : hasAcceptedUpcomingFellowship
-              ? nextAy
-              : null,
-          event: undefined,
+        bioEmail,
+        vitIdInvitation,
+        // Duplicate-contact rows still get an appointeeStatus derivation so
+        // the chip column never shows blank. The needs-review state drives
+        // the button disabling, not the chip itself.
+        appointeeStatus: computeAppointeeStatus({
+          fellowshipAccepted: displayFellowshipAccepted,
+          vitIdTier: 'needs-review',
+          vitIdInvitationStatus: toEventStatus(vitInvitationEvent),
+          bioEmailStatus: toEventStatus(bioEvent),
         }),
       };
       fellows.push(base);
@@ -264,24 +392,29 @@ export async function getFellowsDashboard(
         ? ('ok' as const)
         : ('missing' as const);
 
-    // Bio-email target year: prefer current, else accepted-upcoming.
-    const targetAcademicYear = hasCurrentFellowship
-      ? currentAy
-      : hasAcceptedUpcomingFellowship
-        ? nextAy
-        : null;
-
-    const existingEvent = targetAcademicYear
-      ? bioEmailMap.get(`${entry.civicrmId}:${targetAcademicYear}`)
-      : undefined;
+    const hasVitId = !!matchedUser;
+    const isNeedsReview = match.status === 'needs-review';
 
     const bioEmail = buildBioEmailSummary({
-      // hasVitId is true when the ladder found any active match. For
-      // 'needs-review' we deliberately return false — we won't send to an
-      // ambiguous target.
-      hasVitId: !!matchedUser,
+      hasVitId,
+      needsReview: isNeedsReview,
       targetAcademicYear,
-      event: existingEvent,
+      event: bioEvent,
+    });
+
+    const vitIdInvitation = buildVitIdInvitationSummary({
+      hasVitId,
+      needsReview: isNeedsReview,
+      fellowshipAccepted: displayFellowshipAccepted,
+      targetAcademicYear,
+      event: vitInvitationEvent,
+    });
+
+    const appointeeStatus = computeAppointeeStatus({
+      fellowshipAccepted: displayFellowshipAccepted,
+      vitIdTier: match.status,
+      vitIdInvitationStatus: toEventStatus(vitInvitationEvent),
+      bioEmailStatus: toEventStatus(bioEvent),
     });
 
     const base: FellowDashboardEntry = {
@@ -289,6 +422,8 @@ export async function getFellowsDashboard(
       status: match.status,
       civicrmIdStatus,
       bioEmail,
+      vitIdInvitation,
+      appointeeStatus,
     };
 
     if (match.status === 'active' || match.status === 'active-different-email') {
@@ -301,6 +436,11 @@ export async function getFellowsDashboard(
       base.reason = match.reason;
       base.candidates = match.candidates;
     }
+
+    // Silence "unused" lint on displayFellowshipId — it's reserved for an
+    // upcoming refactor (dashboard-side preview routes key by fellowship).
+    void displayFellowshipId;
+    void displayYearLabel;
 
     fellows.push(base);
   }
