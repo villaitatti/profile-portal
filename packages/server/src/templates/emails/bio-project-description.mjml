@@ -5,7 +5,7 @@
 
   Runtime-substituted tokens:
     {{firstName}}  contact.firstName (falls back to "Appointee" per existing logic)
-    {{logoUrl}}    env.PORTAL_PUBLIC_URL + '/itatti-logo-email.png'
+    {{logoUrl}}    env.APPOINTEE_EMAIL_LOGO_URL or env.PORTAL_PUBLIC_URL + '/itatti-logo-email.png'
 
   Unlike the VIT invitation, this email has no CTA button — the
   call-to-action is the inline JSM link, which ships as an anchor tag

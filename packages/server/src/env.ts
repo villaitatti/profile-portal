@@ -109,10 +109,14 @@ const envSchema = z.object({
   // HTTPS is enforced in production (see loadEnv() below).
   CLAIM_VIT_ID_URL: requiredUrl,
   // Public-facing URL of the profile-portal web app. Used to construct
-  // absolute URLs for assets referenced from outgoing email (e.g., the
-  // I Tatti logo header at ${PORTAL_PUBLIC_URL}/itatti-logo-email.png).
+  // fallback absolute URLs for assets referenced from outgoing email (e.g.,
+  // the I Tatti logo header at ${PORTAL_PUBLIC_URL}/itatti-logo-email.png).
   // HTTPS is enforced in production (see loadEnv() below).
   PORTAL_PUBLIC_URL: requiredUrl,
+  // Optional absolute logo URL for appointee emails. Use this when the portal
+  // domain is protected by Cloudflare/Auth0 and email clients cannot fetch
+  // ${PORTAL_PUBLIC_URL}/itatti-logo-email.png anonymously.
+  APPOINTEE_EMAIL_LOGO_URL: z.string().url().optional().or(z.literal('')),
   // Friendly "From" names rendered in the recipient's inbox for each
   // appointee-facing email type. Defaults match the sender-identity
   // decisions from /plan-design-review 2026-04-22.
@@ -169,7 +173,7 @@ function loadEnv() {
   // can't send appointees a crimson "Claim your VIT ID" button that points
   // at a plain-http URL. Dev/staging can still use http://localhost etc.
   if (result.data.NODE_ENV === 'production' && !devMode) {
-    for (const key of ['CLAIM_VIT_ID_URL', 'PORTAL_PUBLIC_URL'] as const) {
+    for (const key of ['CLAIM_VIT_ID_URL', 'PORTAL_PUBLIC_URL', 'APPOINTEE_EMAIL_LOGO_URL'] as const) {
       const value = result.data[key];
       if (value && !value.startsWith('https://')) {
         console.error(

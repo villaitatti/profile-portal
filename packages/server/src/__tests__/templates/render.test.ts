@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
-// Template renderer reads env.CLAIM_VIT_ID_URL + env.PORTAL_PUBLIC_URL at
-// call time, not module-init, so we can mock env in the test harness.
+// Template renderer reads env.CLAIM_VIT_ID_URL + env.PORTAL_PUBLIC_URL +
+// env.APPOINTEE_EMAIL_LOGO_URL at call time, not module-init, so we can mock
+// env in the test harness.
 vi.mock('../../env.js', () => ({
   env: {
     CLAIM_VIT_ID_URL: 'https://claim.test.example/claim-vit-id',
     PORTAL_PUBLIC_URL: 'https://portal.test.example',
+    APPOINTEE_EMAIL_LOGO_URL: '',
   },
   isDevMode: false,
 }));
@@ -48,6 +50,7 @@ describe('renderVitIdInvitation', () => {
       env: {
         CLAIM_VIT_ID_URL: 'https://claim.test.example/claim-vit-id',
         PORTAL_PUBLIC_URL: 'https://portal.test.example/',
+        APPOINTEE_EMAIL_LOGO_URL: '',
       },
       isDevMode: false,
     }));
@@ -59,6 +62,29 @@ describe('renderVitIdInvitation', () => {
       'https://portal.test.example/itatti-logo-email.png'
     );
     expect(out.html).not.toContain('//itatti-logo-email.png');
+  });
+
+  it('uses APPOINTEE_EMAIL_LOGO_URL when configured', async () => {
+    vi.resetModules();
+    vi.doMock('../../env.js', () => ({
+      env: {
+        CLAIM_VIT_ID_URL: 'https://claim.test.example/claim-vit-id',
+        PORTAL_PUBLIC_URL: 'https://portal.test.example',
+        APPOINTEE_EMAIL_LOGO_URL:
+          'https://itatti.harvard.edu/static/itatti-logo-email.png',
+      },
+      isDevMode: false,
+    }));
+
+    const mod = await import('../../templates/render.js');
+    mod.__resetTemplateCacheForTests();
+    const out = mod.renderVitIdInvitation({ firstName: 'Sofia' });
+    expect(out.html).toContain(
+      'https://itatti.harvard.edu/static/itatti-logo-email.png'
+    );
+    expect(out.html).not.toContain(
+      'https://portal.test.example/itatti-logo-email.png'
+    );
   });
 
   it('throws missing_first_name when firstName is blank or whitespace-only', () => {

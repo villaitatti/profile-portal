@@ -89,6 +89,9 @@ export function __resetTemplateCacheForTests(): void {
 }
 
 function buildLogoUrl(): string {
+  const configuredLogoUrl = env.APPOINTEE_EMAIL_LOGO_URL?.trim();
+  if (configuredLogoUrl) return configuredLogoUrl;
+
   // PORTAL_PUBLIC_URL is validated as a URL at startup (see env.ts). We
   // tolerate a trailing slash for operator ergonomics.
   const base = env.PORTAL_PUBLIC_URL.replace(/\/+$/, '');

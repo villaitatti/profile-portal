@@ -1,6 +1,7 @@
 <!--
   Shared header block. The logo URL is {{logoUrl}} — resolved at send time
-  from env.PORTAL_PUBLIC_URL + /itatti-logo-email.png by templates/render.ts.
+  from env.APPOINTEE_EMAIL_LOGO_URL, falling back to
+  env.PORTAL_PUBLIC_URL + /itatti-logo-email.png by templates/render.ts.
   Width 200px on desktop, MJML auto-scales on mobile.
 -->
 <mj-section background-color="#ffffff" padding="32px 0 24px 0" css-class="it-card">
