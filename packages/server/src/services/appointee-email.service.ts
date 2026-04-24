@@ -757,11 +757,10 @@ export async function sendBioEmailManually(args: {
     return { ok: false, reason: 'civicrm_unavailable' };
   }
 
-  // SES rejected the send. The row is now FAILED. Throw so the route returns
-  // a non-200 — otherwise the admin UI would show a green success toast
-  // while the email never left the server.
+  // SES rejected the send. The row is now FAILED. Return a typed reason so
+  // the route/UI can distinguish delivery failure from an unexpected bug.
   if (outcome === 'failed') {
-    throw new Error('ses_send_failed');
+    return { ok: false, reason: 'email_send_failed' };
   }
 
   const finalEvent = await prisma.appointeeEmailEvent.findUniqueOrThrow({
@@ -781,6 +780,7 @@ export async function sendBioEmailManually(args: {
       'no_primary_email',
       'already_sent',
       'civicrm_unavailable',
+      'email_send_failed',
     ];
     if (reason && (validReasons as readonly string[]).includes(reason)) {
       return { ok: false, reason: reason as BioEmailIneligibilityReason };
@@ -894,7 +894,7 @@ export async function sendVitIdInvitationManually(args: {
     return { ok: false, reason: 'civicrm_unavailable' };
   }
   if (outcome === 'failed') {
-    throw new Error('ses_send_failed');
+    return { ok: false, reason: 'email_send_failed' };
   }
 
   const finalEvent = await prisma.appointeeEmailEvent.findUniqueOrThrow({
@@ -912,6 +912,7 @@ export async function sendVitIdInvitationManually(args: {
       'needs_review',
       'already_sent',
       'civicrm_unavailable',
+      'email_send_failed',
     ];
     if (reason && (validReasons as readonly string[]).includes(reason)) {
       return {

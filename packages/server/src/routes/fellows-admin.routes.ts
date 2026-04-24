@@ -183,7 +183,9 @@ router.get('/', async (req, res, next) => {
 //   400 { reason: BioEmailIneligibilityReason }  — eligibility precondition failed
 //                                                  (no_vit_id / no_matching_fellowship / fellowship_not_accepted /
 //                                                   no_primary_email / already_sent)
-//   500 { error: "internal_error" }              — upstream (CiviCRM / Auth0 / SES) failure
+//   503 { reason: "civicrm_unavailable" }        — transient CiviCRM/Auth0 lookup failure
+//   502 { reason: "email_send_failed" }          — SES/config rejected the send
+//   500 { error: "internal_error" }              — unexpected server bug
 const sendBioEmailBodySchema = z.object({
   academicYear: academicYearSchema,
 });
@@ -234,7 +236,12 @@ router.post('/:contactId/send-bio-email', async (req, res, next) => {
       // 503 for transient upstream outages so the admin UI can surface a
       // retry message; 400 for genuine ineligibility. Mirrors the send-vit-id
       // endpoint so the two have identical error semantics.
-      const status = result.reason === 'civicrm_unavailable' ? 503 : 400;
+      const status =
+        result.reason === 'civicrm_unavailable'
+          ? 503
+          : result.reason === 'email_send_failed'
+            ? 502
+            : 400;
       res.status(status).json({ reason: result.reason });
       return;
     }
@@ -306,7 +313,12 @@ router.post('/:contactId/send-vit-id-email', async (req, res, next) => {
       // Surface 503 for transient upstream failures so the frontend can
       // distinguish a CiviCRM outage from a genuine ineligibility. Everything
       // else is 400 with the reason code for the UI to render.
-      const status = result.reason === 'civicrm_unavailable' ? 503 : 400;
+      const status =
+        result.reason === 'civicrm_unavailable'
+          ? 503
+          : result.reason === 'email_send_failed'
+            ? 502
+            : 400;
       res.status(status).json({ reason: result.reason });
       return;
     }

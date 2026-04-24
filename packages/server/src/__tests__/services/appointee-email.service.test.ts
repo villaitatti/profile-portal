@@ -744,7 +744,7 @@ describe('sendBioEmailManually', () => {
     (mockPrisma.appointeeEmailEvent.updateMany as any).mockResolvedValue({ count: 1 });
   }
 
-  it('throws ses_send_failed when dispatchOne returns failed (SES rejection)', async () => {
+  it('returns email_send_failed when dispatchOne returns failed (SES rejection)', async () => {
     primeEligibleContact();
     // Inside dispatchOne: findUniqueOrThrow returns the SENDING row.
     (mockPrisma.appointeeEmailEvent.findUniqueOrThrow as any).mockResolvedValue({
@@ -756,13 +756,12 @@ describe('sendBioEmailManually', () => {
     mockEmail.sendBioProjectDescriptionEmail.mockRejectedValue(new Error('SES 550'));
     (mockPrisma.appointeeEmailEvent.update as any).mockResolvedValue({});
 
-    await expect(
-      sendBioEmailManually({
-        contactId: 1,
-        academicYear: '2026-2027',
-        triggeredBy: 'admin_manual:u1',
-      })
-    ).rejects.toThrow('ses_send_failed');
+    const result = await sendBioEmailManually({
+      contactId: 1,
+      academicYear: '2026-2027',
+      triggeredBy: 'admin_manual:u1',
+    });
+    expect(result).toEqual({ ok: false, reason: 'email_send_failed' });
   });
 
   it('returns {ok:false, reason} when dispatchOne skips with a recognized ineligibility reason', async () => {
@@ -1440,7 +1439,7 @@ describe('sendVitIdInvitationManually', () => {
     expect(result).toEqual({ ok: false, reason: 'civicrm_unavailable' });
   });
 
-  it('throws ses_send_failed when SES rejects the send', async () => {
+  it('returns email_send_failed when SES rejects the send', async () => {
     primeEligibleContactNoVitId();
     (mockPrisma.appointeeEmailEvent.findUnique as any).mockResolvedValue(null);
     (mockPrisma.appointeeEmailEvent.create as any).mockResolvedValue({
@@ -1462,13 +1461,12 @@ describe('sendVitIdInvitationManually', () => {
       new Error('SES rejected')
     );
 
-    await expect(
-      sendVitIdInvitationManually({
-        contactId: 1,
-        academicYear: '2026-2027',
-        triggeredBy: 'admin_manual:u1',
-      })
-    ).rejects.toThrow('ses_send_failed');
+    const result = await sendVitIdInvitationManually({
+      contactId: 1,
+      academicYear: '2026-2027',
+      triggeredBy: 'admin_manual:u1',
+    });
+    expect(result).toEqual({ ok: false, reason: 'email_send_failed' });
   });
 
   it('maps a skipped-dispatch with a recognized reason back to {ok: false, reason}', async () => {

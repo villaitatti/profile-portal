@@ -3,8 +3,10 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import {
+  useSendBioEmail,
   useSendVitIdEmail,
   useEmailPreview,
+  SendBioEmailError,
   SendVitIdEmailError,
   EmailPreviewError,
 } from '@/api/fellows';
@@ -144,6 +146,28 @@ describe('useSendVitIdEmail', () => {
     await result.current.mutateAsync({ contactId: 1, academicYear: '2026-2027' });
 
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['fellows'] });
+  });
+});
+
+describe('useSendBioEmail', () => {
+  it('throws SendBioEmailError on 502 email_send_failed', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 502,
+      json: async () => ({ reason: 'email_send_failed' }),
+    });
+
+    const { result } = renderHook(() => useSendBioEmail(), { wrapper: wrap() });
+    try {
+      await result.current.mutateAsync({
+        contactId: 1,
+        academicYear: '2026-2027',
+      });
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(SendBioEmailError);
+      expect((err as SendBioEmailError).reason).toBe('email_send_failed');
+    }
   });
 });
 

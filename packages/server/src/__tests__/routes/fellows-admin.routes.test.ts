@@ -139,6 +139,19 @@ describe('POST /api/admin/fellows/:contactId/send-vit-id-email', () => {
     expect(res.body.reason).toBe('needs_review');
   });
 
+  it('returns 502 with reason email_send_failed when SES rejects the VIT invitation', async () => {
+    mockAppointee.sendVitIdInvitationManually.mockResolvedValue({
+      ok: false,
+      reason: 'email_send_failed',
+    });
+    const app = makeApp();
+    const res = await request(app)
+      .post('/api/admin/fellows/1/send-vit-id-email')
+      .send({ academicYear: '2026-2027' });
+    expect(res.status).toBe(502);
+    expect(res.body.reason).toBe('email_send_failed');
+  });
+
   it('returns 200 with eventId/status/sentAt on success', async () => {
     const sentAt = new Date('2026-04-23T12:00:00Z');
     mockAppointee.sendVitIdInvitationManually.mockResolvedValue({
@@ -184,6 +197,34 @@ describe('POST /api/admin/fellows/:contactId/send-vit-id-email', () => {
       .send({ academicYear: '2026-2027' });
     expect(res.status).toBe(500);
     expect(res.body.error).toBe('internal_error');
+  });
+});
+
+describe('POST /api/admin/fellows/:contactId/send-bio-email', () => {
+  it('returns 503 with reason civicrm_unavailable when CiviCRM is down', async () => {
+    mockAppointee.sendBioEmailManually.mockResolvedValue({
+      ok: false,
+      reason: 'civicrm_unavailable',
+    });
+    const app = makeApp();
+    const res = await request(app)
+      .post('/api/admin/fellows/1/send-bio-email')
+      .send({ academicYear: '2026-2027' });
+    expect(res.status).toBe(503);
+    expect(res.body.reason).toBe('civicrm_unavailable');
+  });
+
+  it('returns 502 with reason email_send_failed when SES rejects the bio email', async () => {
+    mockAppointee.sendBioEmailManually.mockResolvedValue({
+      ok: false,
+      reason: 'email_send_failed',
+    });
+    const app = makeApp();
+    const res = await request(app)
+      .post('/api/admin/fellows/1/send-bio-email')
+      .send({ academicYear: '2026-2027' });
+    expect(res.status).toBe(502);
+    expect(res.body.reason).toBe('email_send_failed');
   });
 });
 

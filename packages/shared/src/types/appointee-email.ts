@@ -5,16 +5,17 @@
  * copy) so adding a reason to one side surfaces as a TS error in the other.
  */
 
-/** POST /api/admin/fellows/:contactId/send-bio-email — 400 body `{reason}` */
+/** POST /api/admin/fellows/:contactId/send-bio-email — 400/502/503 body `{reason}` */
 export type SendBioEmailReason =
   | 'no_vit_id'
   | 'no_matching_fellowship'
   | 'fellowship_not_accepted'
   | 'no_primary_email'
   | 'already_sent'
-  | 'civicrm_unavailable';
+  | 'civicrm_unavailable'
+  | 'email_send_failed';
 
-/** POST /api/admin/fellows/:contactId/send-vit-id-email — 400 or 503 body `{reason}` */
+/** POST /api/admin/fellows/:contactId/send-vit-id-email — 400/502/503 body `{reason}` */
 export type SendVitIdEmailReason =
   | 'no_matching_fellowship'
   | 'fellowship_not_accepted'
@@ -23,7 +24,8 @@ export type SendVitIdEmailReason =
   | 'already_has_vit_id'
   | 'needs_review'
   | 'already_sent'
-  | 'civicrm_unavailable';
+  | 'civicrm_unavailable'
+  | 'email_send_failed';
 
 /**
  * GET /api/admin/fellows/:contactId/email-preview — 400/404/503 body `{reason}`.

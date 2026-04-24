@@ -417,6 +417,7 @@ const BIO_EMAIL_ERROR_MESSAGES: Record<SendBioEmailReason, string> = {
   no_primary_email: 'No primary email is on file for this appointee.',
   already_sent: 'The bio email has already been sent for this fellowship year.',
   civicrm_unavailable: 'CiviCRM is temporarily unavailable. Try again in a moment.',
+  email_send_failed: 'The email service rejected the message. Check SES configuration and sender verification, then try again.',
 };
 
 const VIT_ID_EMAIL_ERROR_MESSAGES: Record<SendVitIdEmailReason, string> = {
@@ -428,6 +429,7 @@ const VIT_ID_EMAIL_ERROR_MESSAGES: Record<SendVitIdEmailReason, string> = {
   needs_review: 'Resolve the VIT ID Status data conflict before sending.',
   already_sent: 'The VIT ID invitation has already been sent for this fellowship year.',
   civicrm_unavailable: 'CiviCRM is temporarily unavailable. Try again in a moment.',
+  email_send_failed: 'The email service rejected the message. Check SES configuration and sender verification, then try again.',
 };
 
 // Preview-specific reasons (contact_not_found is a 404 unique to the preview
