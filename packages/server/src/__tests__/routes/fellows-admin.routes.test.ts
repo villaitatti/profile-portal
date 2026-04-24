@@ -205,14 +205,16 @@ describe('GET /api/admin/fellows/:contactId/email-preview', () => {
     expect(res.body.error).toBe('invalid_request');
   });
 
-  it('returns 404 when the CiviCRM contact does not exist', async () => {
+  it('returns 404 with reason contact_not_found when the CiviCRM contact does not exist', async () => {
     mockCivicrm.getContactById.mockResolvedValue(null);
     const app = makeApp();
     const res = await request(app)
       .get('/api/admin/fellows/1/email-preview')
       .query({ type: 'vit_id_invitation', academicYear: '2026-2027' });
     expect(res.status).toBe(404);
-    expect(res.body.error).toBe('contact_not_found');
+    // Reason-key envelope (not { error }) so the web client's useEmailPreview
+    // maps this into EmailPreviewError. See EmailPreviewReason in @itatti/shared.
+    expect(res.body.reason).toBe('contact_not_found');
   });
 
   it('returns 400 with reason no_primary_email when the contact has no email', async () => {

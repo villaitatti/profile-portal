@@ -293,7 +293,7 @@ describe('evaluateBioEmailEligibility', () => {
       eligible: true,
       email: 'new@x.com',
       firstName: 'Returning',
-      fellowshipId: expect.any(Number),
+      fellowshipId: 10,
     });
   });
 
@@ -379,7 +379,7 @@ describe('evaluateBioEmailEligibility', () => {
       eligible: true,
       email: 'ada@example.com',
       firstName: 'Ada',
-      fellowshipId: expect.any(Number),
+      fellowshipId: 10,
     });
   });
 
@@ -1130,6 +1130,11 @@ describe('evaluateVitIdInvitationEligibility', () => {
     ]);
     const result = await evaluateVitIdInvitationEligibility(1, '2026-2027');
     expect(result).toEqual({ eligible: false, reason: 'already_has_vit_id' });
+    // Mirror the 'active' sibling test (line ~1112): confirm the evaluator
+    // short-circuits BEFORE querying fellowships. already_has_vit_id should
+    // be decidable from the ladder alone — fetching fellowships after that
+    // would be wasted work.
+    expect(mockCivicrm.getFellowships).not.toHaveBeenCalled();
   });
 
   it('returns civicrm_unavailable when getFellowships throws', async () => {

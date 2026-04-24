@@ -394,7 +394,11 @@ router.get('/:contactId/email-preview', async (req, res, next) => {
       return;
     }
     if (!contact) {
-      res.status(404).json({ error: 'contact_not_found' });
+      // Use the reason-key envelope (not { error }) so the web client's
+      // useEmailPreview maps this into EmailPreviewError and the modal
+      // surfaces the typed human copy. 'contact_not_found' is in the
+      // EmailPreviewReason union in @itatti/shared.
+      res.status(404).json({ reason: 'contact_not_found' });
       return;
     }
     if (!contact.email) {

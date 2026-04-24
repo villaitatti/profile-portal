@@ -132,19 +132,61 @@ migration lands). A `DO $$ RAISE EXCEPTION` guard in the migration aborts if
 any row is present at deploy time — belt-and-suspenders for the "someone
 enabled the cron ahead of schedule" scenario.
 
-**If the guard aborts:** do NOT edit the migration in place (that would
-re-hash it and break `prisma migrate deploy` on every other environment).
-Instead:
+**If the guard aborts:** never modify an already-applied migration file.
+Prisma records a SHA-256 checksum of every migration in the `_prisma_migrations`
+table; if a later `prisma migrate deploy` sees a mismatch, it refuses to run.
+Editing `20260423120001_rekey_appointee_email_events_by_fellowship/migration.sql`
+in place (even to remove the TRUNCATE block or tweak the `ADD COLUMN` to be
+NULLABLE) would break every other environment that already applied the original
+version. The only safe move is to add NEW migrations that layer on top.
 
-1. Write a NEW migration `20260423120002_backfill_fellowship_id` that
-   populates `fellowship_id` for each existing row via a CiviCRM lookup (the
-   same `(contactId, academicYear) → fellowshipId` resolution the app now
-   does at send time).
-2. Reorder this rekey migration to run AFTER the backfill, with the
-   `TRUNCATE` block removed and `ADD COLUMN fellowship_id INTEGER NOT NULL`
-   changed to use a `USING` clause or a temporary NULLABLE → backfill →
-   SET NOT NULL sequence.
-3. Re-run `prisma migrate deploy`.
+The recovery is a three-migration sequence, run in this order:
+
+1. `20260423120002_backfill_fellowship_id_nullable` — makes `fellowship_id`
+   NULLABLE on the column the rekey migration tried to add. Because the rekey
+   migration aborted BEFORE the `ADD COLUMN` ran, the column doesn't exist
+   yet — add it here as NULLABLE so we can write into it.
+
+   ```sql
+   ALTER TABLE "appointee_email_events"
+     ADD COLUMN "fellowship_id" INTEGER NULL;
+   ```
+
+2. `20260423120003_backfill_fellowship_id_populate` — runs a CiviCRM lookup
+   for each existing row (same `(contactId, academicYear) → fellowshipId`
+   resolution the app now does at send time) and writes the result via
+   `UPDATE`. If you can't express the lookup in pure SQL (CiviCRM is remote),
+   do this step as a one-off script that reads the rows, resolves, and
+   issues UPDATEs — then record it as an empty Prisma migration after the
+   fact (via `prisma migrate resolve --applied`) so the checksum chain stays
+   intact.
+
+3. `20260423120004_rekey_appointee_email_events_finalize` — once every row
+   has `fellowship_id` populated, add the NOT NULL constraint and the new
+   unique index. This is the migration that "completes" what the original
+   rekey would have done, minus the TRUNCATE (which is now unnecessary
+   because the backfill populated the values).
+
+   ```sql
+   ALTER TABLE "appointee_email_events"
+     ALTER COLUMN "fellowship_id" SET NOT NULL;
+   DROP INDEX IF EXISTS "appointee_email_events_contact_id_academic_year_email_type_key";
+   DROP INDEX IF EXISTS "appointee_email_events_contact_id_idx";
+   CREATE UNIQUE INDEX "appointee_email_events_fellowship_id_email_type_key"
+     ON "appointee_email_events" ("fellowship_id", "email_type");
+   CREATE INDEX "appointee_email_events_contact_id_academic_year_idx"
+     ON "appointee_email_events" ("contact_id", "academic_year");
+   ```
+
+You'll also need to mark the aborted `20260423120001` migration as resolved —
+since it failed partway, `_prisma_migrations` has a row with a NULL
+`finished_at` that blocks future deploys:
+
+```bash
+docker compose exec portal npx prisma migrate resolve --rolled-back 20260423120001_rekey_appointee_email_events_by_fellowship
+```
+
+Then `prisma migrate deploy` will pick up the three new migrations in order.
 
 **Rollback note:** this migration is **not reversible by image rollback**.
 After it succeeds the schema has `fellowship_id NOT NULL` and a unique key
