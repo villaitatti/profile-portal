@@ -316,32 +316,37 @@ export async function getFellowsDashboard(
       : hasAcceptedUpcomingFellowship
         ? nextAy
         : null;
-    // The fellowship ID for THIS target year. When a returning fellow has
-    // both a 2024-2025 current and a 2026-2027 accepted-upcoming row,
-    // targetAcademicYear is currentAy (2024-2025) and the matching
-    // fellowshipId is the 2024-2025 one — NOT the display fellowship
-    // (which is the latest-starting one). Events are stored keyed by the
-    // fellowship that owns the year, so the lookup must use this id.
-    const targetFellowshipId = hasCurrentFellowship
+    // The fellowship ID that is eligible for a manual send action. When a
+    // returning fellow has both a current row and a later accepted-upcoming row,
+    // the action target remains current-year so we do not accidentally surface
+    // the future fellowship's email event as today's actionable lifecycle.
+    const actionFellowshipId = hasCurrentFellowship
       ? currentFellowshipId
       : hasAcceptedUpcomingFellowship
         ? acceptedUpcomingFellowshipId
         : null;
 
+    // Status display and send eligibility intentionally use different
+    // fellowship IDs. In a filtered year, dedupe only sees rows from that year,
+    // so displayFellowshipId is the correct historical lookup key. In the
+    // all-years view, prefer the actionable current/upcoming fellowship, then
+    // fall back to the display row for past-only fellows.
+    const statusLookupFellowshipId = academicYear
+      ? item.displayFellowshipId
+      : actionFellowshipId ?? item.displayFellowshipId;
+
     // Look up events by (fellowshipId, emailType) — matches the database's
-    // unique key exactly. Uses targetFellowshipId (not the display one) so
-    // a contact whose display row is a future fellowship still resolves
-    // current-year events to the right fellowship. See the map-shape
-    // comment on `currentFellowshipId` above for the returning-fellow
-    // scenario this guards against.
-    const bioEvent = targetFellowshipId
+    // unique key exactly. The lookup key is allowed to differ from the action
+    // key so historical filters can show past send status while still keeping
+    // manual-send buttons gated to current/accepted-upcoming fellowships.
+    const bioEvent = statusLookupFellowshipId
       ? emailStatusMap.get(
-          `${targetFellowshipId}:${AppointeeEmailType.BIO_PROJECT_DESCRIPTION}`
+          `${statusLookupFellowshipId}:${AppointeeEmailType.BIO_PROJECT_DESCRIPTION}`
         )
       : undefined;
-    const vitInvitationEvent = targetFellowshipId
+    const vitInvitationEvent = statusLookupFellowshipId
       ? emailStatusMap.get(
-          `${targetFellowshipId}:${AppointeeEmailType.VIT_ID_INVITATION}`
+          `${statusLookupFellowshipId}:${AppointeeEmailType.VIT_ID_INVITATION}`
         )
       : undefined;
 

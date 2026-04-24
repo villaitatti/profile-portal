@@ -563,6 +563,52 @@ describe('getFellowsDashboard — appointeeStatus composition', () => {
     expect(result.fellows[0].bioEmail.status).toBe('sent');
   });
 
+  it('shows historical email status when filtering to a past academic year without enabling manual send', async () => {
+    mockCivicrm.getFellowsWithContacts.mockResolvedValue([
+      fellow({
+        contactId: 1,
+        fellowshipId: 90,
+        startDate: '2024-09-01',
+        endDate: '2025-06-30',
+        fellowshipAccepted: true,
+      }),
+      fellow({
+        contactId: 1,
+        fellowshipId: 100,
+        startDate: '2025-09-01',
+        endDate: '2026-06-30',
+        fellowshipAccepted: true,
+      }),
+    ]);
+    mockCivicrm.getEmailsForContacts.mockResolvedValue(
+      new Map([[1, { primary: 'test@x.com', secondaries: [] }]])
+    );
+    mockAuth0.listUsersByRole.mockResolvedValue([
+      { user_id: 'auth0|u', email: 'test@x.com', civicrmId: '1' },
+    ]);
+    mockAppointee.getEmailStatusForContacts.mockResolvedValue(
+      new Map([
+        [
+          '90:BIO_PROJECT_DESCRIPTION',
+          {
+            status: 'SENT' as any,
+            sentAt: new Date('2024-10-01'),
+            academicYear: '2024-2025',
+            emailType: 'BIO_PROJECT_DESCRIPTION' as any,
+            fellowshipId: 90,
+          },
+        ],
+      ])
+    );
+
+    const result = await getFellowsDashboard('2024-2025');
+
+    expect(result.fellows).toHaveLength(1);
+    expect(result.fellows[0].fellowshipYear).toBe('2024-2025');
+    expect(result.fellows[0].bioEmail.status).toBe('sent');
+    expect(result.fellows[0].bioEmail.canManuallySend).toBe(false);
+  });
+
   it('exposes appointeeStatus and vitIdInvitation on every row (never undefined)', async () => {
     // Guard: if a code path ever drops one of these from the assembly loop,
     // the UI blows up with "Cannot read property 'status' of undefined" on
