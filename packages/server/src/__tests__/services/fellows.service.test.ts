@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { AppointeeEmailStatus, AppointeeEmailType } from '@prisma/client';
 
 vi.mock('../../env.js', () => ({
   env: {
@@ -366,5 +367,282 @@ describe('getFellowsDashboard — academic year filter', () => {
     // Filter still works: only the 2024-2025 fellowship (contactId 3) in fellows.
     expect(result.fellows).toHaveLength(1);
     expect(result.fellows[0].civicrmId).toBe(3);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────
+// Dashboard composition: appointeeStatus + vitIdInvitation summary. Covers
+// the new fields added alongside the Manage Appointees redesign.
+// ───────────────────────────────────────────────────────────────────────
+
+describe('getFellowsDashboard — appointeeStatus composition', () => {
+  it('a no-VIT-ID + accepted fellowship row derives appointeeStatus="accepted" and shows canManuallySend for VIT invitation', async () => {
+    mockCivicrm.getFellowsWithContacts.mockResolvedValue([
+      fellow({ contactId: 1, fellowshipAccepted: true }),
+    ]);
+    mockCivicrm.getEmailsForContacts.mockResolvedValue(new Map());
+    mockAuth0.listUsersByRole.mockResolvedValue([]); // no VIT ID
+
+    const result = await getFellowsDashboard();
+
+    expect(result.fellows[0].appointeeStatus).toBe('accepted');
+    // VIT invitation should be offerable.
+    expect(result.fellows[0].vitIdInvitation.canManuallySend).toBe(true);
+    // Bio email should NOT be offerable — requires a VIT ID first.
+    expect(result.fellows[0].bioEmail.canManuallySend).toBe(false);
+  });
+
+  it('a contact WITH a VIT ID and accepted fellowship derives appointeeStatus="vit-id-claimed" and shows canManuallySend for bio only', async () => {
+    mockCivicrm.getFellowsWithContacts.mockResolvedValue([
+      fellow({ contactId: 1, email: 'sofia@x.com', fellowshipAccepted: true }),
+    ]);
+    mockCivicrm.getEmailsForContacts.mockResolvedValue(
+      new Map([[1, { primary: 'sofia@x.com', secondaries: [] }]])
+    );
+    mockAuth0.listUsersByRole.mockResolvedValue([
+      { user_id: 'auth0|sofia', email: 'sofia@x.com', civicrmId: '1' },
+    ]);
+
+    const result = await getFellowsDashboard();
+
+    expect(result.fellows[0].appointeeStatus).toBe('vit-id-claimed');
+    // Inverted: VIT invitation off, bio on.
+    expect(result.fellows[0].vitIdInvitation.canManuallySend).toBe(false);
+    expect(result.fellows[0].bioEmail.canManuallySend).toBe(true);
+  });
+
+  it('a non-accepted fellowship (fellowshipAccepted=false) derives appointeeStatus="nominated" and suppresses BOTH send buttons', async () => {
+    mockCivicrm.getFellowsWithContacts.mockResolvedValue([
+      fellow({ contactId: 1, fellowshipAccepted: false }),
+    ]);
+    mockCivicrm.getEmailsForContacts.mockResolvedValue(new Map());
+    mockAuth0.listUsersByRole.mockResolvedValue([]);
+
+    const result = await getFellowsDashboard();
+
+    expect(result.fellows[0].appointeeStatus).toBe('nominated');
+    expect(result.fellows[0].vitIdInvitation.canManuallySend).toBe(false);
+    expect(result.fellows[0].bioEmail.canManuallySend).toBe(false);
+  });
+
+  it('needs-review match-ladder outcome disables BOTH send buttons even when the lifecycle would otherwise allow them', async () => {
+    // Two Auth0 users with the same normalized name — ladder tier 4 collision.
+    mockCivicrm.getFellowsWithContacts.mockResolvedValue([
+      fellow({
+        contactId: 1,
+        firstName: 'Maria',
+        lastName: 'Rossi',
+        fellowshipAccepted: true,
+      }),
+    ]);
+    mockCivicrm.getEmailsForContacts.mockResolvedValue(new Map());
+    mockAuth0.listUsersByRole.mockResolvedValue([
+      { user_id: 'auth0|a', email: 'a@x.com', name: 'Maria Rossi' },
+      { user_id: 'auth0|b', email: 'b@x.com', name: 'MARIA ROSSI' },
+    ]);
+
+    const result = await getFellowsDashboard();
+
+    expect(result.fellows[0].status).toBe('needs-review');
+    // Both send buttons must be suppressed so Angela can't mis-send before
+    // resolving the duplicate. This is the defense-in-depth rail that lives
+    // at the dashboard level (the server route also refuses).
+    expect(result.fellows[0].vitIdInvitation.canManuallySend).toBe(false);
+    expect(result.fellows[0].bioEmail.canManuallySend).toBe(false);
+  });
+
+  it('active-different-email (returning fellow, email changed) is treated as hasVitId for lifecycle', async () => {
+    // The contact's current CiviCRM email is new; the old Auth0 user is still
+    // reachable via app_metadata.civicrm_id. Lifecycle collapses this into
+    // "vit-id-claimed" exactly like a straight 'active' match.
+    mockCivicrm.getFellowsWithContacts.mockResolvedValue([
+      fellow({
+        contactId: 1,
+        email: 't.mueller.new@x.com',
+        fellowshipAccepted: true,
+      }),
+    ]);
+    mockCivicrm.getEmailsForContacts.mockResolvedValue(
+      new Map([[1, { primary: 't.mueller.new@x.com', secondaries: [] }]])
+    );
+    mockAuth0.listUsersByRole.mockResolvedValue([
+      {
+        user_id: 'auth0|thomas',
+        email: 't.mueller@old.com',
+        civicrmId: '1',
+      },
+    ]);
+
+    const result = await getFellowsDashboard();
+
+    expect(result.fellows[0].status).toBe('active-different-email');
+    expect(result.fellows[0].appointeeStatus).toBe('vit-id-claimed');
+    expect(result.fellows[0].vitIdInvitation.canManuallySend).toBe(false);
+    expect(result.fellows[0].bioEmail.canManuallySend).toBe(true);
+  });
+
+  it('widens the email-status query scope to ALL academic years present in the data (codex finding #2)', async () => {
+    mockCivicrm.getFellowsWithContacts.mockResolvedValue([
+      fellow({ contactId: 1, startDate: '2024-09-01', endDate: '2025-06-30' }),
+      fellow({ contactId: 2, startDate: '2025-09-01', endDate: '2026-06-30' }),
+      fellow({ contactId: 3, startDate: '2026-09-01', endDate: '2027-06-30' }),
+    ]);
+    mockCivicrm.getEmailsForContacts.mockResolvedValue(new Map());
+    mockAuth0.listUsersByRole.mockResolvedValue([]);
+
+    await getFellowsDashboard();
+
+    // Before the codex-finding-#2 fix, this was hardcoded to [currentAy, nextAy]
+    // = ['2025-2026', '2026-2027'] and the 2024-2025 row's bio status pill
+    // silently showed blank even if we had a SENT event for it.
+    const call = mockAppointee.getEmailStatusForContacts.mock.calls[0];
+    const yearsArg = call[1] as string[];
+    expect(yearsArg).toEqual(
+      expect.arrayContaining(['2024-2025', '2025-2026', '2026-2027'])
+    );
+  });
+
+  it('looks up email events against the TARGET-year fellowship, not the display (latest-starting) fellowship', async () => {
+    // Returning-fellow scenario: a contact has a current-year fellowship
+    // (2025-2026, already enrolled — bio email was SENT under its
+    // fellowshipId) AND an upcoming accepted fellowship (2026-2027, display
+    // row because it starts later). The dashboard dedupes on latest-start
+    // so the display row is 2026-2027; but the current-year bio email is
+    // keyed under the 2025-2026 fellowship.
+    //
+    // If the lookup used displayFellowshipId (the 2026-2027 one), the
+    // dashboard would show "bio email: none" for a contact who actually
+    // received it. This test asserts the lookup uses the target-year
+    // fellowshipId so the SENT event surfaces correctly.
+    mockCivicrm.getFellowsWithContacts.mockResolvedValue([
+      // 2025-2026: current, fellowshipId=100, bio email already sent
+      fellow({
+        contactId: 1,
+        fellowshipId: 100,
+        startDate: '2025-09-01',
+        endDate: '2026-06-30',
+        fellowshipAccepted: true,
+      }),
+      // 2026-2027: upcoming accepted, fellowshipId=200, latest-starting
+      fellow({
+        contactId: 1,
+        fellowshipId: 200,
+        startDate: '2026-09-01',
+        endDate: '2027-06-30',
+        fellowshipAccepted: true,
+      }),
+    ]);
+    mockCivicrm.getEmailsForContacts.mockResolvedValue(new Map());
+    mockAuth0.listUsersByRole.mockResolvedValue([
+      { user_id: 'auth0|u', email: 'test@x.com', civicrmId: '1' },
+    ]);
+
+    // Bio email event stored under fellowshipId=100 (the current-year one).
+    // If the code looks up by displayFellowshipId (200), this event
+    // SILENTLY MISSES and the row shows "bio email: none".
+    mockAppointee.getEmailStatusForContacts.mockResolvedValue(
+      new Map([
+        [
+          '100:BIO_PROJECT_DESCRIPTION',
+          {
+            status: AppointeeEmailStatus.SENT,
+            sentAt: new Date('2025-10-01'),
+            academicYear: '2025-2026',
+            emailType: AppointeeEmailType.BIO_PROJECT_DESCRIPTION,
+            fellowshipId: 100,
+          },
+        ],
+      ])
+    );
+
+    const result = await getFellowsDashboard();
+
+    expect(result.fellows).toHaveLength(1);
+    // The bio email must be visible as SENT on the display row, proving the
+    // lookup used the 2025-2026 (current) fellowshipId, not the 2026-2027
+    // (display) one.
+    expect(result.fellows[0].bioEmail.status).toBe('sent');
+  });
+
+  it('shows historical email status when filtering to a past academic year without enabling manual send', async () => {
+    mockCivicrm.getFellowsWithContacts.mockResolvedValue([
+      fellow({
+        contactId: 1,
+        fellowshipId: 90,
+        startDate: '2024-09-01',
+        endDate: '2025-06-30',
+        fellowshipAccepted: true,
+      }),
+      fellow({
+        contactId: 1,
+        fellowshipId: 100,
+        startDate: '2025-09-01',
+        endDate: '2026-06-30',
+        fellowshipAccepted: true,
+      }),
+    ]);
+    mockCivicrm.getEmailsForContacts.mockResolvedValue(
+      new Map([[1, { primary: 'test@x.com', secondaries: [] }]])
+    );
+    mockAuth0.listUsersByRole.mockResolvedValue([
+      { user_id: 'auth0|u', email: 'test@x.com', civicrmId: '1' },
+    ]);
+    mockAppointee.getEmailStatusForContacts.mockResolvedValue(
+      new Map([
+        [
+          '90:BIO_PROJECT_DESCRIPTION',
+          {
+            status: AppointeeEmailStatus.SENT,
+            sentAt: new Date('2024-10-01'),
+            academicYear: '2024-2025',
+            emailType: AppointeeEmailType.BIO_PROJECT_DESCRIPTION,
+            fellowshipId: 90,
+          },
+        ],
+      ])
+    );
+
+    const result = await getFellowsDashboard('2024-2025');
+
+    expect(result.fellows).toHaveLength(1);
+    expect(result.fellows[0].fellowshipYear).toBe('2024-2025');
+    expect(result.fellows[0].bioEmail.status).toBe('sent');
+    expect(result.fellows[0].bioEmail.canManuallySend).toBe(false);
+  });
+
+  it('exposes appointeeStatus and vitIdInvitation on every row (never undefined)', async () => {
+    // Guard: if a code path ever drops one of these from the assembly loop,
+    // the UI blows up with "Cannot read property 'status' of undefined" on
+    // AppointeeStatusBadge. Every row must have both fields.
+    mockCivicrm.getFellowsWithContacts.mockResolvedValue([
+      fellow({ contactId: 1, fellowshipAccepted: true }),
+      fellow({ contactId: 2, fellowshipAccepted: false }),
+      fellow({
+        contactId: 3,
+        firstName: 'Dup',
+        lastName: 'Contact',
+        email: 'dup@x.com',
+        fellowshipAccepted: true,
+      }),
+    ]);
+    // Seed a cross-contact duplicate — that row goes through the early
+    // needs-review short-circuit, which must also emit both new fields.
+    // Key 4 is intentionally outside the requested fellows set to simulate an
+    // asymmetric duplicate-detection response from CiviCRM Email.get.
+    mockCivicrm.getEmailsForContacts.mockResolvedValue(
+      new Map([
+        [3, { primary: 'shared@x.com', secondaries: [] }],
+        [4, { primary: 'shared@x.com', secondaries: [] }],
+      ])
+    );
+    mockAuth0.listUsersByRole.mockResolvedValue([]);
+
+    const result = await getFellowsDashboard();
+
+    for (const f of result.fellows) {
+      expect(f.appointeeStatus).toBeDefined();
+      expect(f.vitIdInvitation).toBeDefined();
+      expect(f.vitIdInvitation.canManuallySend).toEqual(expect.any(Boolean));
+    }
   });
 });

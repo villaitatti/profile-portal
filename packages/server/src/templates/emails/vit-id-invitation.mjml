@@ -1,0 +1,74 @@
+<!--
+  VIT ID invitation email — the onboarding touchpoint for a new appointee.
+  Subject (not in MJML, lives in render.ts):
+    Welcome to I Tatti — Claim your VIT ID
+
+  Runtime-substituted tokens:
+    {{firstName}}  contact.firstName from CiviCRM (render throws if missing)
+    {{claimUrl}}   env.CLAIM_VIT_ID_URL
+    {{logoUrl}}    env.PORTAL_PUBLIC_URL + '/itatti-logo-email.png'
+
+  Copy was reworded 2026-04-23 after codex review found the original
+  ("we have already created [your VIT ID] for you") contradicted the
+  actual claim flow in claim.service.ts, which CREATES the Auth0 user
+  on first claim rather than pre-provisioning.
+-->
+<mjml>
+  <mj-include path="./_head.mjml" />
+  <mj-body background-color="#eef1f3" css-class="it-frame" width="640px">
+    <mj-include path="./_header.mjml" />
+
+    <mj-section background-color="#ffffff" padding="0" css-class="it-card">
+      <mj-column>
+        <mj-text css-class="it-text">Dear {{firstName}},</mj-text>
+
+        <mj-text css-class="it-text" padding-top="16px">
+          Please note that I Tatti provides access to an intranet site where you can find useful information to assist with your arrival, as well as information about policies, services, and the I Tatti calendar. To access the site (along with other IT services when you will be at I Tatti, e.g. IT and Library Helpdesk), you will need an I Tatti ID (VIT ID) linked to this email address.
+        </mj-text>
+
+        <mj-text css-class="it-text" padding-top="16px">
+          To set up and activate your VIT ID please follow the instructions below:
+        </mj-text>
+
+        <mj-text css-class="it-text" padding-top="8px" padding-left="48px">
+          <ol style="margin: 0; padding-left: 20px;">
+            <li style="margin-bottom: 8px;">Click on the button below.</li>
+            <li style="margin-bottom: 8px;">In the &ldquo;Claim your VIT ID&rdquo; section, enter your email (the address this email was sent to) and click on &ldquo;Claim VIT ID&rdquo; &mdash; you will receive an email with a link.</li>
+            <li style="margin-bottom: 8px;">Click the link in the email, which will take you to a secure page where you can set a password of your choice.</li>
+            <li style="margin-bottom: 0;">Once your password is set, your VIT ID will be active. Your VIT ID credentials will be the email address where you received this message and your newly set password.</li>
+          </ol>
+        </mj-text>
+
+        <mj-button
+          href="{{claimUrl}}"
+          background-color="#ab192d"
+          color="#ffffff"
+          font-family='Arial, Helvetica, sans-serif'
+          font-size="16px"
+          font-weight="700"
+          inner-padding="14px 28px"
+          border-radius="4px"
+          padding="24px 24px 24px 24px"
+          align="center"
+        >
+          Claim your VIT ID
+        </mj-button>
+
+        <mj-text css-class="it-text" padding-top="0">
+          These credentials will grant you access to our Intranet site at <a href="https://community.itatti.harvard.edu">community.itatti.harvard.edu</a> and the possibility to explore our housing database at <a href="https://housing.itatti.harvard.edu">housing.itatti.harvard.edu</a>. On the login screen, click on &ldquo;Log In with your VIT ID&rdquo; and enter your VIT ID credentials.
+        </mj-text>
+
+        <mj-text css-class="it-text" padding-top="16px">
+          Should you encounter any issues while setting up your VIT ID, please contact our IT department at <a href="mailto:it@itatti.harvard.edu">it@itatti.harvard.edu</a>.
+        </mj-text>
+
+        <mj-text css-class="it-text" padding-top="24px">
+          With kind regards,<br/>
+          I Tatti
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-include path="./_footer.mjml" />
+  </mj-body>
+</mjml>

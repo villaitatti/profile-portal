@@ -6,6 +6,12 @@ import * as appointeeEmailService from '../services/appointee-email.service.js';
 import * as civicrmService from '../services/civicrm.service.js';
 import { listUsersByRole } from '../services/auth0.service.js';
 import { buildAuth0Maps, normalize, reconcile, type LadderFellow } from '../services/vit-id-match.js';
+import { computeAppointeeStatus, type EmailEventStatus } from '../services/appointee-status.js';
+import {
+  renderVitIdInvitation,
+  renderBioProjectDescription,
+  TemplateRenderError,
+} from '../templates/render.js';
 import { logger } from '../lib/logger.js';
 import type {
   Auth0Candidate,
@@ -16,6 +22,24 @@ import type {
 
 const router = Router();
 
+/**
+ * Academic-year label validator, shared by all three appointee-email
+ * endpoints. A plain `/^\d{4}-\d{4}$/` accepts nonsense like "9999-0001"
+ * or "2025-2030" which would reach downstream lookups and then fail with a
+ * confusing 'no_matching_fellowship' reason. Refine to require consecutive
+ * years within a realistic range (1900-2100).
+ */
+const academicYearSchema = z
+  .string()
+  .regex(/^\d{4}-\d{4}$/, 'must be YYYY-YYYY')
+  .refine(
+    (s) => {
+      const [a, b] = s.split('-').map(Number);
+      return b === a + 1 && a >= 1900 && a <= 2100;
+    },
+    { message: 'years must be consecutive and within 1900-2100' }
+  );
+
 function getDevMockData(academicYear?: string): FellowsDashboardResponse {
   const mockBioEmail = (variant: 'none' | 'pending' | 'sent' | 'failed', canSend: boolean, year: string) => ({
     status: variant,
@@ -23,7 +47,14 @@ function getDevMockData(academicYear?: string): FellowsDashboardResponse {
     targetAcademicYear: year,
     canManuallySend: canSend,
   });
-  const fellows: FellowsDashboardResponse['fellows'] = [
+  // Dev-mode rows reuse the bio-email summary shape for the VIT ID
+  // invitation, then we augment with an appointeeStatus via the helper below.
+  // Keeps the hand-maintained rows readable without duplicating 5 fields per row.
+  type PartialEntry = Omit<
+    FellowsDashboardResponse['fellows'][number],
+    'vitIdInvitation' | 'appointeeStatus'
+  >;
+  const partialRows: PartialEntry[] = [
     // Classic 'no-account' — first-time fellow, never been here before
     { civicrmId: 1, firstName: 'Maria', lastName: 'Rossi', email: 'm.rossi@unifi.it', appointment: 'Fellow', fellowship: 'NEH Fellow', fellowshipYear: '2025-2026', status: 'no-account', civicrmIdStatus: 'n/a', bioEmail: mockBioEmail('none', false, '2025-2026') },
     { civicrmId: 2, firstName: 'James', lastName: 'Chen', email: 'jchen@princeton.edu', appointment: 'Fellow', fellowship: 'Mellon Fellow', fellowshipYear: '2025-2026', status: 'no-account', civicrmIdStatus: 'n/a', bioEmail: mockBioEmail('none', false, '2025-2026') },
@@ -67,6 +98,48 @@ function getDevMockData(academicYear?: string): FellowsDashboardResponse {
     { civicrmId: 9, firstName: 'Chiara', lastName: 'Conti', email: 'c.conti@unibo.it', appointment: 'Fellow', fellowship: 'Ahmanson Fellow', fellowshipYear: '2025-2026', status: 'no-account', civicrmIdStatus: 'n/a', bioEmail: mockBioEmail('none', false, '2025-2026') },
     { civicrmId: 10, firstName: 'Robert', lastName: 'Taylor', email: 'r.taylor@oxford.ac.uk', appointment: 'Visiting Professor', fellowship: 'Robert Lehman Visiting Professor', fellowshipYear: '2025-2026', status: 'active', matchedVia: 'primary-email', matched: { userId: 'auth0|robert', email: 'r.taylor@oxford.ac.uk', civicrmId: '10', name: 'Robert Taylor' }, civicrmIdStatus: 'ok', bioEmail: mockBioEmail('none', true, '2025-2026') },
   ];
+
+  // Derive vitIdInvitation + appointeeStatus from each partial row so the
+  // dev-mode dashboard exercises the full five-state palette without requiring
+  // every mock row to be hand-maintained with the new fields.
+  const fellows: FellowsDashboardResponse['fellows'] = partialRows.map((p) => {
+    const hasVitId = p.status === 'active' || p.status === 'active-different-email';
+    const isNeedsReview = p.status === 'needs-review';
+    // Derive a plausible fellowshipAccepted from the mock data. For dev, treat
+    // every row with a VIT ID or a bio email event as accepted; otherwise keep a
+    // few no-account rows nominated so the palette still includes that state.
+    const fellowshipAccepted =
+      hasVitId ||
+      p.bioEmail.status !== 'none' ||
+      p.bioEmail.canManuallySend ||
+      p.civicrmId === 1 ||
+      p.civicrmId === 2;
+    const vitIdInvitationStatus: EmailEventStatus =
+      fellowshipAccepted && !hasVitId && !isNeedsReview && p.civicrmId === 2
+        ? 'SENT'
+        : 'NONE';
+    const vitIdInvitation = {
+      status: vitIdInvitationStatus === 'SENT' ? 'sent' as const : 'none' as const,
+      sentAt:
+        vitIdInvitationStatus === 'SENT' ? '2026-04-09T09:00:00.000Z' : null,
+      targetAcademicYear: p.bioEmail.targetAcademicYear,
+      canManuallySend:
+        fellowshipAccepted &&
+        !hasVitId &&
+        !isNeedsReview &&
+        p.bioEmail.targetAcademicYear !== null &&
+        vitIdInvitationStatus !== 'SENT',
+    };
+    const bioEmailStatus: EmailEventStatus =
+      p.bioEmail.status === 'sent' ? 'SENT' : 'NONE';
+    const appointeeStatus = computeAppointeeStatus({
+      fellowshipAccepted,
+      vitIdTier: p.status,
+      vitIdInvitationStatus,
+      bioEmailStatus,
+    });
+    return { ...p, vitIdInvitation, appointeeStatus };
+  });
 
   const filtered = academicYear
     ? fellows.filter((f) => f.fellowshipYear === academicYear)
@@ -112,7 +185,7 @@ router.get('/', async (req, res, next) => {
 //                                                   no_primary_email / already_sent)
 //   500 { error: "internal_error" }              — upstream (CiviCRM / Auth0 / SES) failure
 const sendBioEmailBodySchema = z.object({
-  academicYear: z.string().regex(/^\d{4}-\d{4}$/),
+  academicYear: academicYearSchema,
 });
 
 router.post('/:contactId/send-bio-email', async (req, res, next) => {
@@ -122,7 +195,10 @@ router.post('/:contactId/send-bio-email', async (req, res, next) => {
     if (!Number.isInteger(contactId) || contactId <= 0) {
       res
         .status(400)
-        .json({ error: 'invalid_request', details: 'contactId must be a positive integer' });
+        .json({
+          error: 'invalid_request',
+          details: [{ path: 'contactId', message: 'must be a positive integer' }],
+        });
       return;
     }
 
@@ -155,7 +231,11 @@ router.post('/:contactId/send-bio-email', async (req, res, next) => {
     });
 
     if (!result.ok) {
-      res.status(400).json({ reason: result.reason });
+      // 503 for transient upstream outages so the admin UI can surface a
+      // retry message; 400 for genuine ineligibility. Mirrors the send-vit-id
+      // endpoint so the two have identical error semantics.
+      const status = result.reason === 'civicrm_unavailable' ? 503 : 400;
+      res.status(status).json({ reason: result.reason });
       return;
     }
 
@@ -166,6 +246,201 @@ router.post('/:contactId/send-bio-email', async (req, res, next) => {
     });
   } catch (err) {
     logger.error({ err, contactId: req.params.contactId }, 'Admin: send-bio-email failed');
+    res.status(500).json({ error: 'internal_error' });
+  }
+});
+
+// POST /api/admin/fellows/:contactId/send-vit-id-email
+// Body: { academicYear: "YYYY-YYYY" }
+// Mirrors /send-bio-email but with the inverted VIT-ID precondition
+// (the appointee must NOT already have an Auth0 account). Codex review
+// 2026-04-23 required the reason union to distinguish 'needs_review' from
+// 'already_has_vit_id', and 'civicrm_unavailable' from generic errors so the
+// modal can surface an actionable message.
+const sendVitIdEmailBodySchema = z.object({
+  academicYear: academicYearSchema,
+});
+
+router.post('/:contactId/send-vit-id-email', async (req, res, next) => {
+  try {
+    const contactIdRaw = req.params.contactId;
+    const contactId = Number(contactIdRaw);
+    if (!Number.isInteger(contactId) || contactId <= 0) {
+      res
+        .status(400)
+        .json({
+          error: 'invalid_request',
+          details: [{ path: 'contactId', message: 'must be a positive integer' }],
+        });
+      return;
+    }
+
+    const parsed = sendVitIdEmailBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        error: 'invalid_request',
+        details: parsed.error.issues.map((i) => ({
+          path: i.path.join('.'),
+          message: i.message,
+        })),
+      });
+      return;
+    }
+
+    if (isDevMode) {
+      res.json({
+        eventId: `dev-vit-${contactId}-${parsed.data.academicYear}`,
+        status: 'SENT',
+        sentAt: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const result = await appointeeEmailService.sendVitIdInvitationManually({
+      contactId,
+      academicYear: parsed.data.academicYear,
+      triggeredBy: `admin_manual:${req.userId || 'unknown'}`,
+    });
+
+    if (!result.ok) {
+      // Surface 503 for transient upstream failures so the frontend can
+      // distinguish a CiviCRM outage from a genuine ineligibility. Everything
+      // else is 400 with the reason code for the UI to render.
+      const status = result.reason === 'civicrm_unavailable' ? 503 : 400;
+      res.status(status).json({ reason: result.reason });
+      return;
+    }
+
+    res.json({
+      eventId: result.eventId,
+      status: result.status,
+      sentAt: result.sentAt ? result.sentAt.toISOString() : null,
+    });
+  } catch (err) {
+    logger.error(
+      { err, contactId: req.params.contactId },
+      'Admin: send-vit-id-email failed'
+    );
+    res.status(500).json({ error: 'internal_error' });
+  }
+});
+
+// GET /api/admin/fellows/:contactId/email-preview
+//   ?type=vit_id_invitation | bio_project_description
+//   &academicYear=YYYY-YYYY
+//
+// Lightweight preview. Fetches the contact once (for firstName), renders the
+// MJML-compiled template via templates/render.ts, returns the rendered HTML,
+// plaintext, subject, and metadata for the EmailPreviewModal. DOES NOT
+// re-validate fellowshipAccepted or match-ladder tier — that's the send
+// endpoint's job. Preview is display; the server re-renders fresh at send.
+const emailPreviewQuerySchema = z.object({
+  type: z.enum(['vit_id_invitation', 'bio_project_description']),
+  academicYear: academicYearSchema,
+});
+
+router.get('/:contactId/email-preview', async (req, res, next) => {
+  try {
+    const contactIdRaw = req.params.contactId;
+    const contactId = Number(contactIdRaw);
+    if (!Number.isInteger(contactId) || contactId <= 0) {
+      res
+        .status(400)
+        .json({
+          error: 'invalid_request',
+          details: [{ path: 'contactId', message: 'must be a positive integer' }],
+        });
+      return;
+    }
+
+    const parsed = emailPreviewQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({
+        error: 'invalid_request',
+        details: parsed.error.issues.map((i) => ({
+          path: i.path.join('.'),
+          message: i.message,
+        })),
+      });
+      return;
+    }
+
+    const bcc = env.APPOINTEE_EMAIL_BCC
+      ? env.APPOINTEE_EMAIL_BCC.split(',')
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0)
+      : [];
+
+    // Dev-mode mock: synthesize a rendered preview without touching CiviCRM or
+    // the compiled HTML (the templates directory may not exist in test harnesses).
+    if (isDevMode) {
+      const mockFirstName = 'Sofia';
+      const mockEmail = `dev-${contactId}@example.com`;
+      const mockSubject =
+        parsed.data.type === 'vit_id_invitation'
+          ? 'Welcome to I Tatti — Claim your VIT ID'
+          : 'Biography and Project Description';
+      res.json({
+        to: mockEmail,
+        bcc,
+        subject: mockSubject,
+        body: `<p>Dev mode preview for ${mockFirstName}. Contact #${contactId}, year ${parsed.data.academicYear}.</p>`,
+        bodyFormat: 'html',
+      });
+      return;
+    }
+
+    // A CiviCRM outage here should surface as 503 civicrm_unavailable so
+    // the preview modal can offer a retry message — not a generic 500.
+    // Mirrors the send-vit-id-email route's error semantics.
+    let contact: Awaited<ReturnType<typeof civicrmService.getContactById>>;
+    try {
+      contact = await civicrmService.getContactById(contactId);
+    } catch (err) {
+      logger.warn(
+        { err, contactId },
+        'Admin: email-preview civicrm fetch failed'
+      );
+      res.status(503).json({ reason: 'civicrm_unavailable' });
+      return;
+    }
+    if (!contact) {
+      // Use the reason-key envelope (not { error }) so the web client's
+      // useEmailPreview maps this into EmailPreviewError and the modal
+      // surfaces the typed human copy. 'contact_not_found' is in the
+      // EmailPreviewReason union in @itatti/shared.
+      res.status(404).json({ reason: 'contact_not_found' });
+      return;
+    }
+    if (!contact.email) {
+      res.status(400).json({ reason: 'no_primary_email' });
+      return;
+    }
+
+    try {
+      const rendered =
+        parsed.data.type === 'vit_id_invitation'
+          ? renderVitIdInvitation({ firstName: contact.firstName })
+          : renderBioProjectDescription({ firstName: contact.firstName });
+      res.json({
+        to: contact.email,
+        bcc,
+        subject: rendered.subject,
+        body: rendered.html,
+        bodyFormat: 'html',
+      });
+    } catch (err) {
+      if (err instanceof TemplateRenderError) {
+        res.status(400).json({ reason: err.reason });
+        return;
+      }
+      throw err;
+    }
+  } catch (err) {
+    logger.error(
+      { err, contactId: req.params.contactId },
+      'Admin: email-preview failed'
+    );
     res.status(500).json({ error: 'internal_error' });
   }
 });

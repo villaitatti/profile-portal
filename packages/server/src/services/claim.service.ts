@@ -382,6 +382,7 @@ async function processAsyncClaimOps(params: {
       await appointeeEmailService.enqueueBioEmail({
         contactId,
         academicYear: target.academicYear,
+        fellowshipId: target.fellowship.id,
         triggeredBy: 'claim_auto',
         delayHours: 24,
       });

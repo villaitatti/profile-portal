@@ -65,6 +65,8 @@ All configuration is in `.env` at the project root. See `.env.example` for the f
 | `CIVICRM_BASE_URL` | CiviCRM instance URL |
 | `CIVICRM_API_KEY` | CiviCRM API key |
 | `CORS_ORIGIN` | Required in production (e.g., `https://dev-profile.itatti.net`) |
+| `CLAIM_VIT_ID_URL` | Destination of the "Claim your VIT ID" button in the invitation email (e.g., `https://community.itatti.harvard.edu/claim-vit-id`) |
+| `PORTAL_PUBLIC_URL` | Origin used to serve the I Tatti logo asset referenced from outgoing HTML emails |
 
 ### Optional services (features disabled if not set)
 
@@ -75,18 +77,22 @@ All configuration is in `.env` at the project root. See `.env.example` for the f
 | `SSE_SECRET` | HMAC key for SSE tokens (random fallback if not set, but tokens won't survive restarts) |
 | `AWS_SES_REGION` + `AWS_SES_FROM_EMAIL` + AWS credentials | Appointee bio/project email sending via SES |
 
-### Appointee bio email workflow (dev server vs. production)
+### Appointee email workflow (dev server vs. production)
 
-The bio email system has three environment-specific knobs. Defaults are safe (nothing fires), so real production typically only sets the cron flag.
+The appointee email system covers both the **bio & project description** email (24h automated send after claim, dispatched by a daily cron) and the **VIT ID invitation** email (manual-only send from the Manage Appointees dashboard). Defaults are safe (nothing fires), so real production typically only sets the cron flag.
 
 | Variable | Dev server (`civicrm-dev`) | Real production |
 |----------|----------------------------|-----------------|
-| `APPOINTEE_EMAIL_CRON_ENABLED` | `false` (do not auto-send) | `true` |
+| `APPOINTEE_EMAIL_CRON_ENABLED` | `false` (do not auto-send bio emails) | `true` |
 | `APPOINTEE_EMAIL_REDIRECT_TO` | developer inbox (e.g. `andrea@…`) | **unset** |
 | `APPOINTEE_EMAIL_ALLOW_REDIRECT` | `true` (required when redirect is set under `NODE_ENV=production`) | **unset** / `false` |
 | `APPOINTEE_EMAIL_BCC` | optional, suppressed automatically when redirect is active | optional |
+| `APPOINTEE_EMAIL_FROM_NAME_VIT_ID` | `I Tatti - VIT ID` (default) | `I Tatti - VIT ID` (default) |
+| `APPOINTEE_EMAIL_FROM_NAME_BIO` | `I Tatti - Bio & Project` (default) | `I Tatti - Bio & Project` (default) |
 
 The server refuses to start if `APPOINTEE_EMAIL_REDIRECT_TO` is set under `NODE_ENV=production` without `APPOINTEE_EMAIL_ALLOW_REDIRECT=true`. This is an intentional guard against accidentally leaving the redirect on in real production.
+
+The cron dispatches **only** bio-email rows; VIT ID invitations are manual-send-only. `CLAIM_VIT_ID_URL` and `PORTAL_PUBLIC_URL` are required for the invitation email's CTA and logo asset respectively — the server refuses to start without them.
 
 ### Frontend variables (VITE_ prefix, baked into the build)
 
@@ -113,6 +119,85 @@ Migrations are in `packages/server/prisma/migrations/`. They run automatically o
 ```bash
 docker compose exec portal npx prisma migrate deploy
 ```
+
+**Minimum PostgreSQL version: 12** — `20260423120000_add_vit_id_invitation_email_type` uses `ALTER TYPE ... ADD VALUE IF NOT EXISTS`, a syntax added in PG12. Production runs PG17 (docker-compose), so the floor only matters for operators standing up new dev/staging boxes from older images.
+
+### Appointee-email-events rekey migration (`20260423120001`)
+
+This migration changes the unique key on `appointee_email_events` from
+`(contact_id, academic_year, email_type)` to `(fellowship_id, email_type)`. It
+assumes the table is empty at deploy time (the bio-email cron is gated on
+`APPOINTEE_EMAIL_CRON_ENABLED=true` which production only flips after the
+migration lands). A `DO $$ RAISE EXCEPTION` guard in the migration aborts if
+any row is present at deploy time — belt-and-suspenders for the "someone
+enabled the cron ahead of schedule" scenario.
+
+**If the guard aborts:** never modify an already-applied migration file.
+Prisma records a SHA-256 checksum of every migration in the `_prisma_migrations`
+table; if a later `prisma migrate deploy` sees a mismatch, it refuses to run.
+Editing `20260423120001_rekey_appointee_email_events_by_fellowship/migration.sql`
+in place (even to remove the TRUNCATE block or tweak the `ADD COLUMN` to be
+NULLABLE) would break every other environment that already applied the original
+version. The only safe move is to add NEW migrations that layer on top.
+
+The recovery is a three-migration sequence, run in this order:
+
+1. `20260423120002_backfill_fellowship_id_nullable` — makes `fellowship_id`
+   NULLABLE on the column the rekey migration tried to add. Because the rekey
+   migration aborted BEFORE the `ADD COLUMN` ran, the column doesn't exist
+   yet in the expected Prisma path — add it here as NULLABLE so we can write
+   into it. The `IF NOT EXISTS` guard makes the recovery safe if an operator or
+   prior recovery attempt already created the column outside that path.
+
+   ```sql
+   ALTER TABLE "appointee_email_events"
+     ADD COLUMN IF NOT EXISTS "fellowship_id" INTEGER NULL;
+   ```
+
+2. `20260423120003_backfill_fellowship_id_populate` — runs a CiviCRM lookup
+   for each existing row (same `(contactId, academicYear) → fellowshipId`
+   resolution the app now does at send time) and writes the result via
+   `UPDATE`. If you can't express the lookup in pure SQL (CiviCRM is remote),
+   do this step as a one-off script that reads the rows, resolves, and
+   issues UPDATEs — then record it as an empty Prisma migration after the
+   fact (via `prisma migrate resolve --applied`) so the checksum chain stays
+   intact.
+
+3. `20260423120004_rekey_appointee_email_events_finalize` — once every row
+   has `fellowship_id` populated, add the NOT NULL constraint and the new
+   unique index. This is the migration that "completes" what the original
+   rekey would have done, minus the TRUNCATE (which is now unnecessary
+   because the backfill populated the values).
+
+   ```sql
+   ALTER TABLE "appointee_email_events"
+     ALTER COLUMN "fellowship_id" SET NOT NULL;
+   DROP INDEX IF EXISTS "appointee_email_events_contact_id_academic_year_email_type_key";
+   DROP INDEX IF EXISTS "appointee_email_events_contact_id_idx";
+   CREATE UNIQUE INDEX "appointee_email_events_fellowship_id_email_type_key"
+     ON "appointee_email_events" ("fellowship_id", "email_type");
+   CREATE INDEX "appointee_email_events_contact_id_academic_year_idx"
+     ON "appointee_email_events" ("contact_id", "academic_year");
+   ```
+
+You'll also need to mark the aborted `20260423120001` migration as resolved —
+since it failed partway, `_prisma_migrations` has a row with a NULL
+`finished_at` that blocks future deploys:
+
+```bash
+docker compose exec portal npx prisma migrate resolve --rolled-back 20260423120001_rekey_appointee_email_events_by_fellowship
+```
+
+Then `prisma migrate deploy` will pick up the three new migrations in order.
+
+**Rollback note:** this migration is **not reversible by image rollback**.
+After it succeeds the schema has `fellowship_id NOT NULL` and a unique key
+on `(fellowship_id, email_type)`. Rolling back the app image to a version
+that doesn't know about `fellowship_id` means old code will fail NOT NULL
+violations on any new insert. The supported recovery path after a bad
+deploy is **fix-forward on the app code**, not image rollback. If rollback
+is genuinely required, restore the database from a pre-migration backup
+(see Backup/Restore above) alongside the app image downgrade.
 
 ### Backup
 

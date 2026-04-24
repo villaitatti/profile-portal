@@ -1,0 +1,16 @@
+<!--
+  Shared header block. The logo URL is {{logoUrl}} — resolved at send time
+  from env.PORTAL_PUBLIC_URL + /itatti-logo-email.png by templates/render.ts.
+  Width 200px on desktop, MJML auto-scales on mobile.
+-->
+<mj-section background-color="#ffffff" padding="32px 0 24px 0" css-class="it-card">
+  <mj-column>
+    <mj-image
+      src="{{logoUrl}}"
+      alt="Villa I Tatti"
+      width="200px"
+      align="center"
+      padding="0"
+    />
+  </mj-column>
+</mj-section>

@@ -51,3 +51,29 @@
 - **Why:** If a new role is created in Auth0 but not mapped, the sync silently ignores users with that role
 - **How:** `useRoles()` already fetches all Auth0 roles. Compare against `useMappings()` result. Show info banner: "You have 2 unmapped roles: [role1, role2]. Map them?"
 - **Context:** Currently roles are managed manually. This would catch configuration drift.
+
+## Profile Portal Visual Consistency
+
+### VIT ID claim page visual review
+- **What:** Audit the VIT ID claim page (the page the appointee lands on after clicking the CTA in the invitation email) and bring it in line with the I Tatti institutional brand established by the email templates.
+- **Why:** The appointee's FIRST interactive impression of the portal is this page, reached directly from an email that looks like formal correspondence from a Harvard research center. If the claim page looks like a generic form UI, the brand continuity breaks at the most load-bearing moment.
+- **Pros:** Maintains the institutional-correspondence tone end-to-end. Compounds with the email design investment rather than undoing it at the first click.
+- **Cons:** Separate PR; requires a pass on the claim page's current state, then a coherent design-system application.
+- **Context:** Design decisions for the email templates were locked in plan-design-review on 2026-04-22. The email uses: I Tatti logo header on warm-grey institutional background, Georgia serif body, squared crimson CTA (`#ab192d`, 4px radius), muted-grey footer with physical address. The claim page should echo at least the header (logo + wordmark) and the primary-action treatment (CTA button style). See `~/.gstack/projects/villaitatti-profile-portal/acaselli-main-design-20260422-172624.md` "Email HTML System" section for tokens.
+- **Depends on:** The Manage Appointees + HTML email PR landing first (establishes the tokens).
+
+## Appointee Email Pipeline — Follow-ups from /ship review
+
+### Harmonize bio-email route error surface with VIT invitation (503 for civicrm_unavailable)
+- **What:** `POST /api/admin/fellows/:contactId/send-bio-email` currently wraps upstream CiviCRM failures as a 500 `internal_error`. The new `/send-vit-id-email` returns 503 `{reason: "civicrm_unavailable"}` for the same transient failure mode so the modal can surface "CiviCRM is temporarily unavailable. Try again." The UIs therefore interpret identical server state differently.
+- **Why:** Angela will hit this drift the first time CiviCRM has a blip during a manual bio send — she'll get a generic server error instead of the actionable retry message.
+- **How:** Wrap `evaluateBioEmailEligibility` / `sendBioEmailManually` the same way the VIT route does: catch CiviCRM errors, return `{eligible: false, reason: 'civicrm_unavailable'}`, and emit 503 from the route. Factor the envelope helper so both paths share it.
+- **Context:** Flagged by /ship pre-landing review on feat/manage-appointees-html-email 2026-04-23. Priority: P2 — cosmetic UX drift, no correctness bug.
+- **Depends on:** Manage Appointees PR landing.
+
+### Close the delete+create race in manual-send retry paths
+- **What:** `sendBioEmailManually` and `sendVitIdInvitationManually` handle a FAILED/SKIPPED row by `prisma.appointeeEmailEvent.delete` → `enqueueAppointeeEmail`. Between the two statements a concurrent worker (cron, a second admin click) could insert its own row; the enqueue then returns `created: false` and the outer caller's eventId corresponds to a send it didn't trigger. The unique index prevents duplicates; the race surfaces as a misleading toast.
+- **Why:** Rare in practice (one admin, one click at a time), but the window is real and flagging in a log.
+- **How:** Wrap the delete + enqueue in a single `prisma.$transaction([…])`, or replace with `upsert` on `(fellowshipId, emailType)` that resets status to PENDING.
+- **Context:** Flagged by /ship pre-landing review on feat/manage-appointees-html-email 2026-04-23. Priority: P3 — rare race, no data integrity impact.
+- **Depends on:** Nothing.

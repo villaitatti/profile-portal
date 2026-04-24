@@ -26,8 +26,28 @@ jobs:
       - name: Generate Prisma client
         run: pnpm db:generate
 
+      - name: Build email templates
+        # MJML-compiled HTML is checked into the repo so production never
+        # depends on mjml at runtime. Re-running the compile and failing on
+        # any change catches BOTH (a) a developer who edited an .mjml source
+        # without committing the refreshed .compiled.html, AND (b) a new
+        # template whose .compiled.html was never added at all. `git status
+        # --porcelain --untracked-files=all` covers both modifications and
+        # untracked files; plain `git diff --exit-code` would miss case (b).
+        run: |
+          pnpm --filter @itatti/server build:email-templates
+          STATUS=$(git status --porcelain --untracked-files=all -- packages/server/src/templates/emails/)
+          if [ -n "$STATUS" ]; then
+            echo "ERROR: compiled email templates are stale or missing. Run 'pnpm --filter @itatti/server build:email-templates' locally and commit the result."
+            echo "$STATUS"
+            exit 1
+          fi
+
       - name: Typecheck
-        run: pnpm typecheck
+        run: pnpm -r typecheck
 
       - name: Test
-        run: pnpm test
+        # `-r` runs the test script in every workspace (server + web). Web
+        # tests previously didn't gate merges; codex review 2026-04-23 flagged
+        # this as a tight-feedback-loop gap. Fixed here.
+        run: pnpm -r test

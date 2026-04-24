@@ -10,14 +10,23 @@ import { fellowsAdminRoutes, handleVitIdLookup } from './fellows-admin.routes.js
 import { syncAdminRoutes, syncSseRoutes } from './sync-admin.routes.js';
 import { claimsAdminRoutes } from './claims-admin.routes.js';
 import { automationAdminRoutes } from './automation-admin.routes.js';
+import { devEmailPreviewRoutes } from './__dev__/email-preview.routes.js';
 import { authMiddleware, extractUser } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
+import { env } from '../env.js';
 
 export function registerRoutes(app: Express) {
   // Public routes (no auth required)
   app.use('/api/health', healthRoutes);
   app.use('/api/claim', claimRoutes);
   app.use('/api/help', helpRoutes);
+
+  // Dev-only: render compiled MJML email templates inline without auth or
+  // CiviCRM/Auth0 dependencies. Gated on NODE_ENV !== 'production' so these
+  // handlers never exist on the real production instance.
+  if (env.NODE_ENV !== 'production') {
+    app.use('/__dev__/email-preview', devEmailPreviewRoutes);
+  }
 
   // Protected routes (auth required)
   app.use('/api/profile', authMiddleware, extractUser, profileRoutes);

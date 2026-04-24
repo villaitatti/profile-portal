@@ -90,6 +90,7 @@ model RoleGroupMapping {
 
 enum AppointeeEmailType {
   BIO_PROJECT_DESCRIPTION
+  VIT_ID_INVITATION
 
   @@map("appointee_email_type")
 }
@@ -104,13 +105,19 @@ enum AppointeeEmailStatus {
   @@map("appointee_email_status")
 }
 
-// Tracks the lifecycle of per-appointee, per-academic-year transactional emails
-// (currently just the "Biography and Project Description" request). One row
-// exists per (contactId, academicYear, emailType) triple so returning fellows
-// get a fresh event for a new fellowship year. See design doc for the full
-// state machine.
+// Tracks the lifecycle of per-fellowship, per-type transactional emails to
+// appointees (bio & project description request, VIT ID invitation). One row
+// exists per (fellowshipId, emailType) pair.
+//
+// The unique key is fellowshipId (not contactId + academicYear) because the
+// business invariant "one fellowship per contact per year" is CiviCRM policy,
+// not a schema constraint — and codex review (2026-04-23) flagged that an
+// upstream data-entry error could silently collapse two fellowships into one
+// lifecycle if we keyed by (contactId, academicYear, emailType). contactId
+// and academicYear are kept as non-unique columns for audit queries.
 model AppointeeEmailEvent {
   id            String               @id @default(cuid())
+  fellowshipId  Int                  @map("fellowship_id")
   contactId     Int                  @map("contact_id")
   academicYear  String               @map("academic_year")
   emailType     AppointeeEmailType   @map("email_type")
@@ -124,8 +131,8 @@ model AppointeeEmailEvent {
   createdAt     DateTime             @default(now()) @map("created_at")
   updatedAt     DateTime             @updatedAt @map("updated_at")
 
-  @@unique([contactId, academicYear, emailType])
+  @@unique([fellowshipId, emailType])
   @@index([status, sendAfter])
-  @@index([contactId])
+  @@index([contactId, academicYear]) // audit scans
   @@map("appointee_email_events")
 }
