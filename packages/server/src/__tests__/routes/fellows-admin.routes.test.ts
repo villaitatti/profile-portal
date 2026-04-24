@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import express from 'express';
 import request from 'supertest';
+import { AppointeeEmailStatus } from '@prisma/client';
 
 vi.mock('../../env.js', () => ({
   env: {
@@ -143,7 +144,7 @@ describe('POST /api/admin/fellows/:contactId/send-vit-id-email', () => {
     mockAppointee.sendVitIdInvitationManually.mockResolvedValue({
       ok: true,
       eventId: 'evt_ok',
-      status: 'SENT' as any,
+      status: AppointeeEmailStatus.SENT,
       sentAt,
     });
     const app = makeApp();
@@ -162,7 +163,7 @@ describe('POST /api/admin/fellows/:contactId/send-vit-id-email', () => {
     mockAppointee.sendVitIdInvitationManually.mockResolvedValue({
       ok: true,
       eventId: 'evt_ok',
-      status: 'SENT' as any,
+      status: AppointeeEmailStatus.SENT,
       sentAt: new Date(),
     });
     const app = makeApp();
@@ -201,6 +202,16 @@ describe('GET /api/admin/fellows/:contactId/email-preview', () => {
     const res = await request(app)
       .get('/api/admin/fellows/1/email-preview')
       .query({ type: 'unknown_type', academicYear: '2026-2027' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('invalid_request');
+  });
+
+  it('returns 400 invalid_request when academicYear is not consecutive', async () => {
+    const app = makeApp();
+    const res = await request(app)
+      .get('/api/admin/fellows/1/email-preview')
+      .query({ type: 'vit_id_invitation', academicYear: '2025-2030' });
+
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('invalid_request');
   });

@@ -6,6 +6,7 @@ import * as appointeeEmailService from '../services/appointee-email.service.js';
 import * as civicrmService from '../services/civicrm.service.js';
 import { listUsersByRole } from '../services/auth0.service.js';
 import { buildAuth0Maps, normalize, reconcile, type LadderFellow } from '../services/vit-id-match.js';
+import { computeAppointeeStatus, type EmailEventStatus } from '../services/appointee-status.js';
 import {
   renderVitIdInvitation,
   renderBioProjectDescription,
@@ -105,28 +106,38 @@ function getDevMockData(academicYear?: string): FellowsDashboardResponse {
     const hasVitId = p.status === 'active' || p.status === 'active-different-email';
     const isNeedsReview = p.status === 'needs-review';
     // Derive a plausible fellowshipAccepted from the mock data. For dev, treat
-    // every row with a VIT ID or a `sent` bio email as accepted; everyone else
-    // accepted EXCEPT the two nominated-style rows (no-account + bio=none).
+    // every row with a VIT ID or a bio email event as accepted; otherwise keep a
+    // few no-account rows nominated so the palette still includes that state.
     const fellowshipAccepted =
-      hasVitId || p.bioEmail.status === 'sent' || p.bioEmail.status === 'pending' || p.bioEmail.canManuallySend;
+      hasVitId ||
+      p.bioEmail.status !== 'none' ||
+      p.bioEmail.canManuallySend ||
+      p.civicrmId === 1 ||
+      p.civicrmId === 2;
+    const vitIdInvitationStatus: EmailEventStatus =
+      fellowshipAccepted && !hasVitId && !isNeedsReview && p.civicrmId === 2
+        ? 'SENT'
+        : 'NONE';
     const vitIdInvitation = {
-      status: 'none' as const,
-      sentAt: null,
+      status: vitIdInvitationStatus === 'SENT' ? 'sent' as const : 'none' as const,
+      sentAt:
+        vitIdInvitationStatus === 'SENT' ? '2026-04-09T09:00:00.000Z' : null,
       targetAcademicYear: p.bioEmail.targetAcademicYear,
       canManuallySend:
-        fellowshipAccepted && !hasVitId && !isNeedsReview && p.bioEmail.targetAcademicYear !== null,
+        fellowshipAccepted &&
+        !hasVitId &&
+        !isNeedsReview &&
+        p.bioEmail.targetAcademicYear !== null &&
+        vitIdInvitationStatus !== 'SENT',
     };
-    // Mirror computeAppointeeStatus for the dev-mock derivation. Keep the
-    // logic inline (not imported) so the dev path stays self-contained.
-    const bioSent = p.bioEmail.status === 'sent';
-    const appointeeStatus: FellowsDashboardResponse['fellows'][number]['appointeeStatus'] =
-      !fellowshipAccepted
-        ? 'nominated'
-        : hasVitId && bioSent
-          ? 'enrolled'
-          : hasVitId
-            ? 'vit-id-claimed'
-            : 'accepted';
+    const bioEmailStatus: EmailEventStatus =
+      p.bioEmail.status === 'sent' ? 'SENT' : 'NONE';
+    const appointeeStatus = computeAppointeeStatus({
+      fellowshipAccepted,
+      vitIdTier: p.status,
+      vitIdInvitationStatus,
+      bioEmailStatus,
+    });
     return { ...p, vitIdInvitation, appointeeStatus };
   });
 

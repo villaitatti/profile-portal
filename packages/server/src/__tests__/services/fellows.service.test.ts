@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { AppointeeEmailStatus, AppointeeEmailType } from '@prisma/client';
 
 vi.mock('../../env.js', () => ({
   env: {
@@ -544,10 +545,10 @@ describe('getFellowsDashboard — appointeeStatus composition', () => {
         [
           '100:BIO_PROJECT_DESCRIPTION',
           {
-            status: 'SENT' as any,
+            status: AppointeeEmailStatus.SENT,
             sentAt: new Date('2025-10-01'),
             academicYear: '2025-2026',
-            emailType: 'BIO_PROJECT_DESCRIPTION' as any,
+            emailType: AppointeeEmailType.BIO_PROJECT_DESCRIPTION,
             fellowshipId: 100,
           },
         ],
@@ -591,10 +592,10 @@ describe('getFellowsDashboard — appointeeStatus composition', () => {
         [
           '90:BIO_PROJECT_DESCRIPTION',
           {
-            status: 'SENT' as any,
+            status: AppointeeEmailStatus.SENT,
             sentAt: new Date('2024-10-01'),
             academicYear: '2024-2025',
-            emailType: 'BIO_PROJECT_DESCRIPTION' as any,
+            emailType: AppointeeEmailType.BIO_PROJECT_DESCRIPTION,
             fellowshipId: 90,
           },
         ],
@@ -626,6 +627,8 @@ describe('getFellowsDashboard — appointeeStatus composition', () => {
     ]);
     // Seed a cross-contact duplicate — that row goes through the early
     // needs-review short-circuit, which must also emit both new fields.
+    // Key 4 is intentionally outside the requested fellows set to simulate an
+    // asymmetric duplicate-detection response from CiviCRM Email.get.
     mockCivicrm.getEmailsForContacts.mockResolvedValue(
       new Map([
         [3, { primary: 'shared@x.com', secondaries: [] }],

@@ -145,11 +145,13 @@ The recovery is a three-migration sequence, run in this order:
 1. `20260423120002_backfill_fellowship_id_nullable` — makes `fellowship_id`
    NULLABLE on the column the rekey migration tried to add. Because the rekey
    migration aborted BEFORE the `ADD COLUMN` ran, the column doesn't exist
-   yet — add it here as NULLABLE so we can write into it.
+   yet in the expected Prisma path — add it here as NULLABLE so we can write
+   into it. The `IF NOT EXISTS` guard makes the recovery safe if an operator or
+   prior recovery attempt already created the column outside that path.
 
    ```sql
    ALTER TABLE "appointee_email_events"
-     ADD COLUMN "fellowship_id" INTEGER NULL;
+     ADD COLUMN IF NOT EXISTS "fellowship_id" INTEGER NULL;
    ```
 
 2. `20260423120003_backfill_fellowship_id_populate` — runs a CiviCRM lookup

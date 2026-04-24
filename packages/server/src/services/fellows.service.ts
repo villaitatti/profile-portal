@@ -238,11 +238,35 @@ export async function getFellowsDashboard(
       }
       if (isCurrent) {
         existing.hasCurrentFellowship = true;
-        existing.currentFellowshipId = f.fellowshipId;
+        if (existing.currentFellowshipId === null) {
+          existing.currentFellowshipId = f.fellowshipId;
+        } else if (existing.currentFellowshipId !== f.fellowshipId) {
+          logger.warn(
+            {
+              contactId: f.contactId,
+              existingFellowshipId: existing.currentFellowshipId,
+              newFellowshipId: f.fellowshipId,
+              slot: 'current',
+            },
+            'duplicate slot assignment'
+          );
+        }
       }
       if (isAcceptedUpcoming) {
         existing.hasAcceptedUpcomingFellowship = true;
-        existing.acceptedUpcomingFellowshipId = f.fellowshipId;
+        if (existing.acceptedUpcomingFellowshipId === null) {
+          existing.acceptedUpcomingFellowshipId = f.fellowshipId;
+        } else if (existing.acceptedUpcomingFellowshipId !== f.fellowshipId) {
+          logger.warn(
+            {
+              contactId: f.contactId,
+              existingFellowshipId: existing.acceptedUpcomingFellowshipId,
+              newFellowshipId: f.fellowshipId,
+              slot: 'accepted-upcoming',
+            },
+            'duplicate slot assignment'
+          );
+        }
       }
     }
   }
@@ -356,6 +380,8 @@ export async function getFellowsDashboard(
     // pick an arbitrary Auth0 user based on an ambiguous email.
     if (hasCrossContactDuplicate(contactEmails)) {
       const bioEmail = buildBioEmailSummary({
+        // reconcile() is bypassed for duplicate-contact rows, so no matched
+        // Auth0/VIT user is known; treat the account as unclaimed.
         hasVitId: false,
         needsReview: true,
         targetAcademicYear,
