@@ -6,6 +6,7 @@ import {
 } from './appointee-email.service.js';
 import { buildAuth0Maps, reconcile, type LadderFellow } from './vit-id-match.js';
 import { computeAppointeeStatus, type EmailEventStatus } from './appointee-status.js';
+import { academicYearLabelForFellowship } from '../utils/eligibility.js';
 import { AppointeeEmailStatus, AppointeeEmailType } from '@prisma/client';
 import { env } from '../env.js';
 import { logger } from '../lib/logger.js';
@@ -121,25 +122,13 @@ function buildVitIdInvitationSummary(args: {
   };
 }
 
-function getAcademicYearLabel(startDate: string, endDate: string): string {
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const startYear = start.getFullYear();
-  const endYear = end.getFullYear();
-
-  // If the fellowship spans across calendar years, use startYear-endYear
-  if (startYear !== endYear) {
-    return `${startYear}-${endYear}`;
-  }
-
-  // If within the same calendar year, determine based on month
-  // July+ belongs to startYear-startYear+1, Jan-June belongs to startYear-1-startYear
-  const month = start.getMonth();
-  if (month >= 6) {
-    return `${startYear}-${startYear + 1}`;
-  }
-  return `${startYear - 1}-${startYear}`;
-}
+// Academic-year label derivation lives in utils/eligibility.ts so the
+// dashboard and the bio/VIT-invitation eligibility layer agree. An older
+// local copy here used LOCAL getFullYear()/getMonth() and mis-labeled
+// "2026-07-01" as "2025-2026" on any west-of-UTC host (Conductor
+// workspaces, contractors outside Europe), which silently mis-routed
+// email events. academicYearLabelForFellowship() uses UTC accessors for
+// exactly that reason — see the comment on its definition.
 
 export async function getFellowsDashboard(
   academicYear?: string
@@ -193,7 +182,15 @@ export async function getFellowsDashboard(
   >();
 
   for (const f of civicrmFellows) {
-    const yearLabel = getAcademicYearLabel(f.startDate, f.endDate);
+    // CiviCRMFellowship-shaped slice (function only reads startDate).
+    // Keeps the dashboard's year-label and utils/eligibility's year-label
+    // on the same UTC-safe codepath.
+    const yearLabel = academicYearLabelForFellowship({
+      id: f.fellowshipId,
+      contactId: f.contactId,
+      startDate: f.startDate,
+      endDate: f.endDate,
+    });
     academicYearsSet.add(yearLabel);
 
     // If filtering by academic year and this fellowship doesn't match, skip

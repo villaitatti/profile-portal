@@ -120,6 +120,41 @@ Migrations are in `packages/server/prisma/migrations/`. They run automatically o
 docker compose exec portal npx prisma migrate deploy
 ```
 
+**Minimum PostgreSQL version: 12** — `20260423120000_add_vit_id_invitation_email_type` uses `ALTER TYPE ... ADD VALUE IF NOT EXISTS`, a syntax added in PG12. Production runs PG17 (docker-compose), so the floor only matters for operators standing up new dev/staging boxes from older images.
+
+### Appointee-email-events rekey migration (`20260423120001`)
+
+This migration changes the unique key on `appointee_email_events` from
+`(contact_id, academic_year, email_type)` to `(fellowship_id, email_type)`. It
+assumes the table is empty at deploy time (the bio-email cron is gated on
+`APPOINTEE_EMAIL_CRON_ENABLED=true` which production only flips after the
+migration lands). A `DO $$ RAISE EXCEPTION` guard in the migration aborts if
+any row is present at deploy time — belt-and-suspenders for the "someone
+enabled the cron ahead of schedule" scenario.
+
+**If the guard aborts:** do NOT edit the migration in place (that would
+re-hash it and break `prisma migrate deploy` on every other environment).
+Instead:
+
+1. Write a NEW migration `20260423120002_backfill_fellowship_id` that
+   populates `fellowship_id` for each existing row via a CiviCRM lookup (the
+   same `(contactId, academicYear) → fellowshipId` resolution the app now
+   does at send time).
+2. Reorder this rekey migration to run AFTER the backfill, with the
+   `TRUNCATE` block removed and `ADD COLUMN fellowship_id INTEGER NOT NULL`
+   changed to use a `USING` clause or a temporary NULLABLE → backfill →
+   SET NOT NULL sequence.
+3. Re-run `prisma migrate deploy`.
+
+**Rollback note:** this migration is **not reversible by image rollback**.
+After it succeeds the schema has `fellowship_id NOT NULL` and a unique key
+on `(fellowship_id, email_type)`. Rolling back the app image to a version
+that doesn't know about `fellowship_id` means old code will fail NOT NULL
+violations on any new insert. The supported recovery path after a bad
+deploy is **fix-forward on the app code**, not image rollback. If rollback
+is genuinely required, restore the database from a pre-migration backup
+(see Backup/Restore above) alongside the app image downgrade.
+
 ### Backup
 
 ```bash

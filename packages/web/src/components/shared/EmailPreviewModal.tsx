@@ -1,6 +1,6 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import { useEffect, useRef, useState } from 'react';
-import { Loader2, Lock, AlertCircle } from 'lucide-react';
+import { Loader2, Lock, AlertCircle, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // ──────────────────────────────────────────────────────────────────────
@@ -63,6 +63,26 @@ export function EmailPreviewModal({
   const sendDisabled =
     submitting || !preview || !!previewError;
 
+  // Local dismissal flags — the parent owns previewError / sendError, but
+  // lets Angela silence a banner for this open session without losing the
+  // preview pane. Reset each time the modal opens so the banner reappears
+  // after reopen if the error is still present.
+  const [previewErrorDismissed, setPreviewErrorDismissed] = useState(false);
+  const [sendErrorDismissed, setSendErrorDismissed] = useState(false);
+  useEffect(() => {
+    if (open) {
+      setPreviewErrorDismissed(false);
+      setSendErrorDismissed(false);
+    }
+  }, [open]);
+  // Re-show a banner when its message changes (new error).
+  useEffect(() => {
+    setPreviewErrorDismissed(false);
+  }, [previewError]);
+  useEffect(() => {
+    setSendErrorDismissed(false);
+  }, [sendError]);
+
   return (
     <Dialog.Root
       open={open}
@@ -79,13 +99,24 @@ export function EmailPreviewModal({
             </Dialog.Title>
           </header>
 
-          {previewError && (
-            <InlineBanner tone="destructive" icon={<AlertCircle className="h-4 w-4" />}>
+          {previewError && !previewErrorDismissed && (
+            <InlineBanner
+              tone="destructive"
+              icon={<AlertCircle className="h-4 w-4" />}
+              onDismiss={() => setPreviewErrorDismissed(true)}
+            >
               {previewError}
             </InlineBanner>
           )}
-          {sendError && !previewError && (
-            <InlineBanner tone="destructive" icon={<AlertCircle className="h-4 w-4" />}>
+          {/* Suppress stale sendError while the preview is still loading — a
+              red banner floating above a spinner is confusing when Angela
+              reopens the modal for the same appointee after a failed send. */}
+          {sendError && !previewError && preview !== null && !sendErrorDismissed && (
+            <InlineBanner
+              tone="destructive"
+              icon={<AlertCircle className="h-4 w-4" />}
+              onDismiss={() => setSendErrorDismissed(true)}
+            >
               {sendError}
             </InlineBanner>
           )}
@@ -188,10 +219,13 @@ function InlineBanner({
   tone,
   icon,
   children,
+  onDismiss,
 }: {
   tone: 'destructive';
   icon?: React.ReactNode;
   children: React.ReactNode;
+  /** When provided, renders a close (X) button that calls onDismiss. */
+  onDismiss?: () => void;
 }) {
   return (
     <div
@@ -208,6 +242,16 @@ function InlineBanner({
     >
       {icon && <span className="mt-0.5 flex-shrink-0">{icon}</span>}
       <span className="flex-1">{children}</span>
+      {onDismiss && (
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label="Dismiss"
+          className="flex-shrink-0 rounded p-0.5 opacity-70 transition-opacity hover:opacity-100"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      )}
     </div>
   );
 }

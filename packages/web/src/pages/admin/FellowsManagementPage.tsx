@@ -5,10 +5,7 @@ import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { VitIdStatusBadge } from '@/components/shared/VitIdStatusBadge';
 import { AppointeeStatusBadge } from '@/components/shared/AppointeeStatusBadge';
-import {
-  EmailPreviewModal,
-  type EmailPreviewData,
-} from '@/components/shared/EmailPreviewModal';
+import { EmailPreviewModal } from '@/components/shared/EmailPreviewModal';
 import {
   useFellowsDashboard,
   useSendBioEmail,
@@ -19,6 +16,7 @@ import {
   EmailPreviewError,
   type SendBioEmailReason,
   type SendVitIdEmailReason,
+  type EmailPreviewReason,
   type EmailPreviewType,
 } from '@/api/fellows';
 import { getCurrentAcademicYear } from './utils/academic-year';
@@ -231,9 +229,17 @@ export function FellowsManagementPage() {
           icon={<Users className="h-12 w-12 mb-4" />}
           title="No fellows found"
           description={
+            // Three distinct zero-row cases — previously the copy said "No
+            // fellows match the current filters" even for a legitimately-
+            // empty year, which misled Angela into thinking she had a stuck
+            // filter when the data just wasn't there.
             searchQuery
               ? 'Try adjusting your search query.'
-              : 'No fellows match the current filters.'
+              : activeTab !== 'all'
+                ? 'No fellows match this filter. Try "All" to see every appointee for this year.'
+                : selectedYear
+                  ? `No fellows on file for ${selectedYear}.`
+                  : 'No fellows on file.'
           }
         />
       ) : (
@@ -277,15 +283,19 @@ function FellowsManagementSkeleton() {
 
         <div className="overflow-hidden rounded-xl border bg-card">
           <div className="border-b bg-muted/50 px-4 py-3">
-            <div className="grid grid-cols-6 gap-4">
-              {Array.from({ length: 6 }).map((_, index) => (
+            {/* 8 columns matches the real table: Name, Email, Appointment,
+                Fellowship, Appointee Status, VIT ID Status, Bio Email,
+                Actions. Previously the skeleton used grid-cols-6 which
+                caused a visible layout shift when data arrived. */}
+            <div className="grid grid-cols-8 gap-4">
+              {Array.from({ length: 8 }).map((_, index) => (
                 <SkeletonBlock key={index} className="h-3.5 rounded-full" />
               ))}
             </div>
           </div>
           <div className="divide-y">
             {Array.from({ length: 5 }).map((_, index) => (
-              <div key={index} className="grid grid-cols-6 items-center gap-4 px-4 py-4">
+              <div key={index} className="grid grid-cols-8 items-center gap-4 px-4 py-4">
                 <div className="flex items-center gap-3">
                   <SkeletonBlock className="h-8 w-8 rounded-full bg-muted/80" />
                   <div className="space-y-2">
@@ -293,7 +303,10 @@ function FellowsManagementSkeleton() {
                     <SkeletonBlock className="h-3.5 w-24 rounded-full" />
                   </div>
                 </div>
-                {Array.from({ length: 4 }).map((__, column) => (
+                {/* Middle columns = Email, Appointment, Fellowship,
+                    Appointee Status, VIT ID Status, Bio Email. Last cell
+                    is Actions. */}
+                {Array.from({ length: 6 }).map((__, column) => (
                   <SkeletonBlock key={column} className="h-4 w-20 rounded-full" />
                 ))}
                 <SkeletonBlock className="h-4 w-14 rounded-full" />
@@ -403,6 +416,7 @@ const BIO_EMAIL_ERROR_MESSAGES: Record<SendBioEmailReason, string> = {
   fellowship_not_accepted: 'The fellowship for the target year is not marked as accepted.',
   no_primary_email: 'No primary email is on file for this appointee.',
   already_sent: 'The bio email has already been sent for this fellowship year.',
+  civicrm_unavailable: 'CiviCRM is temporarily unavailable. Try again in a moment.',
 };
 
 const VIT_ID_EMAIL_ERROR_MESSAGES: Record<SendVitIdEmailReason, string> = {
@@ -413,6 +427,17 @@ const VIT_ID_EMAIL_ERROR_MESSAGES: Record<SendVitIdEmailReason, string> = {
   already_has_vit_id: 'This appointee already has a VIT ID. Use the bio email flow instead.',
   needs_review: 'Resolve the VIT ID Status data conflict before sending.',
   already_sent: 'The VIT ID invitation has already been sent for this fellowship year.',
+  civicrm_unavailable: 'CiviCRM is temporarily unavailable. Try again in a moment.',
+};
+
+// Preview-specific reasons (contact_not_found is a 404 unique to the preview
+// endpoint; civicrm_unavailable + no_primary_email + missing_first_name reuse
+// the send-side copy but are repeated here so the Record is exhaustive and
+// future reason additions surface as TS errors).
+const EMAIL_PREVIEW_ERROR_MESSAGES: Record<EmailPreviewReason, string> = {
+  missing_first_name: 'This appointee is missing a first name in CiviCRM. Update the record and try again.',
+  no_primary_email: 'No primary email is on file for this appointee.',
+  contact_not_found: 'This appointee no longer exists in CiviCRM — refresh the page and try again.',
   civicrm_unavailable: 'CiviCRM is temporarily unavailable. Try again in a moment.',
 };
 
@@ -611,41 +636,19 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
     }
   }
 
-  function SortHeader({ field, label, className }: { field: SortField; label: string; className?: string }) {
-    const ariaSort = sortField !== field ? 'none' : sortDir === 'asc' ? 'ascending' : 'descending';
-
-    return (
-      <th
-        aria-sort={ariaSort}
-        className={`px-4 py-3 text-left ${className || ''}`}
-      >
-        <button
-          type="button"
-          onClick={() => toggleSort(field)}
-          className="inline-flex select-none items-center text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground"
-        >
-          {label}
-          {sortField === field && (
-            <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>
-          )}
-        </button>
-      </th>
-    );
-  }
-
   return (
     <>
       <div className="overflow-hidden rounded-xl border bg-card">
         <table className="w-full text-[0.95rem]">
           <thead>
             <tr className="border-b bg-muted/50">
-              <SortHeader field="name" label="Name" />
-              <SortHeader field="email" label="Email" className="hidden md:table-cell" />
-              <SortHeader field="appointment" label="Appointment" className="hidden lg:table-cell" />
-              <SortHeader field="fellowship" label="Fellowship Type" className="hidden lg:table-cell" />
-              <SortHeader field="appointeeStatus" label="Appointee Status" />
-              <SortHeader field="status" label="VIT ID Status" />
-              <SortHeader field="bioEmail" label="Bio Email" />
+              <SortHeader field="name" label="Name" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
+              <SortHeader field="email" label="Email" className="hidden md:table-cell" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
+              <SortHeader field="appointment" label="Appointment" className="hidden lg:table-cell" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
+              <SortHeader field="fellowship" label="Fellowship Type" className="hidden lg:table-cell" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
+              <SortHeader field="appointeeStatus" label="Appointee Status" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
+              <SortHeader field="status" label="VIT ID Status" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
+              <SortHeader field="bioEmail" label="Bio Email" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
               <th className="px-4 py-3 text-left text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">
                 Actions
               </th>
@@ -653,172 +656,12 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
           </thead>
           <tbody className="divide-y">
             {paginated.map((fellow) => (
-              <tr key={fellow.civicrmId} className="hover:bg-muted/30">
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10">
-                      {fellow.imageUrl ? (
-                        <img src={fellow.imageUrl} alt="" className="h-8 w-8 rounded-full object-cover" />
-                      ) : (
-                        <span className="text-xs font-medium text-primary">
-                          {fellow.firstName?.[0]}{fellow.lastName?.[0]}
-                        </span>
-                      )}
-                    </div>
-                    <div>
-                      <div className="text-[0.98rem] font-semibold">
-                        {fellow.firstName} {fellow.lastName}
-                      </div>
-                      <div className="text-[0.82rem] leading-5 text-muted-foreground md:hidden">
-                        {fellow.email || 'No email'}
-                      </div>
-                    </div>
-                  </div>
-                </td>
-                <td className="hidden px-4 py-3 text-[0.95rem] text-muted-foreground md:table-cell">
-                  {fellow.email || (
-                    <span className="italic text-muted-foreground/60">No email in CiviCRM</span>
-                  )}
-                </td>
-                <td className="hidden px-4 py-3 text-[0.95rem] text-muted-foreground lg:table-cell">
-                  {formatLabel(fellow.appointment)}
-                </td>
-                <td className="hidden px-4 py-3 text-[0.95rem] text-muted-foreground lg:table-cell">
-                  {formatLabel(fellow.fellowship)}
-                </td>
-                <td className="px-4 py-3">
-                  <AppointeeStatusBadge
-                    status={fellow.appointeeStatus}
-                    subLabel={
-                      fellow.vitIdInvitation.status === 'failed'
-                        ? 'Last send failed'
-                        : undefined
-                    }
-                    subLabelTone="destructive"
-                  />
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex flex-col gap-1">
-                    <VitIdStatusBadge
-                      status={fellow.status}
-                      matchedVia={fellow.matchedVia}
-                      matched={fellow.matched}
-                      matchedViaEmail={fellow.matchedViaEmail}
-                      reason={fellow.reason}
-                      candidates={fellow.candidates}
-                    />
-                    {fellow.status === 'active-different-email' && fellow.matched && (
-                      <span className="text-[0.82rem] leading-5 text-muted-foreground">
-                        VIT ID on file under:{' '}
-                        <span className="font-mono break-all whitespace-normal">
-                          {fellow.matched.email}
-                        </span>
-                      </span>
-                    )}
-                    {fellow.status === 'needs-review' && fellow.candidates && fellow.candidates.length > 0 && (
-                      <ul className="mt-1 space-y-1 text-[0.82rem] leading-5 text-muted-foreground">
-                        {fellow.candidates.map((c) => (
-                          <li
-                            key={c.userId}
-                            className="flex flex-wrap items-center gap-x-2 gap-y-0.5"
-                          >
-                            <span className="font-mono break-all whitespace-normal">
-                              {c.email}
-                            </span>
-                            {c.civicrmId && (
-                              <span className="text-muted-foreground/70">
-                                (civicrm_id: {c.civicrmId})
-                              </span>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  <BioEmailPill
-                    status={fellow.bioEmail.status}
-                    sentAt={fellow.bioEmail.sentAt}
-                    targetAcademicYear={fellow.bioEmail.targetAcademicYear}
-                  />
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    {fellow.vitIdInvitation.canManuallySend && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setActiveSend({
-                            fellow,
-                            kind: 'vit_id_invitation',
-                          })
-                        }
-                        disabled={pendingContactId === fellow.civicrmId}
-                        className="inline-flex items-center gap-1 rounded-md border border-primary/30 bg-primary/5 px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
-                        title={
-                          fellow.vitIdInvitation.targetAcademicYear
-                            ? `Send VIT ID invitation email for ${fellow.vitIdInvitation.targetAcademicYear}`
-                            : 'Send VIT ID invitation email'
-                        }
-                      >
-                        {pendingContactId === fellow.civicrmId ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          <UserPlus className="h-3 w-3" />
-                        )}
-                        <span>Send VIT ID email</span>
-                      </button>
-                    )}
-                    {fellow.status === 'needs-review' &&
-                      (fellow.appointeeStatus === 'accepted' ||
-                        fellow.appointeeStatus === 'vit-id-claimed') && (
-                        <span
-                          className="inline-flex items-center gap-1 rounded-md border border-muted bg-muted/40 px-2 py-1 text-xs font-medium text-muted-foreground"
-                          title="Resolve the VIT ID Status data conflict before sending."
-                        >
-                          <AlertTriangle className="h-3 w-3" />
-                          Send disabled
-                        </span>
-                      )}
-                    {fellow.bioEmail.canManuallySend && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setActiveSend({
-                            fellow,
-                            kind: 'bio_project_description',
-                          })
-                        }
-                        disabled={pendingContactId === fellow.civicrmId}
-                        className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-                        title={
-                          fellow.bioEmail.targetAcademicYear
-                            ? `Send bio & project description email for ${fellow.bioEmail.targetAcademicYear}`
-                            : 'Send bio & project description email'
-                        }
-                      >
-                        {pendingContactId === fellow.civicrmId ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          <Mail className="h-3 w-3" />
-                        )}
-                        <span>Send bio email</span>
-                      </button>
-                    )}
-                    {CIVICRM_URL && (
-                      <a
-                        href={`${CIVICRM_URL}/civicrm/contact/view?reset=1&cid=${fellow.civicrmId}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                      >
-                        CiviCRM <ExternalLink className="h-3 w-3" />
-                      </a>
-                    )}
-                  </div>
-                </td>
-              </tr>
+              <FellowRow
+                key={fellow.civicrmId}
+                fellow={fellow}
+                pendingContactId={pendingContactId}
+                onSendClick={(kind) => setActiveSend({ fellow, kind })}
+              />
             ))}
           </tbody>
         </table>
@@ -853,14 +696,7 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
         previewError={
           previewQuery.error
             ? previewQuery.error instanceof EmailPreviewError
-              ? // Map preview-endpoint reason codes to the same human copy we
-                // use for send errors. The template render errors (missing
-                // firstName) are shared between preview and send.
-                VIT_ID_EMAIL_ERROR_MESSAGES[
-                  previewQuery.error.reason as SendVitIdEmailReason
-                ] || BIO_EMAIL_ERROR_MESSAGES[
-                  previewQuery.error.reason as SendBioEmailReason
-                ] ||
+              ? EMAIL_PREVIEW_ERROR_MESSAGES[previewQuery.error.reason] ||
                 `Preview failed: ${previewQuery.error.reason}`
               : (previewQuery.error as Error).message
             : null
@@ -892,5 +728,223 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
         </div>
       )}
     </>
+  );
+}
+
+// Module-scope so it doesn't re-create on every FellowsTable render; takes
+// sort state as props. Keeps the arrow-indicator + aria-sort logic in one place.
+function SortHeader({
+  field,
+  label,
+  className,
+  sortField,
+  sortDir,
+  toggleSort,
+}: {
+  field: SortField;
+  label: string;
+  className?: string;
+  sortField: SortField;
+  sortDir: SortDir;
+  toggleSort: (f: SortField) => void;
+}) {
+  const ariaSort =
+    sortField !== field ? 'none' : sortDir === 'asc' ? 'ascending' : 'descending';
+  return (
+    <th
+      aria-sort={ariaSort}
+      className={`px-4 py-3 text-left ${className || ''}`}
+    >
+      <button
+        type="button"
+        onClick={() => toggleSort(field)}
+        className="inline-flex select-none items-center text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground"
+      >
+        {label}
+        {sortField === field && (
+          <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>
+        )}
+      </button>
+    </th>
+  );
+}
+
+// Module-scope row component. Previously this was inlined ~180 lines deep
+// inside FellowsTable, braiding row rendering with sort / pagination / modal
+// state. Extracting lets the four concerns be read independently.
+function FellowRow({
+  fellow,
+  pendingContactId,
+  onSendClick,
+}: {
+  fellow: FellowDashboardEntry;
+  pendingContactId: number | null;
+  onSendClick: (kind: 'vit_id_invitation' | 'bio_project_description') => void;
+}) {
+  const isPending = pendingContactId === fellow.civicrmId;
+  return (
+    <tr className="hover:bg-muted/30">
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10">
+            {fellow.imageUrl ? (
+              <img
+                src={fellow.imageUrl}
+                alt=""
+                className="h-8 w-8 rounded-full object-cover"
+              />
+            ) : (
+              <span className="text-xs font-medium text-primary">
+                {fellow.firstName?.[0]}
+                {fellow.lastName?.[0]}
+              </span>
+            )}
+          </div>
+          <div>
+            <div className="text-[0.98rem] font-semibold">
+              {fellow.firstName} {fellow.lastName}
+            </div>
+            <div className="text-[0.82rem] leading-5 text-muted-foreground md:hidden">
+              {fellow.email || 'No email'}
+            </div>
+          </div>
+        </div>
+      </td>
+      <td className="hidden px-4 py-3 text-[0.95rem] text-muted-foreground md:table-cell">
+        {fellow.email || (
+          <span className="italic text-muted-foreground/60">No email in CiviCRM</span>
+        )}
+      </td>
+      <td className="hidden px-4 py-3 text-[0.95rem] text-muted-foreground lg:table-cell">
+        {formatLabel(fellow.appointment)}
+      </td>
+      <td className="hidden px-4 py-3 text-[0.95rem] text-muted-foreground lg:table-cell">
+        {formatLabel(fellow.fellowship)}
+      </td>
+      <td className="px-4 py-3">
+        <AppointeeStatusBadge
+          status={fellow.appointeeStatus}
+          subLabel={
+            fellow.vitIdInvitation.status === 'failed'
+              ? 'Last send failed'
+              : undefined
+          }
+          subLabelTone="destructive"
+        />
+      </td>
+      <td className="px-4 py-3">
+        <div className="flex flex-col gap-1">
+          <VitIdStatusBadge
+            status={fellow.status}
+            matchedVia={fellow.matchedVia}
+            matched={fellow.matched}
+            matchedViaEmail={fellow.matchedViaEmail}
+            reason={fellow.reason}
+            candidates={fellow.candidates}
+          />
+          {fellow.status === 'active-different-email' && fellow.matched && (
+            <span className="text-[0.82rem] leading-5 text-muted-foreground">
+              VIT ID on file under:{' '}
+              <span className="font-mono break-all whitespace-normal">
+                {fellow.matched.email}
+              </span>
+            </span>
+          )}
+          {fellow.status === 'needs-review' &&
+            fellow.candidates &&
+            fellow.candidates.length > 0 && (
+              <ul className="mt-1 space-y-1 text-[0.82rem] leading-5 text-muted-foreground">
+                {fellow.candidates.map((c) => (
+                  <li
+                    key={c.userId}
+                    className="flex flex-wrap items-center gap-x-2 gap-y-0.5"
+                  >
+                    <span className="font-mono break-all whitespace-normal">
+                      {c.email}
+                    </span>
+                    {c.civicrmId && (
+                      <span className="text-muted-foreground/70">
+                        (civicrm_id: {c.civicrmId})
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+        </div>
+      </td>
+      <td className="px-4 py-3">
+        <BioEmailPill
+          status={fellow.bioEmail.status}
+          sentAt={fellow.bioEmail.sentAt}
+          targetAcademicYear={fellow.bioEmail.targetAcademicYear}
+        />
+      </td>
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-3">
+          {fellow.vitIdInvitation.canManuallySend && (
+            <button
+              type="button"
+              onClick={() => onSendClick('vit_id_invitation')}
+              disabled={isPending}
+              className="inline-flex items-center gap-1 rounded-md border border-primary/30 bg-primary/5 px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
+              title={
+                fellow.vitIdInvitation.targetAcademicYear
+                  ? `Send VIT ID invitation email for ${fellow.vitIdInvitation.targetAcademicYear}`
+                  : 'Send VIT ID invitation email'
+              }
+            >
+              {isPending ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <UserPlus className="h-3 w-3" />
+              )}
+              <span>Send VIT ID email</span>
+            </button>
+          )}
+          {fellow.status === 'needs-review' && (
+            // Always show the pill for needs-review rows so the Actions
+            // column is never silently empty for a conflicted row.
+            <span
+              className="inline-flex items-center gap-1 rounded-md border border-muted bg-muted/40 px-2 py-1 text-xs font-medium text-muted-foreground"
+              title="Resolve the VIT ID Status data conflict first: pick a candidate from the list in the VIT ID Status column, or merge the duplicates in CiviCRM."
+            >
+              <AlertTriangle className="h-3 w-3" />
+              Send disabled
+            </span>
+          )}
+          {fellow.bioEmail.canManuallySend && (
+            <button
+              type="button"
+              onClick={() => onSendClick('bio_project_description')}
+              disabled={isPending}
+              className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+              title={
+                fellow.bioEmail.targetAcademicYear
+                  ? `Send bio & project description email for ${fellow.bioEmail.targetAcademicYear}`
+                  : 'Send bio & project description email'
+              }
+            >
+              {isPending ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Mail className="h-3 w-3" />
+              )}
+              <span>Send bio email</span>
+            </button>
+          )}
+          {CIVICRM_URL && (
+            <a
+              href={`${CIVICRM_URL}/civicrm/contact/view?reset=1&cid=${fellow.civicrmId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              CiviCRM <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
+        </div>
+      </td>
+    </tr>
   );
 }

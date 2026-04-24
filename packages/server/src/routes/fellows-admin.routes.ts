@@ -21,6 +21,24 @@ import type {
 
 const router = Router();
 
+/**
+ * Academic-year label validator, shared by all three appointee-email
+ * endpoints. A plain `/^\d{4}-\d{4}$/` accepts nonsense like "9999-0001"
+ * or "2025-2030" which would reach downstream lookups and then fail with a
+ * confusing 'no_matching_fellowship' reason. Refine to require consecutive
+ * years within a realistic range (1900-2100).
+ */
+const academicYearSchema = z
+  .string()
+  .regex(/^\d{4}-\d{4}$/, 'must be YYYY-YYYY')
+  .refine(
+    (s) => {
+      const [a, b] = s.split('-').map(Number);
+      return b === a + 1 && a >= 1900 && a <= 2100;
+    },
+    { message: 'years must be consecutive and within 1900-2100' }
+  );
+
 function getDevMockData(academicYear?: string): FellowsDashboardResponse {
   const mockBioEmail = (variant: 'none' | 'pending' | 'sent' | 'failed', canSend: boolean, year: string) => ({
     status: variant,
@@ -156,7 +174,7 @@ router.get('/', async (req, res, next) => {
 //                                                   no_primary_email / already_sent)
 //   500 { error: "internal_error" }              — upstream (CiviCRM / Auth0 / SES) failure
 const sendBioEmailBodySchema = z.object({
-  academicYear: z.string().regex(/^\d{4}-\d{4}$/),
+  academicYear: academicYearSchema,
 });
 
 router.post('/:contactId/send-bio-email', async (req, res, next) => {
@@ -166,7 +184,10 @@ router.post('/:contactId/send-bio-email', async (req, res, next) => {
     if (!Number.isInteger(contactId) || contactId <= 0) {
       res
         .status(400)
-        .json({ error: 'invalid_request', details: 'contactId must be a positive integer' });
+        .json({
+          error: 'invalid_request',
+          details: [{ path: 'contactId', message: 'must be a positive integer' }],
+        });
       return;
     }
 
@@ -199,7 +220,11 @@ router.post('/:contactId/send-bio-email', async (req, res, next) => {
     });
 
     if (!result.ok) {
-      res.status(400).json({ reason: result.reason });
+      // 503 for transient upstream outages so the admin UI can surface a
+      // retry message; 400 for genuine ineligibility. Mirrors the send-vit-id
+      // endpoint so the two have identical error semantics.
+      const status = result.reason === 'civicrm_unavailable' ? 503 : 400;
+      res.status(status).json({ reason: result.reason });
       return;
     }
 
@@ -222,7 +247,7 @@ router.post('/:contactId/send-bio-email', async (req, res, next) => {
 // 'already_has_vit_id', and 'civicrm_unavailable' from generic errors so the
 // modal can surface an actionable message.
 const sendVitIdEmailBodySchema = z.object({
-  academicYear: z.string().regex(/^\d{4}-\d{4}$/),
+  academicYear: academicYearSchema,
 });
 
 router.post('/:contactId/send-vit-id-email', async (req, res, next) => {
@@ -232,7 +257,10 @@ router.post('/:contactId/send-vit-id-email', async (req, res, next) => {
     if (!Number.isInteger(contactId) || contactId <= 0) {
       res
         .status(400)
-        .json({ error: 'invalid_request', details: 'contactId must be a positive integer' });
+        .json({
+          error: 'invalid_request',
+          details: [{ path: 'contactId', message: 'must be a positive integer' }],
+        });
       return;
     }
 
@@ -297,7 +325,7 @@ router.post('/:contactId/send-vit-id-email', async (req, res, next) => {
 // endpoint's job. Preview is display; the server re-renders fresh at send.
 const emailPreviewQuerySchema = z.object({
   type: z.enum(['vit_id_invitation', 'bio_project_description']),
-  academicYear: z.string().regex(/^\d{4}-\d{4}$/),
+  academicYear: academicYearSchema,
 });
 
 router.get('/:contactId/email-preview', async (req, res, next) => {
@@ -307,7 +335,10 @@ router.get('/:contactId/email-preview', async (req, res, next) => {
     if (!Number.isInteger(contactId) || contactId <= 0) {
       res
         .status(400)
-        .json({ error: 'invalid_request', details: 'contactId must be a positive integer' });
+        .json({
+          error: 'invalid_request',
+          details: [{ path: 'contactId', message: 'must be a positive integer' }],
+        });
       return;
     }
 
@@ -348,7 +379,20 @@ router.get('/:contactId/email-preview', async (req, res, next) => {
       return;
     }
 
-    const contact = await civicrmService.getContactById(contactId);
+    // A CiviCRM outage here should surface as 503 civicrm_unavailable so
+    // the preview modal can offer a retry message — not a generic 500.
+    // Mirrors the send-vit-id-email route's error semantics.
+    let contact: Awaited<ReturnType<typeof civicrmService.getContactById>>;
+    try {
+      contact = await civicrmService.getContactById(contactId);
+    } catch (err) {
+      logger.warn(
+        { err, contactId },
+        'Admin: email-preview civicrm fetch failed'
+      );
+      res.status(503).json({ reason: 'civicrm_unavailable' });
+      return;
+    }
     if (!contact) {
       res.status(404).json({ error: 'contact_not_found' });
       return;

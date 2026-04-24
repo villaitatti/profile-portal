@@ -3,7 +3,6 @@ import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import {
   classifyFellowship,
-  pickBioEmailTargetYear,
   academicYearLabelForFellowship,
 } from '../utils/eligibility.js';
 import { getCurrentAcademicYear } from '../utils/academic-year.js';
@@ -12,34 +11,16 @@ import * as auth0Service from './auth0.service.js';
 import * as emailService from './email.service.js';
 import { buildAuth0Maps, reconcile, type LadderFellow } from './vit-id-match.js';
 import { env } from '../env.js';
+import type {
+  SendBioEmailReason,
+  SendVitIdEmailReason,
+} from '@itatti/shared';
 
-export type BioEmailIneligibilityReason =
-  | 'no_vit_id'
-  | 'no_matching_fellowship'
-  | 'fellowship_not_accepted'
-  | 'no_primary_email'
-  | 'already_sent';
-
-/**
- * Reasons the VIT ID invitation send endpoint rejects a request. Overlaps
- * with bio-email reasons where the underlying checks are identical
- * (no_matching_fellowship, fellowship_not_accepted, no_primary_email,
- * already_sent) but adds its own specifics:
- *
- *   - missing_first_name: template render throws without a first name
- *   - already_has_vit_id: invitation would be misleading — they can sign in already
- *   - needs_review: match ladder returned an ambiguous result; Angela must resolve first
- *   - civicrm_unavailable: upstream fetch failed at validation time
- */
-export type VitIdInvitationIneligibilityReason =
-  | 'no_matching_fellowship'
-  | 'fellowship_not_accepted'
-  | 'no_primary_email'
-  | 'missing_first_name'
-  | 'already_has_vit_id'
-  | 'needs_review'
-  | 'already_sent'
-  | 'civicrm_unavailable';
+// Server-side aliases for the shared unions. Kept as type aliases (not
+// re-declarations) so a reason added in @itatti/shared flows through here
+// and into the route handlers without a second source of truth.
+export type BioEmailIneligibilityReason = SendBioEmailReason;
+export type VitIdInvitationIneligibilityReason = SendVitIdEmailReason;
 
 export type EligibilityEvaluation =
   | { eligible: true; email: string; firstName: string; fellowshipId: number }
@@ -201,27 +182,15 @@ export async function enqueueAppointeeEmail(args: {
  * resolves to unambiguously (i.e., `'active'` or `'active-different-email'`).
  * Returns false for `'needs-review'` (we won't send to an ambiguous target)
  * and for `'no-account'`.
+ *
+ * Delegates to classifyLadderMatch to keep a single source of truth for
+ * the Auth0-fetch + LadderFellow construction.
  */
 async function checkHasVitIdViaLadder(
   contactId: number,
   contact: { firstName: string; lastName: string; email: string }
 ): Promise<boolean> {
-  const [auth0Users, contactEmails] = await Promise.all([
-    auth0Service.listUsersByRole(env.AUTH0_FELLOWS_ROLE_ID),
-    civicrmService.getEmailsForContacts([contactId]),
-  ]);
-  const maps = buildAuth0Maps(auth0Users);
-  const emails = contactEmails.get(contactId);
-  const ladderFellow: LadderFellow = {
-    civicrmId: contactId,
-    firstName: contact.firstName,
-    lastName: contact.lastName,
-    // No fallback to contact.email — if Email.get returned nothing for this
-    // contact (all on_hold), we don't want to match against the held primary.
-    primaryEmail: emails?.primary ?? null,
-    secondaries: emails?.secondaries ?? [],
-  };
-  const match = reconcile(ladderFellow, maps);
+  const match = await classifyLadderMatch(contactId, contact);
   return match.status === 'active' || match.status === 'active-different-email';
 }
 
@@ -229,7 +198,15 @@ export async function evaluateBioEmailEligibility(
   contactId: number,
   academicYear: string
 ): Promise<EligibilityEvaluation> {
-  const contact = await civicrmService.getContactById(contactId);
+  // Mirror the VIT path: upstream CiviCRM / Auth0 failures produce a
+  // 'civicrm_unavailable' reason (503 at the route layer) so the admin UI
+  // can offer a retry instead of rendering a generic internal error.
+  let contact: Awaited<ReturnType<typeof civicrmService.getContactById>>;
+  try {
+    contact = await civicrmService.getContactById(contactId);
+  } catch {
+    return { eligible: false, reason: 'civicrm_unavailable' };
+  }
   if (!contact) {
     return { eligible: false, reason: 'no_matching_fellowship' };
   }
@@ -244,12 +221,22 @@ export async function evaluateBioEmailEligibility(
   // name) so a returning fellow with a changed email still resolves to their
   // existing VIT ID rather than getting a false 'no_vit_id'. For
   // 'needs-review' we refuse to send — we won't pick a candidate to deliver to.
-  const hasVitId = await checkHasVitIdViaLadder(contactId, contact);
+  let hasVitId: boolean;
+  try {
+    hasVitId = await checkHasVitIdViaLadder(contactId, contact);
+  } catch {
+    return { eligible: false, reason: 'civicrm_unavailable' };
+  }
   if (!hasVitId) {
     return { eligible: false, reason: 'no_vit_id' };
   }
 
-  const fellowships = await civicrmService.getFellowships(contactId);
+  let fellowships;
+  try {
+    fellowships = await civicrmService.getFellowships(contactId);
+  } catch {
+    return { eligible: false, reason: 'civicrm_unavailable' };
+  }
   if (fellowships.length === 0) {
     return { eligible: false, reason: 'no_matching_fellowship' };
   }
@@ -308,6 +295,8 @@ async function classifyLadderMatch(
     civicrmId: contactId,
     firstName: contact.firstName,
     lastName: contact.lastName,
+    // No fallback to contact.email — if Email.get returned nothing for this
+    // contact (all on_hold), we don't want to match against the held primary.
     primaryEmail: emails?.primary ?? null,
     secondaries: emails?.secondaries ?? [],
   };
@@ -584,6 +573,21 @@ export async function dispatchOne(
   }
 
   if (!eligibility.eligible) {
+    // civicrm_unavailable is transient — revert to PENDING so the next run
+    // retries. Persisting SKIPPED here would strand the row forever because
+    // the cron filter only picks PENDING. Manual-send callers see the
+    // 'deferred' outcome and surface a retryable 503 at the route layer.
+    if (eligibility.reason === 'civicrm_unavailable') {
+      await prisma.appointeeEmailEvent.update({
+        where: { id: eventId },
+        data: { status: AppointeeEmailStatus.PENDING },
+      });
+      logger.warn(
+        { eventId, emailType: event.emailType, contactId: event.contactId },
+        'Appointee email: eligibility check returned civicrm_unavailable, deferring to next run'
+      );
+      return 'deferred';
+    }
     await prisma.appointeeEmailEvent.update({
       where: { id: eventId },
       data: {
@@ -745,11 +749,12 @@ export async function sendBioEmailManually(args: {
 
   const outcome = await dispatchOne(eventId);
 
-  // Upstream failure (CiviCRM/Auth0 unreachable): event stayed PENDING. Surface
-  // a 500-ish signal to the route layer (we don't leak the underlying error
-  // to the admin).
+  // A 'deferred' outcome means dispatchOne hit civicrm_unavailable (the
+  // only source of defers). The event is back at PENDING so a future run
+  // can retry. Map to the typed ineligibility union so the route layer
+  // returns 503 via the civicrm_unavailable branch.
   if (outcome === 'deferred') {
-    throw new Error('upstream_fetch_failed');
+    return { ok: false, reason: 'civicrm_unavailable' };
   }
 
   // SES rejected the send. The row is now FAILED. Throw so the route returns
@@ -775,6 +780,7 @@ export async function sendBioEmailManually(args: {
       'fellowship_not_accepted',
       'no_primary_email',
       'already_sent',
+      'civicrm_unavailable',
     ];
     if (reason && (validReasons as readonly string[]).includes(reason)) {
       return { ok: false, reason: reason as BioEmailIneligibilityReason };
@@ -880,8 +886,12 @@ export async function sendVitIdInvitationManually(args: {
 
   const outcome = await dispatchOne(eventId);
 
+  // A 'deferred' outcome means dispatchOne hit civicrm_unavailable (the
+  // only source of defers) and reverted the row to PENDING. Map back to
+  // the typed ineligibility union so the route layer returns 503 via the
+  // same code path as a pre-check civicrm_unavailable.
   if (outcome === 'deferred') {
-    throw new Error('upstream_fetch_failed');
+    return { ok: false, reason: 'civicrm_unavailable' };
   }
   if (outcome === 'failed') {
     throw new Error('ses_send_failed');
@@ -1002,20 +1012,6 @@ export async function getEmailStatusForContacts(
   return result;
 }
 
-/**
- * Convenience: pick the academic-year label for a contact's current/upcoming
- * fellowship, using the shared helper. Returns null if neither exists.
- * Exposed here so callers don't need to import eligibility + CiviCRM directly.
- */
-export async function getBioEmailTargetYearForContact(
-  contactId: number
-): Promise<{ academicYear: string } | null> {
-  const fellowships = await civicrmService.getFellowships(contactId);
-  const target = pickBioEmailTargetYear(fellowships);
-  if (!target) return null;
-  return { academicYear: target.academicYear };
-}
-
 // Exported for tests / dashboard summaries.
 export function currentAndNextAcademicYears(now: Date = new Date()): [string, string] {
   const current = getCurrentAcademicYear(now);
@@ -1024,6 +1020,3 @@ export function currentAndNextAcademicYears(now: Date = new Date()): [string, st
   const nextEnd = Number(endStr) + 1;
   return [current.label, `${nextStart}-${nextEnd}`];
 }
-
-// Used as a Prisma alias in case we need to cast in tests.
-export type AppointeeEmailEventDelegate = Prisma.AppointeeEmailEventDelegate;

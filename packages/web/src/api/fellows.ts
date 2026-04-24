@@ -1,6 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch, useApiToken } from './client';
-import type { FellowsDashboardResponse } from '@itatti/shared';
+import type {
+  FellowsDashboardResponse,
+  SendBioEmailReason,
+  SendVitIdEmailReason,
+  EmailPreviewReason,
+} from '@itatti/shared';
+
+export type {
+  SendBioEmailReason,
+  SendVitIdEmailReason,
+  EmailPreviewReason,
+} from '@itatti/shared';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 
@@ -24,17 +35,11 @@ export interface SendBioEmailResponse {
   sentAt: string | null;
 }
 
-export type SendBioEmailReason =
-  | 'no_vit_id'
-  | 'no_matching_fellowship'
-  | 'fellowship_not_accepted'
-  | 'no_primary_email'
-  | 'already_sent';
-
 /**
- * Error thrown when the server returns 400 { reason } (eligibility failure).
- * Extends Error so React Query / generic error handlers receive a proper
- * Error instance; the `reason` field lets UI code map to a specific toast.
+ * Error thrown when the server returns 400/503 { reason } (eligibility
+ * failure or transient civicrm outage). Extends Error so React Query /
+ * generic error handlers receive a proper Error instance; the `reason`
+ * field lets UI code map to a specific toast.
  */
 export class SendBioEmailError extends Error {
   readonly reason: SendBioEmailReason;
@@ -87,16 +92,6 @@ export function useSendBioEmail() {
 // Separate error-reason union because the VIT send can fail in ways
 // the bio path never can (missing_first_name, already_has_vit_id, etc).
 // ────────────────────────────────────────────────────────────────────
-
-export type SendVitIdEmailReason =
-  | 'no_matching_fellowship'
-  | 'fellowship_not_accepted'
-  | 'no_primary_email'
-  | 'missing_first_name'
-  | 'already_has_vit_id'
-  | 'needs_review'
-  | 'already_sent'
-  | 'civicrm_unavailable';
 
 export class SendVitIdEmailError extends Error {
   readonly reason: SendVitIdEmailReason;
@@ -161,8 +156,8 @@ export interface EmailPreviewResponse {
 }
 
 export class EmailPreviewError extends Error {
-  readonly reason: string;
-  constructor(reason: string) {
+  readonly reason: EmailPreviewReason;
+  constructor(reason: EmailPreviewReason) {
     super(`email-preview: ${reason}`);
     this.name = 'EmailPreviewError';
     this.reason = reason;
@@ -193,7 +188,7 @@ export function useEmailPreview(args: {
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}));
         if (payload && typeof payload.reason === 'string') {
-          throw new EmailPreviewError(payload.reason);
+          throw new EmailPreviewError(payload.reason as EmailPreviewReason);
         }
         throw new Error(payload?.error || `Preview failed: ${res.status}`);
       }
