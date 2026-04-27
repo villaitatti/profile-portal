@@ -10,11 +10,14 @@
 --   - at most one in-flight row (PENDING/SENDING) may exist per pair
 --   - dashboard queries use the latest row by created_at/id
 
-DROP INDEX IF EXISTS "appointee_email_events_fellowship_id_email_type_key";
-
-CREATE INDEX IF NOT EXISTS "appointee_email_events_fellowship_id_email_type_created_at_idx"
-  ON "appointee_email_events" ("fellowship_id", "email_type", "created_at" DESC);
-
-CREATE UNIQUE INDEX IF NOT EXISTS "appointee_email_events_one_in_flight_per_fellowship_type"
+-- Prisma's PostgreSQL migrations are not wrapped in a transaction unless the
+-- migration adds BEGIN/COMMIT explicitly. Keep these index changes concurrent
+-- so deploys do not block appointee_email_events writes while the indexes build.
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS "appointee_email_events_one_in_flight_per_fellowship_type"
   ON "appointee_email_events" ("fellowship_id", "email_type")
   WHERE "status" IN ('PENDING', 'SENDING');
+
+DROP INDEX CONCURRENTLY IF EXISTS "appointee_email_events_fellowship_id_email_type_key";
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "appointee_email_events_fellowship_id_email_type_created_at_idx"
+  ON "appointee_email_events" ("fellowship_id", "email_type", "created_at" DESC);

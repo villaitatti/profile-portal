@@ -178,7 +178,7 @@ router.get('/', async (req, res, next) => {
 });
 
 // POST /api/admin/fellows/:contactId/send-bio-email
-// Body: { academicYear: "YYYY-YYYY", resend?: true }
+// Body: { academicYear: "YYYY-YYYY", resend?: boolean }
 // Returns:
 //   200 { eventId, status, sentAt? }             — success (including in-flight PENDING/SENDING)
 //   400 { error: "invalid_request", details? }   — malformed :contactId or body failed schema validation

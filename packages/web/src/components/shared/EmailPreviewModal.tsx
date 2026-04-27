@@ -238,14 +238,14 @@ function InlineBanner({
   /** When provided, renders a close (X) button that calls onDismiss. */
   onDismiss?: () => void;
 }) {
+  const liveRegionProps =
+    tone === 'warning'
+      ? ({ role: 'status', 'aria-live': 'polite' } as const)
+      : ({ role: 'alert', 'aria-live': 'assertive' } as const);
+
   return (
     <div
-      // role="alert" + aria-live="assertive" announces the message to
-      // screen-reader users when the banner appears. Without this, an
-      // Angela using VoiceOver would silently see Send disable with no
-      // feedback about why.
-      role="alert"
-      aria-live="assertive"
+      {...liveRegionProps}
       className={cn(
         'mx-6 mt-4 flex items-start gap-2 rounded-md border px-3 py-2 text-[0.88rem]',
         tone === 'destructive' && 'border-destructive/30 bg-destructive/10 text-destructive',
