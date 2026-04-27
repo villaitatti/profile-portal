@@ -37,13 +37,14 @@ interface EnqueueArgs {
   triggeredBy: string;
   delayHours?: number;
   emailType?: AppointeeEmailType; // defaults to BIO_PROJECT_DESCRIPTION for back-compat
+  allowHistoricalDuplicate?: boolean;
 }
 
 /**
  * Idempotently enqueue a bio-email event for (contactId, academicYear). If an
- * event already exists we leave it alone; a SENT event is already delivered,
- * a PENDING/SENDING event is already scheduled, and a FAILED event should be
- * retried via the manual admin path (which deletes the old row first).
+ * event already exists we leave it alone for automatic enqueue; manual retry
+ * and resend pass allowHistoricalDuplicate=true so the old row remains in the
+ * audit history and a fresh attempt is created.
  *
  * `sendAfter` is always "now + delayHours" (default 24h for the auto path,
  * pass 0 for the manual path).
@@ -71,6 +72,7 @@ export async function enqueueAppointeeEmail(args: {
   triggeredBy: string;
   delayHours?: number;
   emailType: AppointeeEmailType;
+  allowHistoricalDuplicate?: boolean;
 }): Promise<{
   eventId: string;
   status: AppointeeEmailStatus;
@@ -83,15 +85,17 @@ export async function enqueueAppointeeEmail(args: {
     triggeredBy,
     delayHours = 24,
     emailType,
+    allowHistoricalDuplicate = false,
   } = args;
   const now = new Date();
   const sendAfter = new Date(now.getTime() + delayHours * 60 * 60 * 1000);
 
-  const existing = await prisma.appointeeEmailEvent.findUnique({
-    where: {
-      fellowshipId_emailType: { fellowshipId, emailType },
-    },
-  });
+  const existing = allowHistoricalDuplicate
+    ? null
+    : await prisma.appointeeEmailEvent.findFirst({
+        where: { fellowshipId, emailType },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      });
 
   if (existing) {
     logger.info(
@@ -137,10 +141,15 @@ export async function enqueueAppointeeEmail(args: {
     return { eventId: created.id, status: created.status, created: true };
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-      const winner = await prisma.appointeeEmailEvent.findUnique({
+      const winner = await prisma.appointeeEmailEvent.findFirst({
         where: {
-          fellowshipId_emailType: { fellowshipId, emailType },
+          fellowshipId,
+          emailType,
+          status: {
+            in: [AppointeeEmailStatus.PENDING, AppointeeEmailStatus.SENDING],
+          },
         },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       });
       if (winner) {
         logger.info(
@@ -696,11 +705,12 @@ export async function sendBioEmailManually(args: {
   contactId: number;
   academicYear: string;
   triggeredBy: string;
+  resend?: boolean;
 }): Promise<
   | { ok: true; eventId: string; status: AppointeeEmailStatus; sentAt: Date | null }
   | { ok: false; reason: BioEmailIneligibilityReason }
 > {
-  const { contactId, academicYear, triggeredBy } = args;
+  const { contactId, academicYear, triggeredBy, resend = false } = args;
 
   // Pre-check eligibility so we don't persist a SKIPPED event on manual click.
   const eligibility = await evaluateBioEmailEligibility(contactId, academicYear);
@@ -708,22 +718,23 @@ export async function sendBioEmailManually(args: {
     return { ok: false, reason: eligibility.reason };
   }
 
-  // Already-sent short-circuit (manual button is hidden in the UI once sent,
-  // but guard at the API layer too).
-  const existing = await prisma.appointeeEmailEvent.findUnique({
+  // Latest-row guard: preserve all historical rows, but do not create a new
+  // attempt while one is already PENDING/SENDING. SENT requires explicit
+  // resend=true so accidental duplicate clicks stay blocked.
+  const existing = await prisma.appointeeEmailEvent.findFirst({
     where: {
-      fellowshipId_emailType: {
-        fellowshipId: eligibility.fellowshipId,
-        emailType: AppointeeEmailType.BIO_PROJECT_DESCRIPTION,
-      },
+      fellowshipId: eligibility.fellowshipId,
+      emailType: AppointeeEmailType.BIO_PROJECT_DESCRIPTION,
     },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
   });
 
   if (existing) {
     if (existing.status === AppointeeEmailStatus.SENT) {
-      return { ok: false, reason: 'already_sent' };
-    }
-    if (
+      if (!resend) {
+        return { ok: false, reason: 'already_sent' };
+      }
+    } else if (
       existing.status === AppointeeEmailStatus.PENDING ||
       existing.status === AppointeeEmailStatus.SENDING
     ) {
@@ -735,8 +746,6 @@ export async function sendBioEmailManually(args: {
         sentAt: existing.sentAt,
       };
     }
-    // FAILED or SKIPPED — delete and retry fresh.
-    await prisma.appointeeEmailEvent.delete({ where: { id: existing.id } });
   }
 
   const { eventId } = await enqueueBioEmail({
@@ -745,6 +754,7 @@ export async function sendBioEmailManually(args: {
     fellowshipId: eligibility.fellowshipId,
     triggeredBy,
     delayHours: 0,
+    allowHistoricalDuplicate: true,
   });
 
   const outcome = await dispatchOne(eventId);
@@ -825,13 +835,12 @@ export async function sendVitIdInvitationManually(args: {
     return { ok: false, reason: eligibility.reason };
   }
 
-  const existing = await prisma.appointeeEmailEvent.findUnique({
+  const existing = await prisma.appointeeEmailEvent.findFirst({
     where: {
-      fellowshipId_emailType: {
-        fellowshipId: eligibility.fellowshipId,
-        emailType: AppointeeEmailType.VIT_ID_INVITATION,
-      },
+      fellowshipId: eligibility.fellowshipId,
+      emailType: AppointeeEmailType.VIT_ID_INVITATION,
     },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
   });
 
   let eventId: string;
@@ -858,10 +867,8 @@ export async function sendVitIdInvitationManually(args: {
       // strand the row forever since no cron picks it up.
       eventId = existing.id;
     } else {
-      // FAILED or SKIPPED — delete and enqueue fresh so the caller sees a
-      // clean dispatch (preserves the status-flip semantics of the
-      // happy-path insert).
-      await prisma.appointeeEmailEvent.delete({ where: { id: existing.id } });
+      // FAILED or SKIPPED — enqueue a fresh attempt while preserving the old
+      // row for the future email log page.
       const enqueued = await enqueueAppointeeEmail({
         contactId,
         academicYear,
@@ -869,6 +876,7 @@ export async function sendVitIdInvitationManually(args: {
         triggeredBy,
         delayHours: 0,
         emailType: AppointeeEmailType.VIT_ID_INVITATION,
+        allowHistoricalDuplicate: true,
       });
       eventId = enqueued.eventId;
     }
@@ -880,6 +888,7 @@ export async function sendVitIdInvitationManually(args: {
       triggeredBy,
       delayHours: 0,
       emailType: AppointeeEmailType.VIT_ID_INVITATION,
+      allowHistoricalDuplicate: true,
     });
     eventId = enqueued.eventId;
   }
@@ -940,13 +949,11 @@ export async function sendVitIdInvitationManually(args: {
  * ALL email events across the given contacts, years, and types. Caller bins
  * the results by `emailType` into per-type maps.
  *
- * Key format: `${fellowshipId}:${emailType}`. This mirrors the database's
- * actual unique key on the events table (see migration 20260423120001 —
- * codex review 2026-04-23 moved the key from contactId+year to fellowshipId
- * because CiviCRM "one fellowship per contact per year" is policy, not a
- * schema constraint). Keying the in-memory Map the same way means two
- * fellowships for the same contact+year would surface as two independent
- * entries, not collapse into one. `fellowshipId` is also present on the
+ * Key format: `${fellowshipId}:${emailType}`. The query may return historical
+ * rows for the same pair; rows are ordered newest-first and the first row wins.
+ * Keying the in-memory Map by fellowshipId means two fellowships for the same
+ * contact+year surface as independent entries, not collapse into one.
+ * `fellowshipId` is also present on the
  * value payload so callers can double-check the binding.
  */
 export async function getEmailStatusForContacts(
@@ -965,6 +972,7 @@ export async function getEmailStatusForContacts(
       academicYear: string;
       emailType: AppointeeEmailType;
       fellowshipId: number;
+      sendCount: number;
     }
   >
 > {
@@ -976,6 +984,7 @@ export async function getEmailStatusForContacts(
       academicYear: string;
       emailType: AppointeeEmailType;
       fellowshipId: number;
+      sendCount: number;
     }
   >();
   if (
@@ -999,15 +1008,23 @@ export async function getEmailStatusForContacts(
       emailType: true,
       fellowshipId: true,
     },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
   });
 
   for (const row of rows) {
-    result.set(`${row.fellowshipId}:${row.emailType}`, {
+    const key = `${row.fellowshipId}:${row.emailType}`;
+    const existing = result.get(key);
+    if (existing) {
+      existing.sendCount += 1;
+      continue;
+    }
+    result.set(key, {
       status: row.status,
       sentAt: row.sentAt,
       academicYear: row.academicYear,
       emailType: row.emailType,
       fellowshipId: row.fellowshipId,
+      sendCount: 1,
     });
   }
   return result;

@@ -226,6 +226,26 @@ describe('POST /api/admin/fellows/:contactId/send-bio-email', () => {
     expect(res.status).toBe(502);
     expect(res.body.reason).toBe('email_send_failed');
   });
+
+  it('passes resend=true into the manual bio send service', async () => {
+    mockAppointee.sendBioEmailManually.mockResolvedValue({
+      ok: true,
+      eventId: 'evt_resend',
+      status: AppointeeEmailStatus.SENT,
+      sentAt: new Date('2026-04-24T12:00:00Z'),
+    });
+    const app = makeApp();
+    await request(app)
+      .post('/api/admin/fellows/1/send-bio-email')
+      .send({ academicYear: '2026-2027', resend: true });
+
+    expect(mockAppointee.sendBioEmailManually).toHaveBeenCalledWith({
+      contactId: 1,
+      academicYear: '2026-2027',
+      triggeredBy: 'admin_manual:test-user',
+      resend: true,
+    });
+  });
 });
 
 describe('GET /api/admin/fellows/:contactId/email-preview', () => {

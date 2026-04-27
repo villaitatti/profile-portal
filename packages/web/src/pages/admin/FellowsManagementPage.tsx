@@ -32,6 +32,7 @@ import {
   Mail,
   UserPlus,
   Loader2,
+  Repeat2,
 } from 'lucide-react';
 import type {
   FellowDashboardEntry,
@@ -347,10 +348,12 @@ function SummaryCard({
 function BioEmailPill({
   status,
   sentAt,
+  sendCount,
   targetAcademicYear,
 }: {
   status: BioEmailStatus;
   sentAt: string | null;
+  sendCount: number;
   targetAcademicYear: string | null;
 }) {
   if (status === 'none') {
@@ -378,22 +381,23 @@ function BioEmailPill({
     );
   }
   if (status === 'sent') {
+    const verb = sendCount > 1 ? 'Re-sent' : 'Sent';
     const label = sentAt
-      ? `Sent ${new Date(sentAt).toLocaleDateString(undefined, {
+      ? `${verb} ${new Date(sentAt).toLocaleDateString(undefined, {
           year: 'numeric',
           month: 'short',
           day: 'numeric',
         })}`
-      : 'Sent';
+      : verb;
     return (
       <span
         className="inline-flex items-center rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700"
         title={
           targetAcademicYear
-            ? `Bio email sent for ${targetAcademicYear}${sentAt ? ` on ${new Date(sentAt).toLocaleString()}` : ''}`
+            ? `Bio email ${sendCount > 1 ? 're-sent' : 'sent'} for ${targetAcademicYear}${sentAt ? ` on ${new Date(sentAt).toLocaleString()}` : ''}`
             : sentAt
-              ? `Bio email sent on ${new Date(sentAt).toLocaleString()}`
-              : 'Bio email sent'
+              ? `Bio email ${sendCount > 1 ? 're-sent' : 'sent'} on ${new Date(sentAt).toLocaleString()}`
+              : `Bio email ${sendCount > 1 ? 're-sent' : 'sent'}`
         }
       >
         {label}
@@ -465,6 +469,7 @@ const FELLOWS_PER_PAGE = 25;
 type ActiveSend = {
   fellow: FellowDashboardEntry;
   kind: 'vit_id_invitation' | 'bio_project_description';
+  mode?: 'send' | 'resend';
 };
 
 function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
@@ -476,6 +481,7 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
   const [page, setPage] = useState(1);
   const [activeSend, setActiveSend] = useState<ActiveSend | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [resendConfirmOpen, setResendConfirmOpen] = useState(false);
   const sendBioEmail = useSendBioEmail();
   const sendVitIdEmail = useSendVitIdEmail();
   const [pendingContactId, setPendingContactId] = useState<number | null>(null);
@@ -493,7 +499,10 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
 
   // Reset transient modal state when we open a new preview.
   useEffect(() => {
-    if (activeSend) setSendError(null);
+    if (activeSend) {
+      setSendError(null);
+      setResendConfirmOpen(false);
+    }
   }, [activeSend?.fellow.civicrmId, activeSend?.kind]);
 
   // Reset to page 1 when the underlying data changes (filter/search/year)
@@ -572,8 +581,16 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
   }
 
   async function handleConfirmSend() {
+    if (activeSend?.kind === 'bio_project_description' && activeSend.mode === 'resend') {
+      setResendConfirmOpen(true);
+      return;
+    }
+    await sendActiveEmail();
+  }
+
+  async function sendActiveEmail() {
     if (!activeSend) return;
-    const { fellow, kind } = activeSend;
+    const { fellow, kind, mode } = activeSend;
     const targetYear =
       kind === 'vit_id_invitation'
         ? fellow.vitIdInvitation.targetAcademicYear
@@ -604,13 +621,18 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
         const result = await sendBioEmail.mutateAsync({
           contactId: fellow.civicrmId,
           academicYear: targetYear,
+          resend: mode === 'resend',
         });
         const label = `${fellow.firstName} ${fellow.lastName}`;
         if (result.status === 'SENT') {
-          toast.success(`Bio email sent to ${label}.`);
+          toast.success(
+            mode === 'resend'
+              ? `Bio email re-sent to ${label}.`
+              : `Bio email sent to ${label}.`
+          );
         } else {
           toast.success(
-            `Bio email queued for ${label} (status: ${result.status.toLowerCase()}).`
+            `${mode === 'resend' ? 'Bio email re-send' : 'Bio email'} queued for ${label} (status: ${result.status.toLowerCase()}).`
           );
         }
         setActiveSend(null);
@@ -662,7 +684,7 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
                 key={fellow.civicrmId}
                 fellow={fellow}
                 pendingContactId={pendingContactId}
-                onSendClick={(kind) => setActiveSend({ fellow, kind })}
+                onSendClick={(kind, mode) => setActiveSend({ fellow, kind, mode })}
               />
             ))}
           </tbody>
@@ -680,10 +702,15 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
           activeSend?.kind === 'vit_id_invitation'
             ? `Send VIT ID invitation to ${activeSend.fellow.firstName} ${activeSend.fellow.lastName}`
             : activeSend
-              ? `Send bio email to ${activeSend.fellow.firstName} ${activeSend.fellow.lastName}`
+              ? `${activeSend.mode === 'resend' ? 'Re-send' : 'Send'} bio email to ${activeSend.fellow.firstName} ${activeSend.fellow.lastName}`
               : ''
         }
         confirmLabel="Send email"
+        notice={
+          activeSend?.kind === 'bio_project_description' && activeSend.mode === 'resend'
+            ? `This bio email was already sent${activeSend.fellow.bioEmail.sentAt ? ` on ${new Date(activeSend.fellow.bioEmail.sentAt).toLocaleDateString()}` : ''}. Review the email before re-sending it.`
+            : null
+        }
         preview={
           previewQuery.data
             ? {
@@ -705,6 +732,20 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
         }
         sendError={sendError}
         submitting={pendingContactId !== null}
+      />
+      <ConfirmResendDialog
+        open={resendConfirmOpen}
+        fellowName={
+          activeSend
+            ? `${activeSend.fellow.firstName} ${activeSend.fellow.lastName}`
+            : ''
+        }
+        submitting={pendingContactId !== null}
+        onCancel={() => setResendConfirmOpen(false)}
+        onConfirm={async () => {
+          setResendConfirmOpen(false);
+          await sendActiveEmail();
+        }}
       />
       {totalPages > 1 && (
         <div className="mt-4 flex items-center justify-between text-sm">
@@ -781,7 +822,10 @@ function FellowRow({
 }: {
   fellow: FellowDashboardEntry;
   pendingContactId: number | null;
-  onSendClick: (kind: 'vit_id_invitation' | 'bio_project_description') => void;
+  onSendClick: (
+    kind: 'vit_id_invitation' | 'bio_project_description',
+    mode?: 'send' | 'resend'
+  ) => void;
 }) {
   const isPending = pendingContactId === fellow.civicrmId;
   return (
@@ -879,6 +923,7 @@ function FellowRow({
         <BioEmailPill
           status={fellow.bioEmail.status}
           sentAt={fellow.bioEmail.sentAt}
+          sendCount={fellow.bioEmail.sendCount}
           targetAcademicYear={fellow.bioEmail.targetAcademicYear}
         />
       </td>
@@ -935,6 +980,22 @@ function FellowRow({
               <span>Send bio email</span>
             </button>
           )}
+          {fellow.bioEmail.status === 'sent' && fellow.bioEmail.targetAcademicYear && (
+            <button
+              type="button"
+              onClick={() => onSendClick('bio_project_description', 'resend')}
+              disabled={isPending}
+              className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-900 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+              title={`Re-send bio & project description email for ${fellow.bioEmail.targetAcademicYear}`}
+            >
+              {isPending ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Repeat2 className="h-3 w-3" />
+              )}
+              <span>Re-send bio email</span>
+            </button>
+          )}
           {CIVICRM_URL && (
             <a
               href={`${CIVICRM_URL}/civicrm/contact/view?reset=1&cid=${fellow.civicrmId}`}
@@ -948,5 +1009,72 @@ function FellowRow({
         </div>
       </td>
     </tr>
+  );
+}
+
+function ConfirmResendDialog({
+  open,
+  fellowName,
+  submitting,
+  onCancel,
+  onConfirm,
+}: {
+  open: boolean;
+  fellowName: string;
+  submitting: boolean;
+  onCancel: () => void;
+  onConfirm: () => Promise<void> | void;
+}) {
+  if (!open) return null;
+
+  return (
+    <div
+      role="presentation"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-[rgba(29,37,44,0.38)] px-4"
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirm-resend-title"
+        className="w-full max-w-md rounded-lg border bg-card shadow-lg"
+      >
+        <div className="border-b px-5 py-4">
+          <h2
+            id="confirm-resend-title"
+            className="text-lg font-semibold tracking-tight text-foreground"
+          >
+            Re-send bio email?
+          </h2>
+        </div>
+        <div className="space-y-3 px-5 py-4 text-[0.95rem] leading-6 text-muted-foreground">
+          <p>
+            This bio email has already been sent to {fellowName}. Sending again
+            will deliver another copy to the recipient.
+          </p>
+          <p className="font-medium text-foreground">
+            Are you sure you want to send it again?
+          </p>
+        </div>
+        <div className="flex justify-end gap-3 border-t px-5 py-4">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={submitting}
+            className="rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => onConfirm()}
+            disabled={submitting}
+            className="inline-flex items-center gap-2 rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+            Send again
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

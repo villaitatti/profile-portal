@@ -57,9 +57,9 @@ export function useSendBioEmail() {
   return useMutation<
     SendBioEmailResponse,
     Error,
-    { contactId: number; academicYear: string }
+    { contactId: number; academicYear: string; resend?: boolean }
   >({
-    mutationFn: async ({ contactId, academicYear }) => {
+    mutationFn: async ({ contactId, academicYear, resend }) => {
       const token = await getToken();
       // Use fetch directly so we can distinguish 400 {reason} (eligibility) from
       // 400 {error: 'invalid_request'} (malformed) and 500 errors. apiFetch
@@ -70,7 +70,7 @@ export function useSendBioEmail() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ academicYear }),
+        body: JSON.stringify({ academicYear, ...(resend ? { resend } : {}) }),
       });
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}));
