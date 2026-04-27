@@ -88,6 +88,10 @@ export interface BioEmailSummary {
   //   - "failed"  → event is FAILED
   status: BioEmailStatus;
   sentAt: string | null;
+  // Number of persisted send attempts for this fellowship/email type. The
+  // latest row still drives status/sentAt; this count lets the UI distinguish
+  // an original send from a re-send without losing history.
+  sendCount: number;
   // Current or next academic year this appointee is eligible for (null if neither)
   targetAcademicYear: string | null;
   // True when admin should see a "Send bio email" button for this row.
@@ -111,6 +115,7 @@ export type VitIdInvitationStatus = 'none' | 'pending' | 'sent' | 'failed';
 export interface VitIdInvitationSummary {
   status: VitIdInvitationStatus;
   sentAt: string | null;
+  sendCount: number;
   // Academic year this row targets, for display in the modal subject line.
   targetAcademicYear: string | null;
   // Send button visible when:

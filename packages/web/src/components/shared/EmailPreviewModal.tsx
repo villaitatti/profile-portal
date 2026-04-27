@@ -37,6 +37,7 @@ interface EmailPreviewModalProps {
   open: boolean;
   title: string;
   confirmLabel?: string;
+  notice?: string | null;
   /** Preview envelope. `null` = still loading. Provide a fresh value via react-query data. */
   preview: EmailPreviewData | null;
   /** Human-readable reason why the preview endpoint failed (e.g. "Missing first name in CiviCRM"). */
@@ -53,6 +54,7 @@ export function EmailPreviewModal({
   open,
   title,
   confirmLabel = 'Send email',
+  notice,
   preview,
   previewError,
   sendError,
@@ -98,6 +100,15 @@ export function EmailPreviewModal({
               {title}
             </Dialog.Title>
           </header>
+
+          {notice && (
+            <InlineBanner
+              tone="warning"
+              icon={<AlertCircle className="h-4 w-4" />}
+            >
+              {notice}
+            </InlineBanner>
+          )}
 
           {previewError && !previewErrorDismissed && (
             <InlineBanner
@@ -221,7 +232,7 @@ function InlineBanner({
   children,
   onDismiss,
 }: {
-  tone: 'destructive';
+  tone: 'destructive' | 'warning';
   icon?: React.ReactNode;
   children: React.ReactNode;
   /** When provided, renders a close (X) button that calls onDismiss. */
@@ -237,7 +248,8 @@ function InlineBanner({
       aria-live="assertive"
       className={cn(
         'mx-6 mt-4 flex items-start gap-2 rounded-md border px-3 py-2 text-[0.88rem]',
-        tone === 'destructive' && 'border-destructive/30 bg-destructive/10 text-destructive'
+        tone === 'destructive' && 'border-destructive/30 bg-destructive/10 text-destructive',
+        tone === 'warning' && 'border-amber-300 bg-amber-50 text-amber-900'
       )}
     >
       {icon && <span className="mt-0.5 flex-shrink-0">{icon}</span>}

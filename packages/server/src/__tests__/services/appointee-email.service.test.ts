@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 vi.mock('../../lib/prisma.js', () => ({
   prisma: {
     appointeeEmailEvent: {
+      findFirst: vi.fn(),
       findUnique: vi.fn(),
       findMany: vi.fn(),
       findUniqueOrThrow: vi.fn(),
@@ -124,7 +125,7 @@ describe('currentAndNextAcademicYears', () => {
 
 describe('enqueueBioEmail', () => {
   it('creates a new PENDING event with 24h delay when none exists', async () => {
-    (mockPrisma.appointeeEmailEvent.findUnique as any).mockResolvedValue(null);
+    (mockPrisma.appointeeEmailEvent.findFirst as any).mockResolvedValue(null);
     (mockPrisma.appointeeEmailEvent.create as any).mockImplementation((args: any) =>
       Promise.resolve({ id: 'evt_new', status: 'PENDING', ...args.data })
     );
@@ -154,7 +155,7 @@ describe('enqueueBioEmail', () => {
   });
 
   it('respects delayHours: 0 for the manual path', async () => {
-    (mockPrisma.appointeeEmailEvent.findUnique as any).mockResolvedValue(null);
+    (mockPrisma.appointeeEmailEvent.findFirst as any).mockResolvedValue(null);
     (mockPrisma.appointeeEmailEvent.create as any).mockImplementation((args: any) =>
       Promise.resolve({ id: 'evt_now', status: 'PENDING', ...args.data })
     );
@@ -175,7 +176,7 @@ describe('enqueueBioEmail', () => {
   });
 
   it('is idempotent: returns the existing event without creating a duplicate', async () => {
-    (mockPrisma.appointeeEmailEvent.findUnique as any).mockResolvedValue({
+    (mockPrisma.appointeeEmailEvent.findFirst as any).mockResolvedValue({
       id: 'evt_existing',
       status: 'PENDING',
     });
@@ -196,7 +197,7 @@ describe('enqueueBioEmail', () => {
     // Two concurrent workers both see findUnique=null, then the loser's
     // create() fails with P2002 because the winner beat it to the unique
     // index. The loser must fall back to returning the winner's row.
-    (mockPrisma.appointeeEmailEvent.findUnique as any)
+    (mockPrisma.appointeeEmailEvent.findFirst as any)
       .mockResolvedValueOnce(null) // initial existence check
       .mockResolvedValueOnce({ id: 'evt_winner', status: 'PENDING' }); // post-P2002 re-fetch
     const p2002 = new Prisma.PrismaClientKnownRequestError(
@@ -218,7 +219,7 @@ describe('enqueueBioEmail', () => {
   });
 
   it('re-throws non-P2002 Prisma errors', async () => {
-    (mockPrisma.appointeeEmailEvent.findUnique as any).mockResolvedValue(null);
+    (mockPrisma.appointeeEmailEvent.findFirst as any).mockResolvedValue(null);
     const other = new Prisma.PrismaClientKnownRequestError('nope', {
       code: 'P2025',
       clientVersion: 'test',
@@ -703,7 +704,7 @@ describe('sendBioEmailManually', () => {
         fellowshipAccepted: true,
       },
     ]);
-    (mockPrisma.appointeeEmailEvent.findUnique as any).mockResolvedValue({
+    (mockPrisma.appointeeEmailEvent.findFirst as any).mockResolvedValue({
       id: 'evt_sent',
       status: 'SENT',
       sentAt: new Date(),
@@ -716,6 +717,67 @@ describe('sendBioEmailManually', () => {
     });
 
     expect(result).toEqual({ ok: false, reason: 'already_sent' });
+  });
+
+  it('preserves a SENT event and creates a new row when resend=true', async () => {
+    mockCivicrm.getContactById.mockResolvedValue({
+      id: 1,
+      firstName: 'A',
+      lastName: 'B',
+      email: 'a@b.com',
+    });
+    mockCivicrm.getFellowships.mockResolvedValue([
+      {
+        id: 10,
+        contactId: 1,
+        startDate: '2026-07-01',
+        endDate: '2027-06-30',
+        fellowshipAccepted: true,
+      },
+    ]);
+    (mockPrisma.appointeeEmailEvent.findFirst as any).mockResolvedValue({
+      id: 'evt_sent',
+      status: 'SENT',
+      sentAt: new Date('2026-04-23T12:00:00Z'),
+    });
+    (mockPrisma.appointeeEmailEvent.create as any).mockResolvedValue({
+      id: 'evt_resend',
+      status: 'PENDING',
+      emailType: 'BIO_PROJECT_DESCRIPTION',
+    });
+    (mockPrisma.appointeeEmailEvent.updateMany as any).mockResolvedValue({ count: 1 });
+    (mockPrisma.appointeeEmailEvent.findUniqueOrThrow as any)
+      .mockResolvedValueOnce({
+        id: 'evt_resend',
+        status: 'SENDING',
+        emailType: 'BIO_PROJECT_DESCRIPTION',
+        contactId: 1,
+        academicYear: '2026-2027',
+        fellowshipId: 10,
+      })
+      .mockResolvedValueOnce({
+        id: 'evt_resend',
+        status: 'SENT',
+        sentAt: new Date('2026-04-24T12:00:00Z'),
+      });
+    (mockPrisma.appointeeEmailEvent.update as any).mockResolvedValue({});
+    mockEmail.sendBioProjectDescriptionEmail.mockResolvedValue({
+      messageId: 'ses-resend',
+    });
+
+    const result = await sendBioEmailManually({
+      contactId: 1,
+      academicYear: '2026-2027',
+      triggeredBy: 'admin_manual:u1',
+      resend: true,
+    });
+
+    expect(mockPrisma.appointeeEmailEvent.delete).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      ok: true,
+      eventId: 'evt_resend',
+      status: 'SENT',
+    });
   });
 
   // Shared eligibility/fellowship setup for the dispatch-outcome tests below.
@@ -736,7 +798,7 @@ describe('sendBioEmailManually', () => {
         fellowshipAccepted: true,
       },
     ]);
-    (mockPrisma.appointeeEmailEvent.findUnique as any).mockResolvedValue(null);
+    (mockPrisma.appointeeEmailEvent.findFirst as any).mockResolvedValue(null);
     (mockPrisma.appointeeEmailEvent.create as any).mockImplementation((args: any) =>
       Promise.resolve({ id: 'evt_new', status: 'PENDING', ...args.data })
     );
@@ -909,9 +971,17 @@ describe('getEmailStatusForContacts', () => {
     expect(mockPrisma.appointeeEmailEvent.findMany).not.toHaveBeenCalled();
   });
 
-  it('keys the returned map by `${fellowshipId}:${emailType}` (matches the DB unique key)', async () => {
+  it('keys the returned map by `${fellowshipId}:${emailType}` and uses the latest row', async () => {
     const sent = new Date('2026-04-10');
     (mockPrisma.appointeeEmailEvent.findMany as any).mockResolvedValue([
+      {
+        contactId: 1,
+        academicYear: '2026-2027',
+        fellowshipId: 101,
+        status: 'PENDING',
+        sentAt: null,
+        emailType: 'BIO_PROJECT_DESCRIPTION',
+      },
       {
         contactId: 1,
         academicYear: '2026-2027',
@@ -934,11 +1004,12 @@ describe('getEmailStatusForContacts', () => {
 
     expect(result.size).toBe(2);
     expect(result.get('101:BIO_PROJECT_DESCRIPTION')).toEqual({
-      status: 'SENT',
-      sentAt: sent,
+      status: 'PENDING',
+      sentAt: null,
       academicYear: '2026-2027',
       emailType: 'BIO_PROJECT_DESCRIPTION',
       fellowshipId: 101,
+      sendCount: 2,
     });
     expect(result.get('202:VIT_ID_INVITATION')).toEqual({
       status: 'PENDING',
@@ -946,6 +1017,7 @@ describe('getEmailStatusForContacts', () => {
       academicYear: '2026-2027',
       emailType: 'VIT_ID_INVITATION',
       fellowshipId: 202,
+      sendCount: 1,
     });
     expect(result.get('303:BIO_PROJECT_DESCRIPTION')).toBeUndefined();
   });
@@ -976,7 +1048,9 @@ describe('getEmailStatusForContacts', () => {
     const result = await getEmailStatusForContacts([1], ['2026-2027']);
     expect(result.size).toBe(2);
     expect(result.get('501:BIO_PROJECT_DESCRIPTION')?.status).toBe('SENT');
+    expect(result.get('501:BIO_PROJECT_DESCRIPTION')?.sendCount).toBe(1);
     expect(result.get('502:BIO_PROJECT_DESCRIPTION')?.status).toBe('PENDING');
+    expect(result.get('502:BIO_PROJECT_DESCRIPTION')?.sendCount).toBe(1);
   });
 
   it('filters by the types argument — bio only when requested', async () => {
@@ -1259,7 +1333,7 @@ describe('sendVitIdInvitationManually', () => {
 
   it('returns already_sent when a SENT event already exists for this fellowship', async () => {
     primeEligibleContactNoVitId();
-    (mockPrisma.appointeeEmailEvent.findUnique as any).mockResolvedValue({
+    (mockPrisma.appointeeEmailEvent.findFirst as any).mockResolvedValue({
       id: 'evt_sent',
       status: 'SENT',
       sentAt: new Date(),
@@ -1274,7 +1348,7 @@ describe('sendVitIdInvitationManually', () => {
 
   it('returns existing SENDING event without creating a duplicate (in-flight short-circuit)', async () => {
     primeEligibleContactNoVitId();
-    (mockPrisma.appointeeEmailEvent.findUnique as any).mockResolvedValue({
+    (mockPrisma.appointeeEmailEvent.findFirst as any).mockResolvedValue({
       id: 'evt_sending',
       status: 'SENDING',
       sentAt: null,
@@ -1311,7 +1385,7 @@ describe('sendVitIdInvitationManually', () => {
       sesMessageId: null,
       sendAfter: new Date(),
     };
-    (mockPrisma.appointeeEmailEvent.findUnique as any).mockResolvedValue(
+    (mockPrisma.appointeeEmailEvent.findFirst as any).mockResolvedValue(
       pendingEvt
     );
     // dispatchOne: atomic flip succeeds against the existing row, eligibility
@@ -1341,18 +1415,13 @@ describe('sendVitIdInvitationManually', () => {
     expect(mockEmail.sendVitIdInvitationEmail).toHaveBeenCalled();
   });
 
-  it('deletes a FAILED row and retries fresh', async () => {
+  it('preserves a FAILED row and retries fresh', async () => {
     primeEligibleContactNoVitId();
-    // findUnique is called twice: once for existence check, once inside
-    // enqueue. First call returns the FAILED row; second call (after delete)
-    // returns null so the new create succeeds.
-    (mockPrisma.appointeeEmailEvent.findUnique as any)
-      .mockResolvedValueOnce({
-        id: 'evt_failed',
-        status: 'FAILED',
-        sentAt: null,
-      })
-      .mockResolvedValueOnce(null);
+    (mockPrisma.appointeeEmailEvent.findFirst as any).mockResolvedValue({
+      id: 'evt_failed',
+      status: 'FAILED',
+      sentAt: null,
+    });
 
     // Mock dispatch path: atomic PENDING→SENDING succeeds, eligibility holds,
     // SES returns a message id.
@@ -1383,9 +1452,7 @@ describe('sendVitIdInvitationManually', () => {
       academicYear: '2026-2027',
       triggeredBy: 'admin_manual:u1',
     });
-    expect(mockPrisma.appointeeEmailEvent.delete).toHaveBeenCalledWith({
-      where: { id: 'evt_failed' },
-    });
+    expect(mockPrisma.appointeeEmailEvent.delete).not.toHaveBeenCalled();
     expect(result).toMatchObject({ ok: true, eventId: 'evt_retry' });
   });
 
@@ -1398,7 +1465,7 @@ describe('sendVitIdInvitationManually', () => {
     // maps it back. Angela's modal surfaces it as the 503-worthy reason,
     // rather than the cron-style deferral bio uses.
     primeEligibleContactNoVitId();
-    (mockPrisma.appointeeEmailEvent.findUnique as any).mockResolvedValue(null);
+    (mockPrisma.appointeeEmailEvent.findFirst as any).mockResolvedValue(null);
     (mockPrisma.appointeeEmailEvent.create as any).mockResolvedValue({
       id: 'evt_new',
       status: 'PENDING',
@@ -1441,7 +1508,7 @@ describe('sendVitIdInvitationManually', () => {
 
   it('returns email_send_failed when SES rejects the send', async () => {
     primeEligibleContactNoVitId();
-    (mockPrisma.appointeeEmailEvent.findUnique as any).mockResolvedValue(null);
+    (mockPrisma.appointeeEmailEvent.findFirst as any).mockResolvedValue(null);
     (mockPrisma.appointeeEmailEvent.create as any).mockResolvedValue({
       id: 'evt_new',
       status: 'PENDING',
@@ -1471,7 +1538,7 @@ describe('sendVitIdInvitationManually', () => {
 
   it('maps a skipped-dispatch with a recognized reason back to {ok: false, reason}', async () => {
     primeEligibleContactNoVitId();
-    (mockPrisma.appointeeEmailEvent.findUnique as any).mockResolvedValue(null);
+    (mockPrisma.appointeeEmailEvent.findFirst as any).mockResolvedValue(null);
     (mockPrisma.appointeeEmailEvent.create as any).mockResolvedValue({
       id: 'evt_new',
       status: 'PENDING',
@@ -1514,7 +1581,7 @@ describe('sendVitIdInvitationManually', () => {
 
   it('happy path returns {ok: true, ...} when dispatch succeeds', async () => {
     primeEligibleContactNoVitId();
-    (mockPrisma.appointeeEmailEvent.findUnique as any).mockResolvedValue(null);
+    (mockPrisma.appointeeEmailEvent.findFirst as any).mockResolvedValue(null);
     const newEvt = {
       id: 'evt_new',
       status: 'PENDING',

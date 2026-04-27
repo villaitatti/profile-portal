@@ -150,6 +150,35 @@ describe('useSendVitIdEmail', () => {
 });
 
 describe('useSendBioEmail', () => {
+  it('sends resend=true in the request body when requested', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        eventId: 'evt_resend',
+        status: 'SENT',
+        sentAt: '2026-04-24T12:00:00Z',
+      }),
+    });
+
+    const { result } = renderHook(() => useSendBioEmail(), { wrapper: wrap() });
+    await result.current.mutateAsync({
+      contactId: 1,
+      academicYear: '2026-2027',
+      resend: true,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/admin/fellows/1/send-bio-email'),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          academicYear: '2026-2027',
+          resend: true,
+        }),
+      })
+    );
+  });
+
   it('throws SendBioEmailError on 502 email_send_failed', async () => {
     fetchMock.mockResolvedValue({
       ok: false,

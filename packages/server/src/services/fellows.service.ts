@@ -64,7 +64,7 @@ function buildBioEmailSummary(args: {
   needsReview: boolean;
   targetAcademicYear: string | null;
   event:
-    | { status: AppointeeEmailStatus; sentAt: Date | null; academicYear: string }
+    | { status: AppointeeEmailStatus; sentAt: Date | null; academicYear: string; sendCount?: number }
     | undefined;
 }): BioEmailSummary {
   const { hasVitId, needsReview, targetAcademicYear, event } = args;
@@ -84,6 +84,7 @@ function buildBioEmailSummary(args: {
   return {
     status: pill.status,
     sentAt: pill.sentAt,
+    sendCount: event?.sendCount ?? 0,
     targetAcademicYear,
     canManuallySend,
   };
@@ -95,7 +96,7 @@ function buildVitIdInvitationSummary(args: {
   fellowshipAccepted: boolean;
   targetAcademicYear: string | null;
   event:
-    | { status: AppointeeEmailStatus; sentAt: Date | null; academicYear: string }
+    | { status: AppointeeEmailStatus; sentAt: Date | null; academicYear: string; sendCount?: number }
     | undefined;
 }): VitIdInvitationSummary {
   const { hasVitId, needsReview, fellowshipAccepted, targetAcademicYear, event } =
@@ -117,6 +118,7 @@ function buildVitIdInvitationSummary(args: {
   return {
     status: pill.status,
     sentAt: pill.sentAt,
+    sendCount: event?.sendCount ?? 0,
     targetAcademicYear,
     canManuallySend,
   };
@@ -359,10 +361,10 @@ export async function getFellowsDashboard(
       ? item.displayFellowshipId
       : actionFellowshipId ?? item.displayFellowshipId;
 
-    // Look up events by (fellowshipId, emailType) — matches the database's
-    // unique key exactly. The lookup key is allowed to differ from the action
-    // key so historical filters can show past send status while still keeping
-    // manual-send buttons gated to current/accepted-upcoming fellowships.
+    // Look up latest event by (fellowshipId, emailType). The lookup key is
+    // allowed to differ from the action key so historical filters can show
+    // past send status while still keeping manual-send buttons gated to
+    // current/accepted-upcoming fellowships.
     const bioEvent = statusLookupFellowshipId
       ? emailStatusMap.get(
           `${statusLookupFellowshipId}:${AppointeeEmailType.BIO_PROJECT_DESCRIPTION}`

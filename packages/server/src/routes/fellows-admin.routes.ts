@@ -44,6 +44,7 @@ function getDevMockData(academicYear?: string): FellowsDashboardResponse {
   const mockBioEmail = (variant: 'none' | 'pending' | 'sent' | 'failed', canSend: boolean, year: string) => ({
     status: variant,
     sentAt: variant === 'sent' ? '2026-04-10T09:00:00.000Z' : null,
+    sendCount: variant === 'none' ? 0 : 1,
     targetAcademicYear: year,
     canManuallySend: canSend,
   });
@@ -122,6 +123,7 @@ function getDevMockData(academicYear?: string): FellowsDashboardResponse {
       status: vitIdInvitationStatus === 'SENT' ? 'sent' as const : 'none' as const,
       sentAt:
         vitIdInvitationStatus === 'SENT' ? '2026-04-09T09:00:00.000Z' : null,
+      sendCount: vitIdInvitationStatus === 'SENT' ? 1 : 0,
       targetAcademicYear: p.bioEmail.targetAcademicYear,
       canManuallySend:
         fellowshipAccepted &&
@@ -176,7 +178,7 @@ router.get('/', async (req, res, next) => {
 });
 
 // POST /api/admin/fellows/:contactId/send-bio-email
-// Body: { academicYear: "YYYY-YYYY" }
+// Body: { academicYear: "YYYY-YYYY", resend?: true }
 // Returns:
 //   200 { eventId, status, sentAt? }             — success (including in-flight PENDING/SENDING)
 //   400 { error: "invalid_request", details? }   — malformed :contactId or body failed schema validation
@@ -188,6 +190,7 @@ router.get('/', async (req, res, next) => {
 //   500 { error: "internal_error" }              — unexpected server bug
 const sendBioEmailBodySchema = z.object({
   academicYear: academicYearSchema,
+  resend: z.boolean().optional().default(false),
 });
 
 router.post('/:contactId/send-bio-email', async (req, res, next) => {
@@ -230,6 +233,7 @@ router.post('/:contactId/send-bio-email', async (req, res, next) => {
       contactId,
       academicYear: parsed.data.academicYear,
       triggeredBy: `admin_manual:${req.userId || 'unknown'}`,
+      resend: parsed.data.resend,
     });
 
     if (!result.ok) {

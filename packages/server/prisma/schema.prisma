@@ -105,16 +105,15 @@ enum AppointeeEmailStatus {
   @@map("appointee_email_status")
 }
 
-// Tracks the lifecycle of per-fellowship, per-type transactional emails to
-// appointees (bio & project description request, VIT ID invitation). One row
-// exists per (fellowshipId, emailType) pair.
+// Tracks each delivery attempt for per-fellowship, per-type transactional
+// emails to appointees (bio & project description request, VIT ID invitation).
+// Multiple rows may exist for the same (fellowshipId, emailType) so resend
+// history is preserved for the future email log page.
 //
-// The unique key is fellowshipId (not contactId + academicYear) because the
-// business invariant "one fellowship per contact per year" is CiviCRM policy,
-// not a schema constraint — and codex review (2026-04-23) flagged that an
-// upstream data-entry error could silently collapse two fellowships into one
-// lifecycle if we keyed by (contactId, academicYear, emailType). contactId
-// and academicYear are kept as non-unique columns for audit queries.
+// Dashboard state reads the latest row per (fellowshipId, emailType). A raw
+// partial unique index in migration 20260424170000 prevents duplicate
+// in-flight rows (PENDING/SENDING) while allowing historical SENT/FAILED/
+// SKIPPED rows to accumulate.
 model AppointeeEmailEvent {
   id            String               @id @default(cuid())
   fellowshipId  Int                  @map("fellowship_id")
@@ -131,7 +130,7 @@ model AppointeeEmailEvent {
   createdAt     DateTime             @default(now()) @map("created_at")
   updatedAt     DateTime             @updatedAt @map("updated_at")
 
-  @@unique([fellowshipId, emailType])
+  @@index([fellowshipId, emailType, createdAt(sort: Desc)])
   @@index([status, sendAfter])
   @@index([contactId, academicYear]) // audit scans
   @@map("appointee_email_events")

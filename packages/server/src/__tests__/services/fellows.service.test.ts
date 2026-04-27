@@ -550,6 +550,7 @@ describe('getFellowsDashboard — appointeeStatus composition', () => {
             academicYear: '2025-2026',
             emailType: AppointeeEmailType.BIO_PROJECT_DESCRIPTION,
             fellowshipId: 100,
+            sendCount: 2,
           },
         ],
       ])
@@ -562,6 +563,7 @@ describe('getFellowsDashboard — appointeeStatus composition', () => {
     // lookup used the 2025-2026 (current) fellowshipId, not the 2026-2027
     // (display) one.
     expect(result.fellows[0].bioEmail.status).toBe('sent');
+    expect(result.fellows[0].bioEmail.sendCount).toBe(2);
   });
 
   it('shows historical email status when filtering to a past academic year without enabling manual send', async () => {
@@ -597,6 +599,7 @@ describe('getFellowsDashboard — appointeeStatus composition', () => {
             academicYear: '2024-2025',
             emailType: AppointeeEmailType.BIO_PROJECT_DESCRIPTION,
             fellowshipId: 90,
+            sendCount: 1,
           },
         ],
       ])
