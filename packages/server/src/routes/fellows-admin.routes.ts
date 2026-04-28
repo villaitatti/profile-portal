@@ -229,10 +229,15 @@ router.post('/:contactId/send-bio-email', async (req, res, next) => {
       return;
     }
 
+    const adminName = (req.auth?.['https://auth0.itatti.harvard.edu/name'] as string) || '';
+    const triggeredBy = adminName
+      ? `admin_manual:${req.userId || 'unknown'}:${adminName}`
+      : `admin_manual:${req.userId || 'unknown'}`;
+
     const result = await appointeeEmailService.sendBioEmailManually({
       contactId,
       academicYear: parsed.data.academicYear,
-      triggeredBy: `admin_manual:${req.userId || 'unknown'}`,
+      triggeredBy,
       resend: parsed.data.resend,
     });
 
@@ -307,10 +312,15 @@ router.post('/:contactId/send-vit-id-email', async (req, res, next) => {
       return;
     }
 
+    const adminNameVit = (req.auth?.['https://auth0.itatti.harvard.edu/name'] as string) || '';
+    const triggeredByVit = adminNameVit
+      ? `admin_manual:${req.userId || 'unknown'}:${adminNameVit}`
+      : `admin_manual:${req.userId || 'unknown'}`;
+
     const result = await appointeeEmailService.sendVitIdInvitationManually({
       contactId,
       academicYear: parsed.data.academicYear,
-      triggeredBy: `admin_manual:${req.userId || 'unknown'}`,
+      triggeredBy: triggeredByVit,
     });
 
     if (!result.ok) {
