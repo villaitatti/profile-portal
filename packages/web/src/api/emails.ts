@@ -34,34 +34,41 @@ export interface TemplatePreview {
   bcc: string[];
 }
 
-export function useEmailEvents() {
+export interface EmailEventsParams {
+  year?: string;
+  type?: string;
+  status?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface EmailEventsResponse {
+  events: EmailEvent[];
+  nextCursor: string | null;
+}
+
+export function useEmailEvents(params: EmailEventsParams = {}) {
   const getToken = useApiToken();
 
   return useQuery({
-    queryKey: ['admin-emails'],
+    queryKey: ['admin-emails', params],
     queryFn: async () => {
       const token = await getToken();
-      const allEvents: EmailEvent[] = [];
-      let cursor: string | null = null;
+      const url = new URL(`${API_BASE}/api/admin/emails`, window.location.origin);
+      if (params.limit) url.searchParams.set('limit', String(params.limit));
+      if (params.cursor) url.searchParams.set('cursor', params.cursor);
+      if (params.year && params.year !== 'all') url.searchParams.set('year', params.year);
+      if (params.type && params.type !== 'all') url.searchParams.set('type', params.type);
+      if (params.status) url.searchParams.set('status', params.status);
 
-      do {
-        const url = new URL(`${API_BASE}/api/admin/emails`, window.location.origin);
-        url.searchParams.set('limit', '200');
-        if (cursor) url.searchParams.set('cursor', cursor);
-
-        const res = await fetch(url.toString(), {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        });
-        if (!res.ok) throw new Error(`Failed to load emails: ${res.status}`);
-        const data = await res.json();
-        allEvents.push(...(data.events as EmailEvent[]));
-        cursor = data.nextCursor;
-      } while (cursor);
-
-      return allEvents;
+      const res = await fetch(url.toString(), {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!res.ok) throw new Error(`Failed to load emails: ${res.status}`);
+      return (await res.json()) as EmailEventsResponse;
     },
     staleTime: 60_000,
   });

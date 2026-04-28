@@ -43,10 +43,14 @@ interface EmailEventRow {
 }
 
 // GET /api/admin/emails
-// Returns email events with joined appointee names. Supports cursor-based pagination.
+// Returns email events with joined appointee names. Supports cursor-based pagination
+// and server-side filtering by year, type, and status.
 const listQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).optional().default(100),
   cursor: z.string().optional(),
+  year: z.string().optional(),
+  type: z.enum(['BIO_PROJECT_DESCRIPTION', 'VIT_ID_INVITATION']).optional(),
+  status: z.string().optional(),
 });
 
 router.get('/', async (req, res, next) => {
@@ -62,11 +66,21 @@ router.get('/', async (req, res, next) => {
       return;
     }
 
-    const { limit, cursor } = query.data;
+    const { limit, cursor, year, type, status } = query.data;
+
+    const where: Record<string, unknown> = {};
+    if (year) where.academicYear = year;
+    if (type) where.emailType = type;
+    if (status) {
+      const statuses = status.split(',').filter(Boolean);
+      if (statuses.length === 1) where.status = statuses[0];
+      else if (statuses.length > 1) where.status = { in: statuses };
+    }
 
     const events = await prisma.appointeeEmailEvent.findMany({
+      where,
       take: limit + 1,
-      orderBy: { enqueuedAt: 'desc' },
+      orderBy: [{ enqueuedAt: 'desc' }, { id: 'desc' }],
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
 

@@ -57,13 +57,13 @@ describe('useEmailEvents', () => {
 
     fetchMock.mockResolvedValue({
       ok: true,
-      json: async () => ({ events: mockEvents }),
+      json: async () => ({ events: mockEvents, nextCursor: null }),
     });
 
     const { result } = renderHook(() => useEmailEvents(), { wrapper: wrap() });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toEqual(mockEvents);
+    expect(result.current.data).toEqual({ events: mockEvents, nextCursor: null });
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining('/api/admin/emails'),
       expect.objectContaining({

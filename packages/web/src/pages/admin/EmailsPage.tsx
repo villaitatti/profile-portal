@@ -1,11 +1,12 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import * as Tabs from '@radix-ui/react-tabs';
 import * as Dialog from '@radix-ui/react-dialog';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { useEmailEvents, useEmailEventPreview, useTemplatePreview } from '@/api/emails';
-import type { EmailEvent } from '@/api/emails';
+import { useApiToken } from '@/api/client';
+import type { EmailEvent, EmailEventsResponse } from '@/api/emails';
 import {
   Mail,
   AlertCircle,
@@ -68,25 +69,46 @@ function StatusBadge({ status, failureReason }: { status: EmailEvent['status']; 
 // --- Sent Emails Tab ---
 
 function SentEmailsTab() {
-  const { data: events, isLoading, error } = useEmailEvents();
   const [yearFilter, setYearFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<TypeFilter | 'all'>('all');
   const [statusFilters, setStatusFilters] = useState<Set<StatusFilter>>(new Set());
   const [sortField, setSortField] = useState<SortField>('enqueuedAt');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [loadedPages, setLoadedPages] = useState<EmailEvent[][]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [knownYears, setKnownYears] = useState<string[]>([]);
+  const lastDataRef = useRef<unknown>(null);
 
-  const academicYears = useMemo(() => {
-    if (!events) return [];
-    return [...new Set(events.map((e) => e.academicYear))].sort().reverse();
-  }, [events]);
+  const statusParam = statusFilters.size > 0 ? [...statusFilters].join(',') : undefined;
 
-  const filtered = useMemo(() => {
-    if (!events) return [];
-    let result = [...events];
-    if (yearFilter !== 'all') result = result.filter((e) => e.academicYear === yearFilter);
-    if (typeFilter !== 'all') result = result.filter((e) => e.emailType === typeFilter);
-    if (statusFilters.size > 0) result = result.filter((e) => statusFilters.has(e.status));
+  const { data, isLoading, error } = useEmailEvents({
+    year: yearFilter !== 'all' ? yearFilter : undefined,
+    type: typeFilter !== 'all' ? typeFilter : undefined,
+    status: statusParam,
+    limit: 100,
+  });
+
+  if (data && data !== lastDataRef.current) {
+    lastDataRef.current = data;
+    setNextCursor(data.nextCursor);
+    setLoadedPages([]);
+    if (yearFilter === 'all' && typeFilter === 'all' && !statusParam) {
+      const years = [...new Set(data.events.map((e) => e.academicYear))].sort().reverse();
+      if (years.length > 0) setKnownYears(years);
+    }
+  }
+
+  const events = useMemo(() => {
+    const firstPage = data?.events || [];
+    return [...firstPage, ...loadedPages.flat()];
+  }, [data, loadedPages]);
+
+  const academicYears = knownYears;
+  const hasActiveFilters = yearFilter !== 'all' || typeFilter !== 'all' || statusFilters.size > 0;
+
+  const sorted = useMemo(() => {
+    const result = [...events];
     result.sort((a, b) => {
       const aVal = a[sortField] || '';
       const bVal = b[sortField] || '';
@@ -94,10 +116,10 @@ function SentEmailsTab() {
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return result;
-  }, [events, yearFilter, typeFilter, statusFilters, sortField, sortDir]);
+  }, [events, sortField, sortDir]);
 
   const selectedEvent = useMemo(
-    () => events?.find((e) => e.id === selectedEventId) || null,
+    () => events.find((e) => e.id === selectedEventId) || null,
     [events, selectedEventId]
   );
 
@@ -114,6 +136,33 @@ function SentEmailsTab() {
       return next;
     });
   }
+
+  const getToken = useApiToken();
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const loadMore = useCallback(async () => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const token = await getToken();
+      const url = new URL(`${import.meta.env.VITE_API_BASE_URL || ''}/api/admin/emails`, window.location.origin);
+      url.searchParams.set('limit', '100');
+      url.searchParams.set('cursor', nextCursor);
+      if (yearFilter !== 'all') url.searchParams.set('year', yearFilter);
+      if (typeFilter !== 'all') url.searchParams.set('type', typeFilter);
+      if (statusParam) url.searchParams.set('status', statusParam);
+      const res = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      });
+      if (!res.ok) throw new Error(`Load more failed: ${res.status}`);
+      const page = (await res.json()) as EmailEventsResponse;
+      setLoadedPages((prev) => [...prev, page.events]);
+      setNextCursor(page.nextCursor);
+    } finally {
+      setLoadingMore(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nextCursor, loadingMore, getToken, yearFilter, typeFilter, statusParam]);
 
   if (isLoading) return <EmailsSkeleton />;
   if (error) {
@@ -172,12 +221,12 @@ function SentEmailsTab() {
       </div>
 
       {/* Table */}
-      {filtered.length === 0 ? (
+      {sorted.length === 0 ? (
         <EmptyState
-          title={events?.length === 0 ? 'No emails sent yet' : 'No emails match these filters'}
-          description={events?.length === 0
-            ? 'Once invitations or bio requests go out, they\'ll appear here.'
-            : 'Try adjusting the year, type, or status filters.'}
+          title={hasActiveFilters ? 'No emails match these filters' : 'No emails sent yet'}
+          description={hasActiveFilters
+            ? 'Try adjusting the year, type, or status filters.'
+            : 'Once invitations or bio requests go out, they\'ll appear here.'}
         />
       ) : (
         <div className="overflow-x-auto rounded-lg border border-border">
@@ -197,7 +246,7 @@ function SentEmailsTab() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {filtered.map((event) => (
+              {sorted.map((event) => (
                 <tr
                   key={event.id}
                   tabIndex={0}
@@ -211,7 +260,14 @@ function SentEmailsTab() {
                   }}
                   className="cursor-pointer transition-colors hover:bg-muted/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
                 >
-                  <td className="px-4 py-3 font-medium">{event.appointeeName}</td>
+                  <td className="px-4 py-3 font-medium">
+                    <button
+                      className="sr-only"
+                      aria-label={`View details for ${event.appointeeName}`}
+                      tabIndex={-1}
+                    />
+                    {event.appointeeName}
+                  </td>
                   <td className="px-4 py-3 text-muted-foreground">{formatEmailType(event.emailType)}</td>
                   <td className="px-4 py-3">
                     <StatusBadge status={event.status} failureReason={event.failureReason} />
@@ -222,6 +278,19 @@ function SentEmailsTab() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Load more */}
+      {nextCursor && (
+        <div className="mt-4 text-center">
+          <button
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"
+          >
+            {loadingMore ? 'Loading...' : 'Load more'}
+          </button>
         </div>
       )}
 

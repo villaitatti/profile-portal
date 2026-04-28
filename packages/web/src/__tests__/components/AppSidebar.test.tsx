@@ -73,6 +73,7 @@ describe('AppSidebar', () => {
     expect(screen.getByText('My Profile')).toBeInTheDocument();
     expect(screen.getByText('Has VIT ID?')).toBeInTheDocument();
     expect(screen.getByText('Manage Appointees')).toBeInTheDocument();
+    expect(screen.getByText('Emails')).toBeInTheDocument();
     expect(screen.queryByText('Portal Settings')).not.toBeInTheDocument();
     expect(screen.queryByText('Atlassian Cloud')).not.toBeInTheDocument();
   });
@@ -85,6 +86,7 @@ describe('AppSidebar', () => {
     expect(screen.getByText('My Profile')).toBeInTheDocument();
     expect(screen.getByText('Has VIT ID?')).toBeInTheDocument();
     expect(screen.getByText('Manage Appointees')).toBeInTheDocument();
+    expect(screen.getByText('Emails')).toBeInTheDocument();
     expect(screen.getByText('Applications Catalog')).toBeInTheDocument();
     expect(screen.getByText('Manage Group Mapping')).toBeInTheDocument();
     expect(screen.getByText('Sync Users to Atlassian Cloud')).toBeInTheDocument();

@@ -79,11 +79,30 @@ const mockEvents: EmailEvent[] = [
   },
 ];
 
+const stableResponses = new Map<string, { events: EmailEvent[]; nextCursor: null }>();
+function getStableResponse(params: Record<string, string | number | undefined>) {
+  const key = JSON.stringify(params);
+  if (!stableResponses.has(key)) {
+    let filtered = mockEvents;
+    if (params.year) filtered = filtered.filter((e) => e.academicYear === params.year);
+    if (params.type) filtered = filtered.filter((e) => e.emailType === params.type);
+    if (params.status) {
+      const statuses = String(params.status).split(',');
+      filtered = filtered.filter((e) => statuses.includes(e.status));
+    }
+    stableResponses.set(key, { events: filtered, nextCursor: null });
+  }
+  return stableResponses.get(key)!;
+}
+
 function setDefaultHookStates() {
-  mockUseEmailEvents.mockReturnValue({
-    data: mockEvents,
-    isLoading: false,
-    error: null,
+  stableResponses.clear();
+  mockUseEmailEvents.mockImplementation((params: Record<string, string | number | undefined> = {}) => {
+    return {
+      data: getStableResponse(params),
+      isLoading: false,
+      error: null,
+    };
   });
   mockUseEmailEventPreview.mockReturnValue({
     data: null,
@@ -173,7 +192,7 @@ describe('EmailsPage — Sent emails tab — error state', () => {
 describe('EmailsPage — Sent emails tab — empty state', () => {
   it('shows "No emails sent yet" when there are zero events', () => {
     mockUseEmailEvents.mockReturnValue({
-      data: [],
+      data: { events: [], nextCursor: null },
       isLoading: false,
       error: null,
     });

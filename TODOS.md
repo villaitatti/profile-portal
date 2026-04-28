@@ -1,20 +1,12 @@
 # TODOS
 
-## Email Log — Follow-ups from /ship adversarial review
+## ~~Email Log — Follow-ups from /ship adversarial review~~ (RESOLVED)
 
-### Add pagination or date-bounded query to email events list endpoint
-- **What:** `GET /api/admin/emails` does `findMany` with no `take` limit. Over years this grows unbounded.
-- **Why:** At current scale (< 100 events/year) this is fine. If the table reaches thousands of rows, page load degrades.
-- **How:** Add `take: 500` with cursor-based pagination, or filter by academic year server-side.
-- **Priority:** P3 — not urgent at current volume, monitor over time.
-- **Context:** Flagged by Codex and Claude adversarial review on acaselli/email-log-page (2026-04-28).
+### ~~Add pagination or date-bounded query to email events list endpoint~~ (RESOLVED)
+- **Resolved:** Cursor-based pagination with `take: limit + 1` and server-side filtering by year/type/status implemented in `emails-admin.routes.ts`. Frontend uses "Load more" button.
 
-### Cache CiviCRM fellows roster in email list endpoint
-- **What:** `getFellowsWithContacts()` is called on every `GET /api/admin/emails` request for name joins.
-- **Why:** Expensive upstream HTTP call repeated on every React Query refetch. staleTime mitigates client-side but server still hits CiviCRM each time.
-- **How:** Short in-memory TTL cache (60s) on the fellows roster, or denormalize name onto the event row at enqueue time.
-- **Priority:** P3 — mitigated by 60s client-side staleTime. Monitor CiviCRM load.
-- **Context:** Flagged by Claude adversarial review on acaselli/email-log-page (2026-04-28).
+### ~~Cache CiviCRM fellows roster in email list endpoint~~ (RESOLVED)
+- **Resolved:** 120s in-memory TTL cache (`cachedFellows` + `cachedFellowsExpires`) implemented in `emails-admin.routes.ts`.
 
 ## Atlassian Sync — Pre-Implementation Checks
 
