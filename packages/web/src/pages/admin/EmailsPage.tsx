@@ -369,14 +369,21 @@ function EmailDrawer({ event, onClose }: { event: EmailEvent | null; onClose: ()
                       <dd>{formatDateTime(event.updatedAt)}</dd>
                     </>
                   )}
-                  <dt className="text-muted-foreground">Triggered by</dt>
-                  <dd>{formatTriggeredBy(event.triggeredBy)}</dd>
-                  {parseTriggeredBy(event.triggeredBy).auth0Id && (
-                    <>
-                      <dt className="text-muted-foreground">Auth0 ID</dt>
-                      <dd className="truncate font-mono text-xs">{parseTriggeredBy(event.triggeredBy).auth0Id}</dd>
-                    </>
-                  )}
+                  {(() => {
+                    const triggered = parseTriggeredBy(event.triggeredBy);
+                    return (
+                      <>
+                        <dt className="text-muted-foreground">Triggered by</dt>
+                        <dd>{triggered.label}</dd>
+                        {triggered.auth0Id && (
+                          <>
+                            <dt className="text-muted-foreground">Auth0 ID</dt>
+                            <dd className="truncate font-mono text-xs">{triggered.auth0Id}</dd>
+                          </>
+                        )}
+                      </>
+                    );
+                  })()}
                 </dl>
               </div>
 
