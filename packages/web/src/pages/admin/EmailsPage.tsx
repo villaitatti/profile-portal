@@ -16,6 +16,7 @@ import {
   ExternalLink,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -34,13 +35,22 @@ function formatDateTime(dateStr: string): string {
   }).format(new Date(dateStr));
 }
 
-function formatTriggeredBy(raw: string): string {
-  if (raw === 'claim_auto') return 'Auto on claim';
+function parseTriggeredBy(raw: string): { label: string; auth0Id?: string } {
+  if (raw === 'claim_auto') return { label: 'Auto on claim' };
   if (raw.startsWith('admin_manual:')) {
-    const sub = raw.replace('admin_manual:', '');
-    return `Manual (${sub})`;
+    const parts = raw.replace('admin_manual:', '').split(':');
+    if (parts.length >= 2) {
+      const auth0Id = parts[0];
+      const name = parts.slice(1).join(':');
+      return { label: `Manual (${name})`, auth0Id };
+    }
+    return { label: `Manual (${parts[0]})`, auth0Id: parts[0] };
   }
-  return raw;
+  return { label: raw };
+}
+
+function formatTriggeredBy(raw: string): string {
+  return parseTriggeredBy(raw).label;
 }
 
 function formatEmailType(type: EmailEvent['emailType']): string {
@@ -243,6 +253,7 @@ function SentEmailsTab() {
                   </button>
                 </th>
                 <th className="hidden px-4 py-3 text-left font-medium text-muted-foreground lg:table-cell">Triggered by</th>
+                <th className="w-10 px-4 py-3"><span className="sr-only">Details</span></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -274,6 +285,9 @@ function SentEmailsTab() {
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">{formatDateTime(event.enqueuedAt)}</td>
                   <td className="hidden px-4 py-3 text-muted-foreground lg:table-cell">{formatTriggeredBy(event.triggeredBy)}</td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    <ChevronRight className="h-4 w-4" />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -355,8 +369,21 @@ function EmailDrawer({ event, onClose }: { event: EmailEvent | null; onClose: ()
                       <dd>{formatDateTime(event.updatedAt)}</dd>
                     </>
                   )}
-                  <dt className="text-muted-foreground">Triggered by</dt>
-                  <dd>{formatTriggeredBy(event.triggeredBy)}</dd>
+                  {(() => {
+                    const triggered = parseTriggeredBy(event.triggeredBy);
+                    return (
+                      <>
+                        <dt className="text-muted-foreground">Triggered by</dt>
+                        <dd>{triggered.label}</dd>
+                        {triggered.auth0Id && (
+                          <>
+                            <dt className="text-muted-foreground">Auth0 ID</dt>
+                            <dd className="truncate font-mono text-xs">{triggered.auth0Id}</dd>
+                          </>
+                        )}
+                      </>
+                    );
+                  })()}
                 </dl>
               </div>
 

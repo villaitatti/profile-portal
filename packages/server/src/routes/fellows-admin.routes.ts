@@ -22,6 +22,12 @@ import type {
 
 const router = Router();
 
+function buildManualTriggeredBy(req: import('express').Request): string {
+  const userId = req.userId || 'unknown';
+  const name = (req.auth?.['https://auth0.itatti.harvard.edu/name'] as string) || '';
+  return name ? `admin_manual:${userId}:${name}` : `admin_manual:${userId}`;
+}
+
 /**
  * Academic-year label validator, shared by all three appointee-email
  * endpoints. A plain `/^\d{4}-\d{4}$/` accepts nonsense like "9999-0001"
@@ -232,7 +238,7 @@ router.post('/:contactId/send-bio-email', async (req, res, next) => {
     const result = await appointeeEmailService.sendBioEmailManually({
       contactId,
       academicYear: parsed.data.academicYear,
-      triggeredBy: `admin_manual:${req.userId || 'unknown'}`,
+      triggeredBy: buildManualTriggeredBy(req),
       resend: parsed.data.resend,
     });
 
@@ -310,7 +316,7 @@ router.post('/:contactId/send-vit-id-email', async (req, res, next) => {
     const result = await appointeeEmailService.sendVitIdInvitationManually({
       contactId,
       academicYear: parsed.data.academicYear,
-      triggeredBy: `admin_manual:${req.userId || 'unknown'}`,
+      triggeredBy: buildManualTriggeredBy(req),
     });
 
     if (!result.ok) {

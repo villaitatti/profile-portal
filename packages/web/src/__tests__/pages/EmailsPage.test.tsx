@@ -58,7 +58,7 @@ const mockEvents: EmailEvent[] = [
     enqueuedAt: '2026-04-08T10:00:00.000Z',
     sentAt: null,
     updatedAt: '2026-04-09T10:00:00.000Z',
-    triggeredBy: 'admin_manual:auth0|andrea123',
+    triggeredBy: 'admin_manual:auth0|andrea123:Andrea Caselli',
     failureReason: 'SES rejected: Email address is not verified.',
     sesMessageId: null,
   },
@@ -73,7 +73,7 @@ const mockEvents: EmailEvent[] = [
     enqueuedAt: '2026-04-27T14:00:00.000Z',
     sentAt: null,
     updatedAt: '2026-04-27T14:00:00.000Z',
-    triggeredBy: 'claim_auto',
+    triggeredBy: 'admin_manual:auth0|legacy999',
     failureReason: null,
     sesMessageId: null,
   },
@@ -257,14 +257,24 @@ describe('EmailsPage — Sent emails tab — table rendering', () => {
     expect(screen.getAllByText('Auto on claim').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('formats "admin_manual:..." triggered-by as "Manual (...)"', () => {
+  it('formats "admin_manual:id:Name" triggered-by as "Manual (Name)"', () => {
     const Wrapper = makeWrapper();
     render(
       <Wrapper>
         <EmailsPage />
       </Wrapper>
     );
-    expect(screen.getByText('Manual (auth0|andrea123)')).toBeInTheDocument();
+    expect(screen.getByText('Manual (Andrea Caselli)')).toBeInTheDocument();
+  });
+
+  it('formats legacy "admin_manual:id" triggered-by as "Manual (id)"', () => {
+    const Wrapper = makeWrapper();
+    render(
+      <Wrapper>
+        <EmailsPage />
+      </Wrapper>
+    );
+    expect(screen.getByText('Manual (auth0|legacy999)')).toBeInTheDocument();
   });
 });
 
@@ -575,6 +585,27 @@ describe('EmailsPage — Email Drawer', () => {
 
     // Drawer should open with details
     expect(screen.getByText('Email Details')).toBeInTheDocument();
+  });
+
+  it('shows Auth0 ID in drawer for admin_manual events', () => {
+    mockUseEmailEventPreview.mockReturnValue({
+      data: null,
+      isLoading: false,
+      error: null,
+    });
+
+    const Wrapper = makeWrapper();
+    render(
+      <Wrapper>
+        <EmailsPage />
+      </Wrapper>
+    );
+
+    // Click on James's row (has admin_manual:auth0|andrea123:Andrea Caselli)
+    fireEvent.click(screen.getByText('James Chen'));
+
+    expect(screen.getByText('Auth0 ID')).toBeInTheDocument();
+    expect(screen.getByText('auth0|andrea123')).toBeInTheDocument();
   });
 
   it('shows failure reason section for FAILED events', () => {
