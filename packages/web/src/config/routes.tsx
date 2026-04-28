@@ -26,6 +26,7 @@ import { AtlassianMappingsPage } from '@/pages/admin/AtlassianMappingsPage';
 import { AtlassianSyncPage } from '@/pages/admin/AtlassianSyncPage';
 import { ClaimLogPage } from '@/pages/admin/ClaimLogPage';
 import { AutomationsPage } from '@/pages/admin/AutomationsPage';
+import { EmailsPage } from '@/pages/admin/EmailsPage';
 
 export const router = createBrowserRouter([
   {
@@ -62,6 +63,7 @@ export const router = createBrowserRouter([
                 children: [
                   { path: '/admin/fellows', element: <FellowsManagementPage /> },
                   { path: '/admin/has-vitid', element: <HasVitIdPage /> },
+                  { path: '/admin/emails', element: <EmailsPage /> },
                 ],
               },
 
