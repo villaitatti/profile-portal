@@ -1,5 +1,13 @@
 # TODOS
 
+## ~~Email Log — Follow-ups from /ship adversarial review~~ (RESOLVED)
+
+### ~~Add pagination or date-bounded query to email events list endpoint~~ (RESOLVED)
+- **Resolved:** Cursor-based pagination with `take: limit + 1` and server-side filtering by year/type/status implemented in `emails-admin.routes.ts`. Frontend uses "Load more" button.
+
+### ~~Cache CiviCRM fellows roster in email list endpoint~~ (RESOLVED)
+- **Resolved:** 120s in-memory TTL cache (`cachedFellows` + `cachedFellowsExpires`) implemented in `emails-admin.routes.ts`.
+
 ## Atlassian Sync — Pre-Implementation Checks
 
 ### Verify SSE through cloudflared
