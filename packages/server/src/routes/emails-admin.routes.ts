@@ -45,6 +45,8 @@ interface EmailEventRow {
 // GET /api/admin/emails
 // Returns email events with joined appointee names. Supports cursor-based pagination
 // and server-side filtering by year, type, and status.
+const VALID_STATUSES = ['PENDING', 'SENDING', 'SENT', 'FAILED', 'SKIPPED'] as const;
+
 const listQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).optional().default(100),
   cursor: z.string().optional(),
@@ -73,6 +75,11 @@ router.get('/', async (req, res, next) => {
     if (type) where.emailType = type;
     if (status) {
       const statuses = status.split(',').filter(Boolean);
+      const invalid = statuses.filter((s) => !(VALID_STATUSES as readonly string[]).includes(s));
+      if (invalid.length > 0) {
+        res.status(400).json({ error: 'invalid_status' });
+        return;
+      }
       if (statuses.length === 1) where.status = statuses[0];
       else if (statuses.length > 1) where.status = { in: statuses };
     }
@@ -164,10 +171,19 @@ router.get('/:eventId/preview', async (req, res) => {
     }
 
     if (isDevMode) {
+      const devEvents = getDevMockEvents();
+      const devEvent = devEvents.find((e) => e.id === eventId.data);
+      const isVitId = devEvent?.emailType === 'VIT_ID_INVITATION';
       res.json({
-        subject: 'Welcome to I Tatti — Claim your VIT ID',
-        html: '<p>Dev mode preview for Sofia. Event preview.</p>',
-        text: 'Dev mode preview for Sofia.',
+        subject: isVitId
+          ? 'Welcome to I Tatti — Claim your VIT ID'
+          : 'Biography and Project Description',
+        html: isVitId
+          ? '<p>Dev mode preview for Sofia. VIT ID invitation.</p>'
+          : '<p>Dev mode preview for Marco. Bio & project request.</p>',
+        text: isVitId
+          ? 'Dev mode preview for Sofia. VIT ID invitation.'
+          : 'Dev mode preview for Marco. Bio & project request.',
         bcc: ['dev@itatti.harvard.edu'],
         recipientStatus: 'current' as const,
       });

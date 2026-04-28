@@ -74,6 +74,32 @@ describe('useEmailEvents', () => {
     );
   });
 
+  it('passes query params to the fetch URL', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ events: [], nextCursor: null }),
+    });
+
+    const { result } = renderHook(
+      () => useEmailEvents({ limit: 50, cursor: 'cur123', year: '2025-2026', type: 'BIO_PROJECT_DESCRIPTION', status: 'SENT' }),
+      { wrapper: wrap() }
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const url = fetchMock.mock.calls[0][0] as string;
+    expect(url).toContain('limit=50');
+    expect(url).toContain('cursor=cur123');
+    expect(url).toContain('year=2025-2026');
+    expect(url).toContain('type=BIO_PROJECT_DESCRIPTION');
+    expect(url).toContain('status=SENT');
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer test-token' }),
+      })
+    );
+  });
+
   it('throws an error when the response is not ok', async () => {
     fetchMock.mockResolvedValue({
       ok: false,

@@ -178,6 +178,30 @@ describe('GET /api/admin/emails', () => {
     expect(res.body.events[0].failureReason).toBe('SES rejected');
   });
 
+  it('returns 400 when status contains invalid values', async () => {
+    const app = makeApp();
+    const res = await request(app).get('/api/admin/emails?status=SENT,BOGUS');
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('invalid_status');
+    expect(mockPrisma.appointeeEmailEvent.findMany).not.toHaveBeenCalled();
+  });
+
+  it('accepts valid comma-separated statuses', async () => {
+    mockPrisma.appointeeEmailEvent.findMany.mockResolvedValue([]);
+    mockCivicrm.getFellowsWithContacts.mockResolvedValue([]);
+
+    const app = makeApp();
+    const res = await request(app).get('/api/admin/emails?status=SENT,FAILED');
+
+    expect(res.status).toBe(200);
+    expect(mockPrisma.appointeeEmailEvent.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { status: { in: ['SENT', 'FAILED'] } },
+      })
+    );
+  });
+
   it('returns 500 when prisma throws', async () => {
     mockPrisma.appointeeEmailEvent.findMany.mockRejectedValue(new Error('DB down'));
 

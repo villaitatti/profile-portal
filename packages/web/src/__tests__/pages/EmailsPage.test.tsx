@@ -314,9 +314,7 @@ describe('EmailsPage — Sent emails tab — filters', () => {
       </Wrapper>
     );
 
-    // Click the FAILED status filter button (first one before the table)
-    const failedButtons = screen.getAllByText('FAILED');
-    fireEvent.click(failedButtons[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'FAILED status filter' }));
 
     // Only James (FAILED) should appear in the table
     expect(screen.getByText('James Chen')).toBeInTheDocument();
@@ -332,11 +330,44 @@ describe('EmailsPage — Sent emails tab — filters', () => {
       </Wrapper>
     );
 
-    // Click SKIPPED filter — no events have that status in our mock data
-    const skippedButtons = screen.getAllByText('SKIPPED');
-    fireEvent.click(skippedButtons[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'SKIPPED status filter' }));
 
     expect(screen.getByText('No emails match these filters')).toBeInTheDocument();
+  });
+});
+
+// ─── Sent Emails Tab — Sorting ───────────────────────────────────────────────
+
+// ─── Sent Emails Tab — Pagination ───────────────────────────────────────────
+
+describe('EmailsPage — Sent emails tab — pagination', () => {
+  it('shows "Load more" button when nextCursor is present', () => {
+    const stableData = { events: mockEvents.slice(0, 2), nextCursor: 'cursor-abc' };
+    mockUseEmailEvents.mockReturnValue({
+      data: stableData,
+      isLoading: false,
+      error: null,
+    });
+
+    const Wrapper = makeWrapper();
+    render(
+      <Wrapper>
+        <EmailsPage />
+      </Wrapper>
+    );
+
+    expect(screen.getByRole('button', { name: 'Load more' })).toBeInTheDocument();
+  });
+
+  it('does not show "Load more" button when nextCursor is null', () => {
+    const Wrapper = makeWrapper();
+    render(
+      <Wrapper>
+        <EmailsPage />
+      </Wrapper>
+    );
+
+    expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
   });
 });
 
