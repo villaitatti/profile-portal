@@ -10,6 +10,7 @@ import { fellowsAdminRoutes, handleVitIdLookup } from './fellows-admin.routes.js
 import { syncAdminRoutes, syncSseRoutes } from './sync-admin.routes.js';
 import { claimsAdminRoutes } from './claims-admin.routes.js';
 import { automationAdminRoutes } from './automation-admin.routes.js';
+import { emailsAdminRoutes } from './emails-admin.routes.js';
 import { devEmailPreviewRoutes } from './__dev__/email-preview.routes.js';
 import { authMiddleware, extractUser } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
@@ -71,6 +72,15 @@ export function registerRoutes(app: Express) {
     extractUser,
     requireRole(KnownRoles.STAFF_IT),
     automationAdminRoutes
+  );
+
+  // Admin routes: Emails log + templates (fellows-admin OR staff-it)
+  app.use(
+    '/api/admin/emails',
+    authMiddleware,
+    extractUser,
+    requireRole(KnownRoles.FELLOWS_ADMIN, KnownRoles.STAFF_IT),
+    emailsAdminRoutes
   );
 
   // SSE stream — mounted BEFORE the JWT chain so EventSource requests (which can't
