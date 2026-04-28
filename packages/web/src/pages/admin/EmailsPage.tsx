@@ -82,6 +82,7 @@ function SentEmailsTab() {
   const [yearFilter, setYearFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<TypeFilter | 'all'>('all');
   const [statusFilters, setStatusFilters] = useState<Set<StatusFilter>>(new Set());
+  const [nameSearch, setNameSearch] = useState('');
   const [sortField, setSortField] = useState<SortField>('enqueuedAt');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
@@ -115,10 +116,14 @@ function SentEmailsTab() {
   }, [data, loadedPages]);
 
   const academicYears = knownYears;
-  const hasActiveFilters = yearFilter !== 'all' || typeFilter !== 'all' || statusFilters.size > 0;
+  const hasActiveFilters = yearFilter !== 'all' || typeFilter !== 'all' || statusFilters.size > 0 || nameSearch.length > 0;
 
   const sorted = useMemo(() => {
-    const result = [...events];
+    let result = [...events];
+    if (nameSearch) {
+      const q = nameSearch.toLowerCase();
+      result = result.filter((e) => e.appointeeName.toLowerCase().includes(q));
+    }
     result.sort((a, b) => {
       const aVal = a[sortField] || '';
       const bVal = b[sortField] || '';
@@ -126,7 +131,7 @@ function SentEmailsTab() {
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return result;
-  }, [events, sortField, sortDir]);
+  }, [events, nameSearch, sortField, sortDir]);
 
   const selectedEvent = useMemo(
     () => events.find((e) => e.id === selectedEventId) || null,
@@ -188,6 +193,15 @@ function SentEmailsTab() {
     <>
       {/* Filters */}
       <div className="mb-6 flex flex-wrap items-center gap-3">
+        <input
+          type="search"
+          placeholder="Search by name..."
+          aria-label="Search by appointee name"
+          value={nameSearch}
+          onChange={(e) => setNameSearch(e.target.value)}
+          className="rounded-md border border-input bg-background px-3 py-1.5 text-sm w-48"
+        />
+
         <select
           id="email-year-filter"
           aria-label="Filter by academic year"
@@ -244,6 +258,7 @@ function SentEmailsTab() {
             <thead className="border-b border-border bg-muted/50">
               <tr>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">Name</th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Year</th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">Type</th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">
@@ -279,6 +294,7 @@ function SentEmailsTab() {
                     />
                     {event.appointeeName}
                   </td>
+                  <td className="px-4 py-3 text-muted-foreground">{event.academicYear}</td>
                   <td className="px-4 py-3 text-muted-foreground">{formatEmailType(event.emailType)}</td>
                   <td className="px-4 py-3">
                     <StatusBadge status={event.status} failureReason={event.failureReason} />
@@ -378,7 +394,7 @@ function EmailDrawer({ event, onClose }: { event: EmailEvent | null; onClose: ()
                         {triggered.auth0Id && (
                           <>
                             <dt className="text-muted-foreground">Auth0 ID</dt>
-                            <dd className="truncate font-mono text-xs">{triggered.auth0Id}</dd>
+                            <dd className="break-all font-mono text-xs">{triggered.auth0Id}</dd>
                           </>
                         )}
                       </>
