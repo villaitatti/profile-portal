@@ -130,6 +130,8 @@ function SentEmailsTab() {
       {/* Filters */}
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <select
+          id="email-year-filter"
+          aria-label="Filter by academic year"
           value={yearFilter}
           onChange={(e) => setYearFilter(e.target.value)}
           className="rounded-md border border-input bg-background px-3 py-1.5 text-sm"
@@ -139,6 +141,8 @@ function SentEmailsTab() {
         </select>
 
         <select
+          id="email-type-filter"
+          aria-label="Filter by email type"
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value as TypeFilter | 'all')}
           className="rounded-md border border-input bg-background px-3 py-1.5 text-sm"
@@ -148,11 +152,13 @@ function SentEmailsTab() {
           <option value="BIO_PROJECT_DESCRIPTION">Bio & Project</option>
         </select>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5" role="group" aria-label="Filter by status">
           {(['PENDING', 'SENDING', 'SENT', 'FAILED', 'SKIPPED'] as StatusFilter[]).map((s) => (
             <button
               key={s}
               onClick={() => toggleStatus(s)}
+              aria-label={`${s} status filter`}
+              aria-pressed={statusFilters.has(s)}
               className={cn(
                 'rounded-full px-2.5 py-0.5 text-xs font-medium transition-opacity',
                 STATUS_STYLES[s],
@@ -194,8 +200,16 @@ function SentEmailsTab() {
               {filtered.map((event) => (
                 <tr
                   key={event.id}
+                  tabIndex={0}
+                  aria-selected={selectedEventId === event.id}
                   onClick={() => setSelectedEventId(event.id)}
-                  className="cursor-pointer transition-colors hover:bg-muted/30"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setSelectedEventId(event.id);
+                    }
+                  }}
+                  className="cursor-pointer transition-colors hover:bg-muted/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
                 >
                   <td className="px-4 py-3 font-medium">{event.appointeeName}</td>
                   <td className="px-4 py-3 text-muted-foreground">{formatEmailType(event.emailType)}</td>

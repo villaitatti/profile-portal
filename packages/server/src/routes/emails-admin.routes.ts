@@ -13,6 +13,19 @@ import type { AppointeeEmailType } from '@prisma/client';
 
 const router = Router();
 
+let cachedFellows: { contactId: number; firstName: string; lastName: string }[] | null = null;
+let cachedFellowsExpires = 0;
+const FELLOWS_CACHE_TTL_MS = 120_000;
+
+async function getFellowsCached() {
+  const now = Date.now();
+  if (cachedFellows && now < cachedFellowsExpires) return cachedFellows;
+  const fellows = await civicrmService.getFellowsWithContacts();
+  cachedFellows = fellows;
+  cachedFellowsExpires = now + FELLOWS_CACHE_TTL_MS;
+  return fellows;
+}
+
 interface EmailEventRow {
   id: string;
   fellowshipId: number;
@@ -30,22 +43,40 @@ interface EmailEventRow {
 }
 
 // GET /api/admin/emails
-// Returns all email events with joined appointee names.
-router.get('/', async (_req, res, next) => {
+// Returns email events with joined appointee names. Supports cursor-based pagination.
+const listQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).optional().default(100),
+  cursor: z.string().optional(),
+});
+
+router.get('/', async (req, res, next) => {
   try {
     if (isDevMode) {
-      res.json({ events: getDevMockEvents() });
+      res.json({ events: getDevMockEvents(), nextCursor: null });
       return;
     }
 
+    const query = listQuerySchema.safeParse(req.query);
+    if (!query.success) {
+      res.status(400).json({ error: 'invalid_request' });
+      return;
+    }
+
+    const { limit, cursor } = query.data;
+
     const events = await prisma.appointeeEmailEvent.findMany({
+      take: limit + 1,
       orderBy: { enqueuedAt: 'desc' },
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
 
-    // Build contactId -> name map from the fellows roster (one upstream call).
+    const hasMore = events.length > limit;
+    const page = hasMore ? events.slice(0, limit) : events;
+    const nextCursor = hasMore ? page[page.length - 1].id : null;
+
     let nameMap: Map<number, string>;
     try {
-      const fellows = await civicrmService.getFellowsWithContacts();
+      const fellows = await getFellowsCached();
       nameMap = new Map(
         fellows.map((f) => [f.contactId, `${f.firstName} ${f.lastName}`.trim()])
       );
@@ -54,7 +85,7 @@ router.get('/', async (_req, res, next) => {
       nameMap = new Map();
     }
 
-    const rows: EmailEventRow[] = events.map((e) => ({
+    const rows: EmailEventRow[] = page.map((e) => ({
       id: e.id,
       fellowshipId: e.fellowshipId,
       contactId: e.contactId,
@@ -70,7 +101,7 @@ router.get('/', async (_req, res, next) => {
       sesMessageId: e.sesMessageId,
     }));
 
-    res.json({ events: rows });
+    res.json({ events: rows, nextCursor });
   } catch (err) {
     next(err);
   }

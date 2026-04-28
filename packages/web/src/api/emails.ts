@@ -41,15 +41,27 @@ export function useEmailEvents() {
     queryKey: ['admin-emails'],
     queryFn: async () => {
       const token = await getToken();
-      const res = await fetch(`${API_BASE}/api/admin/emails`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      if (!res.ok) throw new Error(`Failed to load emails: ${res.status}`);
-      const data = await res.json();
-      return data.events as EmailEvent[];
+      const allEvents: EmailEvent[] = [];
+      let cursor: string | null = null;
+
+      do {
+        const url = new URL(`${API_BASE}/api/admin/emails`, window.location.origin);
+        url.searchParams.set('limit', '200');
+        if (cursor) url.searchParams.set('cursor', cursor);
+
+        const res = await fetch(url.toString(), {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        if (!res.ok) throw new Error(`Failed to load emails: ${res.status}`);
+        const data = await res.json();
+        allEvents.push(...(data.events as EmailEvent[]));
+        cursor = data.nextCursor;
+      } while (cursor);
+
+      return allEvents;
     },
     staleTime: 60_000,
   });
