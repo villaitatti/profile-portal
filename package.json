@@ -1,6 +1,6 @@
 {
   "name": "itatti-profile-portal",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
   "scripts": {
     "dev": "pnpm --filter @itatti/server dev & pnpm --filter @itatti/web dev",

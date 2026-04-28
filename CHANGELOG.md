@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0] - 2026-04-28
+
+### Added
+- **Admin Emails page** (`/admin/emails`). Audit trail of all appointee emails with three tabs: a filterable table of sent/pending/failed events with row-click drill-in drawer showing status, timestamps, failure reasons, SES message ID, and a re-rendered email preview; a templates reference tab with live iframe previews of both VIT ID Invitation and Bio & Project Description emails; and a "How emails work" reference tab documenting trigger logic for each email type.
+- Email event drill-in shows recipient status warnings when the original contact was deleted from CiviCRM or has no first name on file, with placeholder-name rendering and amber info banners.
+- React Query hooks for the three email admin endpoints with appropriate stale times (60s for event list, 5min for event previews, 10min for template previews) to reduce CiviCRM load.
+
 ## [0.8.0] - 2026-04-23
 
 ### Added
