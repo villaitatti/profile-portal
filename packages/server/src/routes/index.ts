@@ -35,7 +35,7 @@ export function registerRoutes(app: Express) {
 
   // Protected routes (auth required)
   app.use('/api/profile', authMiddleware, extractUser, profileRoutes);
-  app.use('/api/profile/contact', authMiddleware, extractUser, profileContactRoutes);
+  app.use('/api/profile/contact', profileContactRoutes);
   app.use('/api/applications', authMiddleware, extractUser, applicationsRoutes);
   app.use('/api/roles', authMiddleware, extractUser, rolesRoutes);
 

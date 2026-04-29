@@ -27,6 +27,7 @@ export function PhoneSection() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingPhone, setEditingPhone] = useState<CiviCRMPhone | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   function handleAdd() {
@@ -57,8 +58,13 @@ export function PhoneSection() {
 
   async function handleDelete() {
     if (deletingId !== null) {
-      await deletePhone.mutateAsync(deletingId);
-      setDeletingId(null);
+      try {
+        setDeleteError(null);
+        await deletePhone.mutateAsync(deletingId);
+        setDeletingId(null);
+      } catch {
+        setDeleteError('Failed to delete phone number. Please try again.');
+      }
     }
   }
 
@@ -185,9 +191,9 @@ export function PhoneSection() {
       <ConfirmDialog
         open={deletingId !== null}
         onConfirm={handleDelete}
-        onCancel={() => setDeletingId(null)}
+        onCancel={() => { setDeletingId(null); setDeleteError(null); }}
         title="Delete phone number"
-        description="Delete this phone number? This cannot be undone."
+        description={deleteError || 'Delete this phone number? This cannot be undone.'}
         confirmLabel="Delete"
         variant="danger"
       />

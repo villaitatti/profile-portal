@@ -25,6 +25,13 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving, err
   const { data: states } = useStateProvinces(countryId);
 
   useEffect(() => {
+    if (stateProvinceId && states && states.length > 0) {
+      const stillValid = states.some((s) => s.id === stateProvinceId);
+      if (!stillValid) setStateProvinceId(undefined);
+    }
+  }, [states, stateProvinceId]);
+
+  useEffect(() => {
     if (open) {
       if (address) {
         setStreetAddress(address.streetAddress || '');

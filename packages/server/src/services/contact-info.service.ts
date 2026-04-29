@@ -62,6 +62,29 @@ async function pickLocationTypeId(
   return LOCATION_TYPE_IDS[0];
 }
 
+// --- Primary reconciliation (race-safe) ---
+
+async function reconcilePrimary(
+  entity: 'Address' | 'Phone',
+  contactId: number,
+  newId: number
+): Promise<boolean> {
+  const existing = await civiApiCall(entity, 'get', {
+    select: ['id', 'is_primary'],
+    where: [['contact_id', '=', contactId]],
+    limit: 0,
+  });
+
+  const hasPrimary = existing.values.some((r) => !!r.is_primary);
+  if (hasPrimary) return false;
+
+  await civiApiCall(entity, 'update', {
+    where: [['id', '=', newId]],
+    values: { is_primary: true },
+  });
+  return true;
+}
+
 // --- Address functions ---
 
 export async function getAddresses(contactId: number): Promise<CiviCRMAddress[]> {
@@ -105,13 +128,6 @@ export async function createAddress(
 ): Promise<CiviCRMAddress> {
   const locationTypeId = await pickLocationTypeId('Address', contactId);
 
-  const existingAddresses = await civiApiCall('Address', 'get', {
-    select: ['id'],
-    where: [['contact_id', '=', contactId]],
-    limit: 1,
-  });
-  const isFirst = existingAddresses.values.length === 0;
-
   const res = await civiApiCall('Address', 'create', {
     values: {
       contact_id: contactId,
@@ -122,13 +138,17 @@ export async function createAddress(
       state_province_id: input.stateProvinceId || null,
       country_id: input.countryId,
       location_type_id: locationTypeId,
-      is_primary: isFirst,
+      is_primary: false,
     },
   });
 
   const created = res.values[0];
+  const newId = Number(created.id);
+
+  const isPrimary = await reconcilePrimary('Address', contactId, newId);
+
   return {
-    id: Number(created.id),
+    id: newId,
     contactId,
     streetAddress: input.streetAddress,
     supplementalAddress1: input.supplementalAddress1,
@@ -136,7 +156,7 @@ export async function createAddress(
     postalCode: input.postalCode,
     stateProvinceId: input.stateProvinceId,
     countryId: input.countryId,
-    isPrimary: isFirst,
+    isPrimary,
   };
 }
 
@@ -175,7 +195,6 @@ export async function isAddressPrimary(recordId: number): Promise<boolean> {
 
 // --- Phone functions ---
 
-const PHONE_TYPE_PHONE = 1;
 const PHONE_TYPE_MOBILE = 2;
 
 export async function getPhones(contactId: number): Promise<CiviCRMPhone[]> {
@@ -188,10 +207,7 @@ export async function getPhones(contactId: number): Promise<CiviCRMPhone[]> {
       'phone_type_id:label',
       'is_primary',
     ],
-    where: [
-      ['contact_id', '=', contactId],
-      ['phone_type_id', 'IN', [PHONE_TYPE_PHONE, PHONE_TYPE_MOBILE]],
-    ],
+    where: [['contact_id', '=', contactId]],
     orderBy: { is_primary: 'DESC' },
     limit: 0,
   });
@@ -201,7 +217,7 @@ export async function getPhones(contactId: number): Promise<CiviCRMPhone[]> {
     contactId: Number(p.contact_id),
     phone: String(p.phone || ''),
     phoneTypeId: Number(p.phone_type_id),
-    phoneType: Number(p.phone_type_id) === PHONE_TYPE_MOBILE ? 'Mobile' as const : 'Phone' as const,
+    phoneType: String(p['phone_type_id:label'] || 'Phone') as 'Phone' | 'Mobile',
     isPrimary: !!p.is_primary,
   }));
 }
@@ -212,34 +228,28 @@ export async function createPhone(
 ): Promise<CiviCRMPhone> {
   const locationTypeId = await pickLocationTypeId('Phone', contactId);
 
-  const existingPhones = await civiApiCall('Phone', 'get', {
-    select: ['id'],
-    where: [
-      ['contact_id', '=', contactId],
-      ['phone_type_id', 'IN', [PHONE_TYPE_PHONE, PHONE_TYPE_MOBILE]],
-    ],
-    limit: 1,
-  });
-  const isFirst = existingPhones.values.length === 0;
-
   const res = await civiApiCall('Phone', 'create', {
     values: {
       contact_id: contactId,
       phone: input.phone,
       phone_type_id: input.phoneTypeId,
       location_type_id: locationTypeId,
-      is_primary: isFirst,
+      is_primary: false,
     },
   });
 
   const created = res.values[0];
+  const newId = Number(created.id);
+
+  const isPrimary = await reconcilePrimary('Phone', contactId, newId);
+
   return {
-    id: Number(created.id),
+    id: newId,
     contactId,
     phone: input.phone,
     phoneTypeId: input.phoneTypeId,
     phoneType: input.phoneTypeId === PHONE_TYPE_MOBILE ? 'Mobile' : 'Phone',
-    isPrimary: isFirst,
+    isPrimary,
   };
 }
 

@@ -82,22 +82,27 @@ describe('getAddresses', () => {
 });
 
 describe('createAddress', () => {
-  it('sets isPrimary=true when contact has no existing addresses', async () => {
-    // pickLocationTypeId: check existing by location type
-    mockFetch.mockResolvedValueOnce(jsonResponse({ values: [] }));
-    // check existing addresses count
+  it('sets isPrimary=true when contact has no existing primary', async () => {
+    // pickLocationTypeId
     mockFetch.mockResolvedValueOnce(jsonResponse({ values: [] }));
     // create call
+    mockFetch.mockResolvedValueOnce(jsonResponse({ values: [{ id: 10 }] }));
+    // reconcilePrimary: fetch all addresses for contact (none have is_primary)
+    mockFetch.mockResolvedValueOnce(jsonResponse({ values: [{ id: 10, is_primary: false }] }));
+    // reconcilePrimary: update new address to primary
     mockFetch.mockResolvedValueOnce(jsonResponse({ values: [{ id: 10 }] }));
 
     const result = await createAddress(42, { streetAddress: '1 St', city: 'Rome', countryId: 1107 });
     expect(result.isPrimary).toBe(true);
   });
 
-  it('sets isPrimary=false when contact already has addresses', async () => {
+  it('sets isPrimary=false when contact already has a primary', async () => {
+    // pickLocationTypeId
     mockFetch.mockResolvedValueOnce(jsonResponse({ values: [] }));
-    mockFetch.mockResolvedValueOnce(jsonResponse({ values: [{ id: 1 }] }));
+    // create call
     mockFetch.mockResolvedValueOnce(jsonResponse({ values: [{ id: 11 }] }));
+    // reconcilePrimary: fetch all addresses (existing one is primary)
+    mockFetch.mockResolvedValueOnce(jsonResponse({ values: [{ id: 1, is_primary: true }, { id: 11, is_primary: false }] }));
 
     const result = await createAddress(42, { streetAddress: '2 Ave', city: 'Florence', countryId: 1107 });
     expect(result.isPrimary).toBe(false);
@@ -120,9 +125,14 @@ describe('getPhones', () => {
 });
 
 describe('createPhone', () => {
-  it('sets isPrimary=true when contact has no existing phones', async () => {
+  it('sets isPrimary=true when contact has no existing primary phone', async () => {
+    // pickLocationTypeId
     mockFetch.mockResolvedValueOnce(jsonResponse({ values: [] }));
-    mockFetch.mockResolvedValueOnce(jsonResponse({ values: [] }));
+    // create call
+    mockFetch.mockResolvedValueOnce(jsonResponse({ values: [{ id: 5 }] }));
+    // reconcilePrimary: fetch all phones (none primary)
+    mockFetch.mockResolvedValueOnce(jsonResponse({ values: [{ id: 5, is_primary: false }] }));
+    // reconcilePrimary: set new phone as primary
     mockFetch.mockResolvedValueOnce(jsonResponse({ values: [{ id: 5 }] }));
 
     const result = await createPhone(42, { phone: '+1 555 123 4567', phoneTypeId: 2 });
@@ -153,7 +163,7 @@ describe('isPhonePrimary', () => {
 describe('CiviCRM API error handling', () => {
   it('throws when CiviCRM returns non-200 status', async () => {
     mockFetch.mockResolvedValueOnce(new Response('Internal Server Error', { status: 500 }));
-    await expect(getAddresses(42)).rejects.toThrow('CiviCRM API error: 500');
+    await expect(getAddresses(42)).rejects.toThrow('CiviCRM API error: Address.get returned 500');
   });
 
   it('throws when CiviCRM returns 200 with error_message', async () => {

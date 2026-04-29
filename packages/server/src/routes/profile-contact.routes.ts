@@ -93,7 +93,7 @@ router.post('/addresses', async (req, res) => {
     res.status(201).json(created);
   } catch (err) {
     logger.error({ err, contactId }, 'Failed to create address');
-    res.status(500).json({ error: 'Failed to create address', code: 'INTERNAL_ERROR' });
+    res.status(503).json({ error: 'Failed to create address', code: 'CIVICRM_UNAVAILABLE' });
   }
 });
 
@@ -130,7 +130,7 @@ router.put('/addresses/:id', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     logger.error({ err, contactId, recordId }, 'Failed to update address');
-    res.status(500).json({ error: 'Failed to update address', code: 'INTERNAL_ERROR' });
+    res.status(503).json({ error: 'Failed to update address', code: 'CIVICRM_UNAVAILABLE' });
   }
 });
 
@@ -167,7 +167,7 @@ router.delete('/addresses/:id', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     logger.error({ err, contactId, recordId }, 'Failed to delete address');
-    res.status(500).json({ error: 'Failed to delete address', code: 'INTERNAL_ERROR' });
+    res.status(503).json({ error: 'Failed to delete address', code: 'CIVICRM_UNAVAILABLE' });
   }
 });
 
@@ -195,7 +195,7 @@ router.put('/addresses/:id/preferred', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     logger.error({ err, contactId, recordId }, 'Failed to set preferred address');
-    res.status(500).json({ error: 'Failed to set preferred address', code: 'INTERNAL_ERROR' });
+    res.status(503).json({ error: 'Failed to set preferred address', code: 'CIVICRM_UNAVAILABLE' });
   }
 });
 
@@ -273,7 +273,7 @@ router.post('/phones', async (req, res) => {
     res.status(201).json(created);
   } catch (err) {
     logger.error({ err, contactId }, 'Failed to create phone');
-    res.status(500).json({ error: 'Failed to create phone', code: 'INTERNAL_ERROR' });
+    res.status(503).json({ error: 'Failed to create phone', code: 'CIVICRM_UNAVAILABLE' });
   }
 });
 
@@ -321,7 +321,7 @@ router.put('/phones/:id', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     logger.error({ err, contactId, recordId }, 'Failed to update phone');
-    res.status(500).json({ error: 'Failed to update phone', code: 'INTERNAL_ERROR' });
+    res.status(503).json({ error: 'Failed to update phone', code: 'CIVICRM_UNAVAILABLE' });
   }
 });
 
@@ -358,7 +358,7 @@ router.delete('/phones/:id', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     logger.error({ err, contactId, recordId }, 'Failed to delete phone');
-    res.status(500).json({ error: 'Failed to delete phone', code: 'INTERNAL_ERROR' });
+    res.status(503).json({ error: 'Failed to delete phone', code: 'CIVICRM_UNAVAILABLE' });
   }
 });
 
@@ -386,7 +386,7 @@ router.put('/phones/:id/preferred', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     logger.error({ err, contactId, recordId }, 'Failed to set preferred phone');
-    res.status(500).json({ error: 'Failed to set preferred phone', code: 'INTERNAL_ERROR' });
+    res.status(503).json({ error: 'Failed to set preferred phone', code: 'CIVICRM_UNAVAILABLE' });
   }
 });
 

@@ -30,7 +30,7 @@ export async function civiApiCall(
   });
 
   if (!response.ok) {
-    throw new Error(`CiviCRM API error: ${response.status} ${response.statusText}`);
+    throw new Error(`CiviCRM API error: ${entity}.${action} returned ${response.status} ${response.statusText}`);
   }
 
   const data = await response.json() as CiviApiResponse & { error_message?: string };

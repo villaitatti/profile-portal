@@ -22,6 +22,7 @@ export function AddressSection() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingAddress, setEditingAddress] = useState<CiviCRMAddress | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   function handleAdd() {
@@ -52,8 +53,13 @@ export function AddressSection() {
 
   async function handleDelete() {
     if (deletingId !== null) {
-      await deleteAddress.mutateAsync(deletingId);
-      setDeletingId(null);
+      try {
+        setDeleteError(null);
+        await deleteAddress.mutateAsync(deletingId);
+        setDeletingId(null);
+      } catch {
+        setDeleteError('Failed to delete address. Please try again.');
+      }
     }
   }
 
@@ -184,9 +190,9 @@ export function AddressSection() {
       <ConfirmDialog
         open={deletingId !== null}
         onConfirm={handleDelete}
-        onCancel={() => setDeletingId(null)}
+        onCancel={() => { setDeletingId(null); setDeleteError(null); }}
         title="Delete address"
-        description="Delete this address? This cannot be undone."
+        description={deleteError || 'Delete this address? This cannot be undone.'}
         confirmLabel="Delete"
         variant="danger"
       />

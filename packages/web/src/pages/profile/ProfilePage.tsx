@@ -89,6 +89,11 @@ function ProfilePageSkeleton() {
         <SkeletonBlock className="h-5 w-40 rounded-full" />
         <SkeletonBlock className="mt-3 h-20 w-full rounded-lg" />
       </div>
+
+      <div className="max-w-3xl overflow-hidden rounded-xl border bg-card p-6">
+        <SkeletonBlock className="h-5 w-36 rounded-full" />
+        <SkeletonBlock className="mt-3 h-16 w-full rounded-lg" />
+      </div>
     </div>
   );
 }
