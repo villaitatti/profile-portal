@@ -26,7 +26,7 @@ export function ProfilePage() {
     <div className="space-y-6">
       <PageHeader title="My Profile" />
 
-      <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-2">
+      <div className="grid max-w-5xl grid-cols-1 gap-6 md:grid-cols-2">
         <div className="rounded-xl border bg-card p-6 md:px-8">
           <div className="flex items-center gap-3">
             <User className="h-5 w-5 text-muted-foreground" />
@@ -52,7 +52,7 @@ function ProfilePageSkeleton() {
         <SkeletonBlock className="h-10 w-48 rounded-full" />
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-2">
+      <div className="grid max-w-5xl grid-cols-1 gap-6 md:grid-cols-2">
         <div className="overflow-hidden rounded-xl border bg-card p-6">
           <SkeletonBlock className="h-5 w-24 rounded-full" />
           <SkeletonBlock className="mt-4 h-5 w-40 rounded-full" />
