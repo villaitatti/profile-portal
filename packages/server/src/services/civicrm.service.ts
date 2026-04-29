@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import { env } from '../env.js';
 import { logger } from '../lib/logger.js';
+import { civiApiCall } from '../lib/civicrm-client.js';
 import type { CiviCRMContact, CiviCRMFellowship } from '@itatti/shared';
 
 // Deterministic short hash for log correlation. Matches the pattern in
@@ -13,38 +14,6 @@ function hashEmail(email: string): string {
 // this at any given time, but we chunk defensively so the query stays fast
 // and doesn't trip any CiviCRM URL-length limits.
 const EMAIL_GET_IN_CHUNK = 500;
-
-interface CiviApiResponse {
-  values: Record<string, unknown>[];
-}
-
-async function apiCall(entity: string, action: string, params: Record<string, unknown>): Promise<CiviApiResponse> {
-  const url = `${env.CIVICRM_BASE_URL}/civicrm/ajax/api4/${entity}/${action}`;
-
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/x-www-form-urlencoded',
-  };
-
-  if (env.CIVICRM_SITE_KEY) {
-    headers['Authorization'] = `Bearer ${env.CIVICRM_API_KEY}`;
-    headers['X-Civi-Key'] = env.CIVICRM_SITE_KEY;
-  } else {
-    headers['X-Civi-Auth'] = `Bearer ${env.CIVICRM_API_KEY}`;
-  }
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: `params=${encodeURIComponent(JSON.stringify(params))}`,
-    signal: AbortSignal.timeout(10_000),
-  });
-
-  if (!response.ok) {
-    throw new Error(`CiviCRM API error: ${response.status} ${response.statusText}`);
-  }
-
-  return response.json() as Promise<CiviApiResponse>;
-}
 
 function parseContact(c: Record<string, unknown>, fallbackEmail?: string): CiviCRMContact {
   return {
@@ -60,7 +29,7 @@ function parseContact(c: Record<string, unknown>, fallbackEmail?: string): CiviC
 export async function findContactByPrimaryEmail(
   email: string
 ): Promise<CiviCRMContact | null> {
-  const result = await apiCall('Contact', 'get', {
+  const result = await civiApiCall('Contact', 'get', {
     select: ['id', 'first_name', 'last_name', 'email_primary.email', 'phone_primary.phone', 'image_URL'],
     where: [
       ['email_primary.email', '=', email],
@@ -76,7 +45,7 @@ export async function findContactByPrimaryEmail(
 }
 
 export async function getContactById(contactId: number): Promise<CiviCRMContact | null> {
-  const result = await apiCall('Contact', 'get', {
+  const result = await civiApiCall('Contact', 'get', {
     select: ['id', 'first_name', 'last_name', 'email_primary.email', 'phone_primary.phone', 'image_URL'],
     where: [
       ['id', '=', contactId],
@@ -113,7 +82,7 @@ export async function getFellowsWithContacts(): Promise<CiviCRMFellowWithContact
   const appointmentField = env.CIVICRM_FIELD_APPOINTMENT;
   const fellowshipField = env.CIVICRM_FIELD_FELLOWSHIP;
 
-  const result = await apiCall(entity, 'get', {
+  const result = await civiApiCall(entity, 'get', {
     select: [
       'id',
       'entity_id',
@@ -175,7 +144,7 @@ export async function getEmailsForContacts(
 
   for (let i = 0; i < contactIds.length; i += EMAIL_GET_IN_CHUNK) {
     const chunk = contactIds.slice(i, i + EMAIL_GET_IN_CHUNK);
-    const res = await apiCall('Email', 'get', {
+    const res = await civiApiCall('Email', 'get', {
       select: ['id', 'contact_id', 'email', 'is_primary', 'on_hold'],
       where: [
         ['contact_id', 'IN', chunk],
@@ -227,7 +196,7 @@ export type FindContactByEmailResult =
 export async function findContactIdByAnyEmail(
   email: string
 ): Promise<FindContactByEmailResult> {
-  const res = await apiCall('Email', 'get', {
+  const res = await civiApiCall('Email', 'get', {
     select: ['contact_id'],
     where: [
       ['email', '=', email],
@@ -261,7 +230,7 @@ export async function getFellowships(contactId: number): Promise<CiviCRMFellowsh
   const endField = env.CIVICRM_FIELD_END_DATE;
   const acceptedField = env.CIVICRM_FIELD_ACCEPTED;
 
-  const result = await apiCall(entity, 'get', {
+  const result = await civiApiCall(entity, 'get', {
     select: ['id', 'entity_id', startField, endField, acceptedField],
     where: [['entity_id', '=', contactId]],
     orderBy: { [startField]: 'ASC' },
