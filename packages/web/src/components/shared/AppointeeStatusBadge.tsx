@@ -63,10 +63,18 @@ const VISUAL: Record<
 > = {
   nominated: {
     label: 'Nominated',
-    // Muted institutional grey — waiting; no action available yet.
     tone: 'bg-muted text-muted-foreground',
-    title:
-      'Waiting on Angela: send the nomination letter and forms (outside the portal for now).',
+    title: 'Waiting on Angela: send the nomination letter and forms.',
+  },
+  'nomination-sent': {
+    label: 'Nomination Sent',
+    tone: 'bg-slate-100 text-slate-700',
+    title: 'Nomination letter sent. Waiting for appointee to submit the form.',
+  },
+  'form-submitted': {
+    label: 'Form Submitted',
+    tone: 'bg-indigo-50 text-indigo-700',
+    title: 'Appointee submitted the required form. Ready for Angela to accept the fellowship.',
   },
   accepted: {
     label: 'Accepted',

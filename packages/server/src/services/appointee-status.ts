@@ -25,6 +25,10 @@ export interface ComputeAppointeeStatusArgs {
   vitIdInvitationStatus: EmailEventStatus;
   /** Status of the BIO_PROJECT_DESCRIPTION email event, or 'NONE' if no row */
   bioEmailStatus: EmailEventStatus;
+  /** Whether Angela has marked the nomination letter as sent */
+  nominationSent: boolean;
+  /** Whether at least one required form has been submitted */
+  formSubmitted: boolean;
 }
 
 /**
@@ -56,7 +60,11 @@ export interface ComputeAppointeeStatusArgs {
 export function computeAppointeeStatus(
   args: ComputeAppointeeStatusArgs
 ): AppointeeStatus {
-  if (!args.fellowshipAccepted) return 'nominated';
+  if (!args.fellowshipAccepted) {
+    if (args.formSubmitted) return 'form-submitted';
+    if (args.nominationSent) return 'nomination-sent';
+    return 'nominated';
+  }
 
   const hasVitId =
     args.vitIdTier === 'active' ||

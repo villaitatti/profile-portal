@@ -23,6 +23,10 @@ vi.mock('../../services/appointee-email.service.js', () => ({
   currentAndNextAcademicYears: vi.fn(() => ['2025-2026', '2026-2027']),
 }));
 
+vi.mock('../../services/form-invitation.service.js', () => ({
+  getInvitationsForContacts: vi.fn(() => Promise.resolve([])),
+}));
+
 const { mockInfo } = vi.hoisted(() => ({ mockInfo: vi.fn() }));
 vi.mock('../../lib/logger.js', () => ({
   logger: { info: mockInfo, warn: vi.fn(), error: vi.fn(), debug: vi.fn() },

@@ -6,6 +6,8 @@ import type { AppointeeStatus } from '@itatti/shared';
 describe('AppointeeStatusBadge', () => {
   const expectations: Array<{ status: AppointeeStatus; label: string }> = [
     { status: 'nominated', label: 'Nominated' },
+    { status: 'nomination-sent', label: 'Nomination Sent' },
+    { status: 'form-submitted', label: 'Form Submitted' },
     { status: 'accepted', label: 'Accepted' },
     { status: 'vit-id-sent', label: 'VIT ID Sent' },
     { status: 'vit-id-claimed', label: 'VIT ID Claimed' },

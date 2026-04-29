@@ -85,3 +85,21 @@
 - **How:** Wrap the delete + enqueue in a single `prisma.$transaction([…])`, or replace with `upsert` on `(fellowshipId, emailType)` that resets status to PENDING.
 - **Context:** Flagged by /ship pre-landing review on feat/manage-appointees-html-email 2026-04-23. Priority: P3 — rare race, no data integrity impact.
 - **Depends on:** Nothing.
+
+## Appointee Forms — Follow-ups
+
+### Add file upload field type (v1.1)
+- **What:** Add file upload field type (photo, CV, grant letter) to the form system.
+- **Why:** Google Form 2 mentions "send us by email attachment, a copy of the grant letter" — currently punted to email. File uploads would complete the form workflow.
+- **Pros:** Angela gets everything in one place. No separate email attachments needed.
+- **Cons:** Requires S3 bucket setup, multipart upload handling, virus scanning, PDF inclusion of file links.
+- **Context:** Explicitly scoped out of v1. Revisit after the core form system is working and Angela confirms she actually wants this in the portal vs. continuing to accept attachments by email.
+- **Depends on:** Core appointee forms feature landing.
+
+### Add forms for other appointment types
+- **What:** Define FormDef entries for non-Fellow appointment types (short-term, visiting scholars, etc.).
+- **Why:** Angela has different forms for different fellowship types. Only Fellow is implemented in v1.
+- **Pros:** Completes the migration off Google Forms for all appointment types.
+- **Cons:** Need to collect form specs from Angela for each type. May require new field types.
+- **Context:** Architecture supports this — add new entries to FORM_REGISTRY with different appointmentTypes arrays. Blocked on Angela providing the other form templates.
+- **Depends on:** Core appointee forms feature landing + Angela's form specs for other types.

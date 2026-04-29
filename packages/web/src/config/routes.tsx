@@ -27,6 +27,8 @@ import { AtlassianSyncPage } from '@/pages/admin/AtlassianSyncPage';
 import { ClaimLogPage } from '@/pages/admin/ClaimLogPage';
 import { AutomationsPage } from '@/pages/admin/AutomationsPage';
 import { EmailsPage } from '@/pages/admin/EmailsPage';
+import { FormsPage } from '@/pages/admin/FormsPage';
+import { PublicFormPage } from '@/pages/forms/PublicFormPage';
 
 export const router = createBrowserRouter([
   {
@@ -37,6 +39,7 @@ export const router = createBrowserRouter([
         element: <PublicLayout />,
         children: [
           { path: '/claim', element: <ClaimPage /> },
+          { path: '/forms/:token', element: <PublicFormPage /> },
         ],
       },
 
@@ -64,6 +67,7 @@ export const router = createBrowserRouter([
                   { path: '/admin/fellows', element: <FellowsManagementPage /> },
                   { path: '/admin/has-vitid', element: <HasVitIdPage /> },
                   { path: '/admin/emails', element: <EmailsPage /> },
+                  { path: '/admin/forms', element: <FormsPage /> },
                 ],
               },
 

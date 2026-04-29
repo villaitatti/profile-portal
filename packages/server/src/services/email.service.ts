@@ -420,3 +420,88 @@ export async function sendAutomationReport(input: AutomationReportInput): Promis
     logger.error({ err }, 'Failed to send automation report email');
   }
 }
+
+export interface FormNotificationEmailInput {
+  formTitle: string;
+  fellowshipId: number;
+  contactId: number;
+  academicYear: string;
+  pdfBuffer: Buffer;
+  responseData: Record<string, unknown>;
+}
+
+export async function sendFormNotificationEmail(input: FormNotificationEmailInput): Promise<void> {
+  if (!isAdminNotificationEmailConfigured()) {
+    logger.warn('Skipping form notification email: admin email not configured');
+    return;
+  }
+
+  const subject = `Form Submitted: ${input.formTitle} — Fellowship ${input.fellowshipId} (${input.academicYear})`;
+
+  const fieldSummary = Object.entries(input.responseData)
+    .filter(([, v]) => v !== null && v !== undefined && v !== '')
+    .map(([k, v]) => `  ${k}: ${v}`)
+    .join('\n');
+
+  const body = [
+    `A new form submission has been received.`,
+    ``,
+    `Form: ${input.formTitle}`,
+    `Fellowship ID: ${input.fellowshipId}`,
+    `Contact ID: ${input.contactId}`,
+    `Academic Year: ${input.academicYear}`,
+    ``,
+    `Response summary:`,
+    fieldSummary,
+    ``,
+    `A PDF copy is attached. You can also view and download the response from the Profile Portal.`,
+  ].join('\n');
+
+  if (isDevMode) {
+    logger.info(
+      { subject, fellowshipId: input.fellowshipId, pdfSize: input.pdfBuffer.length },
+      'Form notification email (dev mode): would send with PDF attachment'
+    );
+    return;
+  }
+
+  if (!isAppointeeEmailConfigured()) {
+    throw new Error('SES not configured for form notification');
+  }
+
+  const client = await getSesClient();
+  const { SendRawEmailCommand } = await import('@aws-sdk/client-ses');
+
+  const boundary = `----=_Part_${Date.now()}`;
+  const pdfFilename = `${input.formTitle.replace(/[^a-zA-Z0-9]/g, '_')}_${input.contactId}.pdf`;
+
+  const rawMessage = [
+    `From: ${buildSesSource()}`,
+    `To: ${env.ADMIN_NOTIFICATION_EMAIL}`,
+    `Subject: ${subject}`,
+    `MIME-Version: 1.0`,
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    ``,
+    `--${boundary}`,
+    `Content-Type: text/plain; charset=UTF-8`,
+    `Content-Transfer-Encoding: 7bit`,
+    ``,
+    body,
+    ``,
+    `--${boundary}`,
+    `Content-Type: application/pdf; name="${pdfFilename}"`,
+    `Content-Disposition: attachment; filename="${pdfFilename}"`,
+    `Content-Transfer-Encoding: base64`,
+    ``,
+    input.pdfBuffer.toString('base64').replace(/(.{76})/g, '$1\n'),
+    ``,
+    `--${boundary}--`,
+  ].join('\r\n');
+
+  const command = new SendRawEmailCommand({
+    RawMessage: { Data: Buffer.from(rawMessage) },
+  });
+
+  await client.send(command);
+  logger.info({ subject, fellowshipId: input.fellowshipId }, 'Form notification email sent');
+}
