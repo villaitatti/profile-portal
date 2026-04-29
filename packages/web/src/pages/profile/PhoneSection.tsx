@@ -74,7 +74,7 @@ export function PhoneSection() {
 
   if (isLoading) {
     return (
-      <div className="max-w-3xl rounded-xl border bg-card p-6 md:px-8 motion-safe:animate-pulse">
+      <div className="rounded-xl border bg-card p-6 md:px-8 motion-safe:animate-pulse">
         <SkeletonBlock className="h-5 w-40 rounded-full" />
         <SkeletonBlock className="mt-4 h-16 w-full rounded-lg" />
       </div>
@@ -83,7 +83,7 @@ export function PhoneSection() {
 
   if (error) {
     return (
-      <div className="max-w-3xl rounded-xl border bg-card p-6 md:px-8">
+      <div className="rounded-xl border bg-card p-6 md:px-8">
         <div className="flex items-center gap-3">
           <Phone className="h-5 w-5 text-muted-foreground" />
           <h2 className="text-lg font-semibold tracking-tight">Phone Numbers</h2>
@@ -103,7 +103,7 @@ export function PhoneSection() {
   }
 
   return (
-    <div className="max-w-3xl rounded-xl border bg-card p-6 md:px-8">
+    <div className="rounded-xl border bg-card p-6 md:px-8">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Phone className="h-5 w-5 text-muted-foreground" />

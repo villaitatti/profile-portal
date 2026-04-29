@@ -1,7 +1,7 @@
 import { PageHeader } from '@/components/shared/PageHeader';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { useProfile } from '@/api/profile';
-import { User, Database } from 'lucide-react';
+import { User } from 'lucide-react';
 import { EmailSection } from './EmailSection';
 import { AddressSection } from './AddressSection';
 import { PhoneSection } from './PhoneSection';
@@ -24,97 +24,54 @@ export function ProfilePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="My Profile"
-        description={
-          profile?.source === 'auth0'
-            ? 'Showing information from your login account'
-            : 'Information from I Tatti records'
-        }
-      />
+      <PageHeader title="My Profile" />
 
-      <div className="max-w-3xl rounded-xl border bg-card">
-        <div className="divide-y">
-          <ProfileField icon={User} label="First Name" value={profile?.firstName} />
-          <ProfileField icon={User} label="Last Name" value={profile?.lastName} />
-        </div>
-        {profile?.source && (
-          <div className="rounded-b-xl bg-muted/45 px-6 py-4 md:px-8">
-            <div className="flex items-center gap-2 text-[0.82rem] text-muted-foreground">
-              <Database className="h-3 w-3" />
-              <span>
-                Source: {profile.source === 'civicrm' ? 'I Tatti Records (CiviCRM)' : 'Login Account (Auth0)'}
-              </span>
-            </div>
+      <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-2">
+        <div className="rounded-xl border bg-card p-6 md:px-8">
+          <div className="flex items-center gap-3">
+            <User className="h-5 w-5 text-muted-foreground" />
+            <h2 className="text-lg font-semibold tracking-tight">Name</h2>
           </div>
-        )}
-      </div>
+          <p className="mt-4 text-base text-foreground">
+            {[profile?.firstName, profile?.lastName].filter(Boolean).join(' ') || '—'}
+          </p>
+        </div>
 
-      <EmailSection email={profile?.email} />
-      <AddressSection />
-      <PhoneSection />
+        <EmailSection email={profile?.email} />
+        <AddressSection />
+        <PhoneSection />
+      </div>
     </div>
   );
 }
 
 function ProfilePageSkeleton() {
   return (
-    <div className="space-y-10 motion-safe:animate-pulse">
+    <div className="space-y-6 motion-safe:animate-pulse">
       <div className="space-y-3">
         <SkeletonBlock className="h-10 w-48 rounded-full" />
-        <SkeletonBlock className="h-5 w-[26rem] max-w-full rounded-full" />
       </div>
 
-      <div className="max-w-3xl overflow-hidden rounded-xl border bg-card">
-        {Array.from({ length: 2 }).map((_, index) => (
-          <div
-            key={index}
-            className={`flex items-center gap-5 px-6 py-5 md:px-8 ${index < 1 ? 'border-b border-border' : ''}`}
-          >
-            <SkeletonBlock className="h-5 w-5 rounded-full bg-muted/80" />
-            <div className="space-y-3">
-              <SkeletonBlock className="h-3 w-20 rounded-full" />
-              <SkeletonBlock className="h-5 w-52 rounded-full" />
-            </div>
-          </div>
-        ))}
-      </div>
+      <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-2">
+        <div className="overflow-hidden rounded-xl border bg-card p-6">
+          <SkeletonBlock className="h-5 w-24 rounded-full" />
+          <SkeletonBlock className="mt-4 h-5 w-40 rounded-full" />
+        </div>
 
-      <div className="max-w-3xl overflow-hidden rounded-xl border bg-card p-6">
-        <SkeletonBlock className="h-5 w-32 rounded-full" />
-        <SkeletonBlock className="mt-3 h-4 w-64 rounded-full" />
-      </div>
+        <div className="overflow-hidden rounded-xl border bg-card p-6">
+          <SkeletonBlock className="h-5 w-32 rounded-full" />
+          <SkeletonBlock className="mt-4 h-5 w-56 rounded-full" />
+        </div>
 
-      <div className="max-w-3xl overflow-hidden rounded-xl border bg-card p-6">
-        <SkeletonBlock className="h-5 w-40 rounded-full" />
-        <SkeletonBlock className="mt-3 h-20 w-full rounded-lg" />
-      </div>
+        <div className="overflow-hidden rounded-xl border bg-card p-6">
+          <SkeletonBlock className="h-5 w-40 rounded-full" />
+          <SkeletonBlock className="mt-4 h-20 w-full rounded-lg" />
+        </div>
 
-      <div className="max-w-3xl overflow-hidden rounded-xl border bg-card p-6">
-        <SkeletonBlock className="h-5 w-36 rounded-full" />
-        <SkeletonBlock className="mt-3 h-16 w-full rounded-lg" />
-      </div>
-    </div>
-  );
-}
-
-function ProfileField({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value?: string;
-}) {
-  return (
-    <div className="flex items-center gap-5 px-6 py-5 md:px-8">
-      <Icon className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-      <div>
-        <p className="text-[0.78rem] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-          {label}
-        </p>
-        <p className="mt-1 text-base leading-7 text-foreground">{value || '—'}</p>
+        <div className="overflow-hidden rounded-xl border bg-card p-6">
+          <SkeletonBlock className="h-5 w-36 rounded-full" />
+          <SkeletonBlock className="mt-4 h-16 w-full rounded-lg" />
+        </div>
       </div>
     </div>
   );

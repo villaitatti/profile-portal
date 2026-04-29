@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.11.1] - 2026-04-29
+
+### Changed
+- Profile page layout: cards now display in a two-column grid (Name + Email top row, Addresses + Phone bottom row).
+- Name card restyled to match other section cards (icon + title header pattern).
+- Removed "Source: I Tatti Records (CiviCRM)" footer from profile page.
+- IT contact email updated to it-help@itatti.harvard.edu.
+
 ## [0.11.0] - 2026-04-29
 
 ### Added

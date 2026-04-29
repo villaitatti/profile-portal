@@ -6,7 +6,7 @@ interface EmailSectionProps {
 
 export function EmailSection({ email }: EmailSectionProps) {
   return (
-    <div className="max-w-3xl rounded-xl border bg-card p-6 md:px-8">
+    <div className="rounded-xl border bg-card p-6 md:px-8">
       <div className="flex items-center gap-3">
         <Mail className="h-5 w-5 text-muted-foreground" />
         <h2 className="text-lg font-semibold tracking-tight">Email</h2>
@@ -19,7 +19,7 @@ export function EmailSection({ email }: EmailSectionProps) {
       </p>
 
       <a
-        href="mailto:helpdesk@itatti.harvard.edu?subject=Email change request"
+        href="mailto:it-help@itatti.harvard.edu?subject=Email change request"
         className="mt-3 inline-flex items-center gap-1.5 text-[0.88rem] font-medium text-primary hover:underline"
       >
         Need to change it? Contact IT staff
