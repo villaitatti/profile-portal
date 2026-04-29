@@ -107,15 +107,20 @@ export async function submitForm(
 
   const data = parsed.data as FormResponseData;
 
-  const [, response] = await prisma.$transaction([
+  const [updated, response] = await prisma.$transaction([
     prisma.formInvitation.update({
-      where: { id: invitation.id },
+      where: { id: invitation.id, status: 'pending' },
       data: { status: 'submitted', submittedAt: new Date() },
     }),
     prisma.formResponse.create({
       data: { invitationId: invitation.id, data },
     }),
-  ]);
+  ]).catch((err) => {
+    if (err.code === 'P2025') {
+      throw new ServiceError('This form has already been submitted', 409);
+    }
+    throw err;
+  });
 
   logger.info(
     { invitationId: invitation.id, responseId: response.id },
