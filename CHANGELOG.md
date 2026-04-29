@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.11.0] - 2026-04-29
+
+### Added
+- **Contact info self-service.** Fellows and staff can now manage their own addresses and phone numbers from the Profile page. Full CRUD with inline editing, preferred (primary) selection, and real-time validation.
+- Address management: street, supplemental line, city, postal code, state/province (dynamic per country), and country selection. Country and state dropdowns fetched from CiviCRM reference data.
+- Phone management: landline and mobile types, 7-digit minimum validation, preferred number toggle.
+- Ownership verification (IDOR protection) on all mutation endpoints: update, delete, and set-preferred require the record to belong to the authenticated user's CiviCRM contact.
+- Race-safe primary reconciliation: new records are created as non-primary, then promoted only if no existing primary is found.
+- Optimistic UI updates with React Query for instant feedback on add/edit/delete/set-preferred actions, with automatic rollback on failure.
+- 43 new server tests covering service layer and route handlers.
+
+### Changed
+- CiviCRM client error messages now include entity and action for easier debugging (e.g. `Address.get returned 500`).
+- Mutation error responses use 503/CIVICRM_UNAVAILABLE instead of generic 500 to distinguish upstream failures from application bugs.
+
 ## [0.10.0] - 2026-04-29
 
 ### Added
