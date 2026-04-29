@@ -10,11 +10,14 @@ import { academicYearLabelForFellowship } from '../utils/eligibility.js';
 import { AppointeeEmailStatus, AppointeeEmailType } from '@prisma/client';
 import { env } from '../env.js';
 import { logger } from '../lib/logger.js';
+import { getFormDef } from '@itatti/shared';
+import { getInvitationsForContacts } from './form-invitation.service.js';
 import type {
   BioEmailSummary,
   VitIdInvitationSummary,
   FellowDashboardEntry,
   FellowsDashboardResponse,
+  FormInvitationSummaryEntry,
   VitIdStatus,
   MatchedVia,
   NeedsReviewReason,
@@ -165,6 +168,7 @@ export async function getFellowsDashboard(
         | 'bioEmail'
         | 'vitIdInvitation'
         | 'appointeeStatus'
+        | 'formInvitations'
       >;
       latestStart: string;
       displayFellowshipId: number;
@@ -279,10 +283,20 @@ export async function getFellowsDashboard(
   // come back in one query; the caller bins them.
   const contactIds = Array.from(fellowsByContact.keys());
   const yearsInScope = Array.from(academicYearsSet);
-  const [emailStatusMap, emailsByContact] = await Promise.all([
+  const [emailStatusMap, emailsByContact, formInvitationRows] = await Promise.all([
     getEmailStatusForContacts(contactIds, yearsInScope),
     getEmailsForContacts(contactIds),
+    getInvitationsForContacts(contactIds),
   ]);
+
+  // Index form invitations by contactId for O(1) lookup in the loop below.
+  type FormInvRow = (typeof formInvitationRows)[number];
+  const formInvitationsByContact = new Map<number, FormInvRow[]>();
+  for (const inv of formInvitationRows) {
+    const existing = formInvitationsByContact.get(inv.contactId) ?? [];
+    existing.push(inv);
+    formInvitationsByContact.set(inv.contactId, existing);
+  }
 
   // Build an email→contactIds index from Email.get results. When the same
   // email string appears on 2+ distinct CiviCRM contacts (a duplicate-contact
@@ -396,6 +410,16 @@ export async function getFellowsDashboard(
         targetAcademicYear,
         event: vitInvitationEvent,
       });
+      const contactForms = formInvitationsByContact.get(entry.civicrmId) ?? [];
+      const formInvitations: FormInvitationSummaryEntry[] = contactForms.map((inv) => ({
+        id: inv.id,
+        formType: inv.formType,
+        formTitle: getFormDef(inv.formType)?.title ?? inv.formType,
+        status: inv.status as 'pending' | 'submitted' | 'expired',
+        token: inv.token,
+        nominationSentAt: inv.nominationSentAt?.toISOString() ?? null,
+        submittedAt: inv.submittedAt?.toISOString() ?? null,
+      }));
       const base: FellowDashboardEntry = {
         ...entry,
         status: 'needs-review',
@@ -404,14 +428,14 @@ export async function getFellowsDashboard(
         civicrmIdStatus: 'n/a',
         bioEmail,
         vitIdInvitation,
-        // Duplicate-contact rows still get an appointeeStatus derivation so
-        // the chip column never shows blank. The needs-review state drives
-        // the button disabling, not the chip itself.
+        formInvitations,
         appointeeStatus: computeAppointeeStatus({
           fellowshipAccepted: displayFellowshipAccepted,
           vitIdTier: 'needs-review',
           vitIdInvitationStatus: toEventStatus(vitInvitationEvent),
           bioEmailStatus: toEventStatus(bioEvent),
+          nominationSent: contactForms.some((f) => !!f.nominationSentAt),
+          formSubmitted: contactForms.some((f) => f.status === 'submitted'),
         }),
       };
       fellows.push(base);
@@ -464,11 +488,24 @@ export async function getFellowsDashboard(
       event: vitInvitationEvent,
     });
 
+    const contactForms = formInvitationsByContact.get(entry.civicrmId) ?? [];
+    const formInvitations: FormInvitationSummaryEntry[] = contactForms.map((inv) => ({
+      id: inv.id,
+      formType: inv.formType,
+      formTitle: getFormDef(inv.formType)?.title ?? inv.formType,
+      status: inv.status as 'pending' | 'submitted' | 'expired',
+      token: inv.token,
+      nominationSentAt: inv.nominationSentAt?.toISOString() ?? null,
+      submittedAt: inv.submittedAt?.toISOString() ?? null,
+    }));
+
     const appointeeStatus = computeAppointeeStatus({
       fellowshipAccepted: displayFellowshipAccepted,
       vitIdTier: match.status,
       vitIdInvitationStatus: toEventStatus(vitInvitationEvent),
       bioEmailStatus: toEventStatus(bioEvent),
+      nominationSent: contactForms.some((f) => !!f.nominationSentAt),
+      formSubmitted: contactForms.some((f) => f.status === 'submitted'),
     });
 
     const base: FellowDashboardEntry = {
@@ -477,6 +514,7 @@ export async function getFellowsDashboard(
       civicrmIdStatus,
       bioEmail,
       vitIdInvitation,
+      formInvitations,
       appointeeStatus,
     };
 

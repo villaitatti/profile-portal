@@ -74,11 +74,13 @@ export type BioEmailStatus = 'none' | 'pending' | 'sent' | 'failed';
  * Implementation: packages/server/src/services/appointee-status.ts.
  */
 export type AppointeeStatus =
-  | 'nominated'      // fellowshipAccepted !== true
-  | 'accepted'       // fellowship accepted, no VIT ID, invitation not sent
-  | 'vit-id-sent'    // invitation sent, appointee has not yet claimed
-  | 'vit-id-claimed' // VIT ID active (or active-different-email), bio not sent
-  | 'enrolled';      // VIT ID active AND bio email sent — terminal state
+  | 'nominated'         // fellowshipAccepted !== true
+  | 'nomination-sent'   // Angela marked nomination letter sent, form pending
+  | 'form-submitted'    // appointee submitted all required forms
+  | 'accepted'          // fellowship accepted, no VIT ID, invitation not sent
+  | 'vit-id-sent'       // invitation sent, appointee has not yet claimed
+  | 'vit-id-claimed'    // VIT ID active (or active-different-email), bio not sent
+  | 'enrolled';         // VIT ID active AND bio email sent — terminal state
 
 export interface BioEmailSummary {
   // UI pill state derived from the DB AppointeeEmailStatus:
@@ -126,6 +128,16 @@ export interface VitIdInvitationSummary {
   canManuallySend: boolean;
 }
 
+export interface FormInvitationSummaryEntry {
+  id: string;
+  formType: string;
+  formTitle: string;
+  status: 'pending' | 'submitted' | 'expired';
+  token: string;
+  nominationSentAt: string | null;
+  submittedAt: string | null;
+}
+
 export interface FellowDashboardEntry {
   civicrmId: number;
   firstName: string;
@@ -145,6 +157,7 @@ export interface FellowDashboardEntry {
   bioEmail: BioEmailSummary;
   vitIdInvitation: VitIdInvitationSummary;
   appointeeStatus: AppointeeStatus;
+  formInvitations: FormInvitationSummaryEntry[];
 }
 
 export interface FellowsDashboardResponse {

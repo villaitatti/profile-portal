@@ -28,6 +28,8 @@ type Row = {
   tier: VitIdStatus;
   invitation: EmailEventStatus;
   bio: EmailEventStatus;
+  nominationSent?: boolean;
+  formSubmitted?: boolean;
   expected: string;
 };
 
@@ -35,6 +37,13 @@ const cases: Row[] = [
   // Nominated — fellowship not yet accepted
   { label: 'fellowship not accepted → nominated', accepted: false, tier: 'no-account', invitation: 'NONE', bio: 'NONE', expected: 'nominated' },
   { label: 'not accepted even if ladder has match → nominated', accepted: false, tier: 'active', invitation: 'NONE', bio: 'NONE', expected: 'nominated' },
+
+  // Nomination Sent — pre-acceptance, Angela marked nomination sent
+  { label: 'nomination sent, form pending → nomination-sent', accepted: false, tier: 'no-account', invitation: 'NONE', bio: 'NONE', nominationSent: true, expected: 'nomination-sent' },
+
+  // Form Submitted — pre-acceptance, appointee completed the form
+  { label: 'form submitted → form-submitted', accepted: false, tier: 'no-account', invitation: 'NONE', bio: 'NONE', nominationSent: true, formSubmitted: true, expected: 'form-submitted' },
+  { label: 'form submitted without nomination → form-submitted', accepted: false, tier: 'no-account', invitation: 'NONE', bio: 'NONE', formSubmitted: true, expected: 'form-submitted' },
 
   // Accepted — just flipped, nothing else happened
   { label: 'accepted, no account, no invitation → accepted', accepted: true, tier: 'no-account', invitation: 'NONE', bio: 'NONE', expected: 'accepted' },
@@ -76,6 +85,8 @@ describe('computeAppointeeStatus', () => {
           vitIdTier: c.tier,
           vitIdInvitationStatus: c.invitation,
           bioEmailStatus: c.bio,
+          nominationSent: c.nominationSent ?? false,
+          formSubmitted: c.formSubmitted ?? false,
         })
       ).toBe(c.expected);
     });
@@ -90,6 +101,8 @@ describe('computeAppointeeStatus', () => {
         vitIdTier: 'active',
         vitIdInvitationStatus: 'NONE',
         bioEmailStatus: 'NONE',
+        nominationSent: false,
+        formSubmitted: false,
       });
       expect(before).toBe('nominated');
 
@@ -98,6 +111,8 @@ describe('computeAppointeeStatus', () => {
         vitIdTier: 'active',
         vitIdInvitationStatus: 'NONE',
         bioEmailStatus: 'NONE',
+        nominationSent: false,
+        formSubmitted: false,
       });
       // Skips accepted + vit-id-sent entirely.
       expect(after).toBe('vit-id-claimed');
@@ -111,6 +126,8 @@ describe('computeAppointeeStatus', () => {
         vitIdTier: 'no-account',
         vitIdInvitationStatus: 'SENT',
         bioEmailStatus: 'SENT',
+        nominationSent: false,
+        formSubmitted: false,
       });
       expect(status).toBe('vit-id-sent');
       expect(mockWarn).toHaveBeenCalledOnce();
@@ -130,6 +147,8 @@ describe('computeAppointeeStatus', () => {
         vitIdTier: 'active',
         vitIdInvitationStatus: 'SENT',
         bioEmailStatus: 'SENT',
+        nominationSent: false,
+        formSubmitted: false,
       });
       expect(mockWarn).not.toHaveBeenCalled();
     });

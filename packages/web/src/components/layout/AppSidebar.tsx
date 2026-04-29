@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   CalendarClock,
   Mail,
+  FileText,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import itattiLogo from '@/assets/itatti-logo.png';
@@ -50,6 +51,7 @@ const navSections: NavSection[] = [
       { label: 'Has VIT ID?', path: '/admin/has-vitid', icon: Search },
       { label: 'Manage Appointees', path: '/admin/fellows', icon: Users },
       { label: 'Emails', path: '/admin/emails', icon: Mail },
+      { label: 'Forms', path: '/admin/forms', icon: FileText },
     ],
   },
   {

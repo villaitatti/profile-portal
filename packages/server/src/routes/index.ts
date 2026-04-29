@@ -11,6 +11,8 @@ import { syncAdminRoutes, syncSseRoutes } from './sync-admin.routes.js';
 import { claimsAdminRoutes } from './claims-admin.routes.js';
 import { automationAdminRoutes } from './automation-admin.routes.js';
 import { emailsAdminRoutes } from './emails-admin.routes.js';
+import { formsPublicRoutes } from './forms-public.routes.js';
+import { formsAdminRoutes } from './forms-admin.routes.js';
 import { devEmailPreviewRoutes } from './__dev__/email-preview.routes.js';
 import { authMiddleware, extractUser } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
@@ -21,6 +23,7 @@ export function registerRoutes(app: Express) {
   app.use('/api/health', healthRoutes);
   app.use('/api/claim', claimRoutes);
   app.use('/api/help', helpRoutes);
+  app.use('/api/forms', formsPublicRoutes);
 
   // Dev-only: render compiled MJML email templates inline without auth or
   // CiviCRM/Auth0 dependencies. Gated on NODE_ENV !== 'production' so these
@@ -81,6 +84,15 @@ export function registerRoutes(app: Express) {
     extractUser,
     requireRole(KnownRoles.FELLOWS_ADMIN, KnownRoles.STAFF_IT),
     emailsAdminRoutes
+  );
+
+  // Admin routes: Forms (fellows-admin OR staff-it)
+  app.use(
+    '/api/admin/forms',
+    authMiddleware,
+    extractUser,
+    requireRole(KnownRoles.FELLOWS_ADMIN, KnownRoles.STAFF_IT),
+    formsAdminRoutes
   );
 
   // SSE stream — mounted BEFORE the JWT chain so EventSource requests (which can't

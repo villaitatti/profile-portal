@@ -135,3 +135,34 @@ model AppointeeEmailEvent {
   @@index([contactId, academicYear]) // audit scans
   @@map("appointee_email_events")
 }
+
+model FormInvitation {
+  id               String    @id @default(cuid())
+  token            String    @unique
+  fellowshipId     Int       @map("fellowship_id")
+  contactId        Int       @map("contact_id")
+  academicYear     String    @map("academic_year")
+  formType         String    @map("form_type")
+  status           String    @default("pending") // pending | submitted | expired
+  nominationSentAt DateTime? @map("nomination_sent_at")
+  submittedAt      DateTime? @map("submitted_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  response FormResponse?
+
+  @@unique([fellowshipId, formType, academicYear])
+  @@index([status, academicYear])
+  @@map("form_invitations")
+}
+
+model FormResponse {
+  id           String   @id @default(cuid())
+  invitationId String   @unique @map("invitation_id")
+  data         Json
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  invitation FormInvitation @relation(fields: [invitationId], references: [id])
+
+  @@map("form_responses")
+}

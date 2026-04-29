@@ -59,7 +59,7 @@ function getDevMockData(academicYear?: string): FellowsDashboardResponse {
   // Keeps the hand-maintained rows readable without duplicating 5 fields per row.
   type PartialEntry = Omit<
     FellowsDashboardResponse['fellows'][number],
-    'vitIdInvitation' | 'appointeeStatus'
+    'vitIdInvitation' | 'appointeeStatus' | 'formInvitations'
   >;
   const partialRows: PartialEntry[] = [
     // Classic 'no-account' — first-time fellow, never been here before
@@ -145,8 +145,10 @@ function getDevMockData(academicYear?: string): FellowsDashboardResponse {
       vitIdTier: p.status,
       vitIdInvitationStatus,
       bioEmailStatus,
+      nominationSent: false,
+      formSubmitted: false,
     });
-    return { ...p, vitIdInvitation, appointeeStatus };
+    return { ...p, vitIdInvitation, appointeeStatus, formInvitations: [] };
   });
 
   const filtered = academicYear

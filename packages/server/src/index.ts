@@ -15,6 +15,12 @@ logger.info({ mode: env.NODE_ENV }, 'Starting server');
 const { registerCronJobs } = await import('./services/automation.service.js');
 registerCronJobs();
 
+// Start pg-boss job queue and register workers
+const { registerFormNotificationWorker } = await import('./workers/form-notification.worker.js');
+registerFormNotificationWorker().catch((err) => {
+  logger.error({ err }, 'Failed to start form notification worker');
+});
+
 app.listen(env.PORT, () => {
   logger.info({ port: env.PORT }, 'Server running');
 });
