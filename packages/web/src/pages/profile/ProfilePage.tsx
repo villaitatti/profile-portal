@@ -1,7 +1,10 @@
 import { PageHeader } from '@/components/shared/PageHeader';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { useProfile } from '@/api/profile';
-import { User, Mail, Phone, Database } from 'lucide-react';
+import { User, Database } from 'lucide-react';
+import { EmailSection } from './EmailSection';
+import { AddressSection } from './AddressSection';
+import { PhoneSection } from './PhoneSection';
 
 export function ProfilePage() {
   const { data: profile, isLoading, error } = useProfile();
@@ -20,7 +23,7 @@ export function ProfilePage() {
   }
 
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
         title="My Profile"
         description={
@@ -32,28 +35,9 @@ export function ProfilePage() {
 
       <div className="max-w-3xl rounded-xl border bg-card">
         <div className="divide-y">
-          <ProfileField
-            icon={User}
-            label="First Name"
-            value={profile?.firstName}
-          />
-          <ProfileField
-            icon={User}
-            label="Last Name"
-            value={profile?.lastName}
-          />
-          <ProfileField
-            icon={Mail}
-            label="Email"
-            value={profile?.email}
-          />
-          <ProfileField
-            icon={Phone}
-            label="Phone"
-            value={profile?.phone}
-          />
+          <ProfileField icon={User} label="First Name" value={profile?.firstName} />
+          <ProfileField icon={User} label="Last Name" value={profile?.lastName} />
         </div>
-
         {profile?.source && (
           <div className="rounded-b-xl bg-muted/45 px-6 py-4 md:px-8">
             <div className="flex items-center gap-2 text-[0.82rem] text-muted-foreground">
@@ -65,6 +49,10 @@ export function ProfilePage() {
           </div>
         )}
       </div>
+
+      <EmailSection email={profile?.email} />
+      <AddressSection />
+      <PhoneSection />
     </div>
   );
 }
@@ -78,10 +66,10 @@ function ProfilePageSkeleton() {
       </div>
 
       <div className="max-w-3xl overflow-hidden rounded-xl border bg-card">
-        {Array.from({ length: 4 }).map((_, index) => (
+        {Array.from({ length: 2 }).map((_, index) => (
           <div
             key={index}
-            className={`flex items-center gap-5 px-6 py-5 md:px-8 ${index < 3 ? 'border-b border-border' : ''}`}
+            className={`flex items-center gap-5 px-6 py-5 md:px-8 ${index < 1 ? 'border-b border-border' : ''}`}
           >
             <SkeletonBlock className="h-5 w-5 rounded-full bg-muted/80" />
             <div className="space-y-3">
@@ -90,9 +78,21 @@ function ProfilePageSkeleton() {
             </div>
           </div>
         ))}
-        <div className="bg-muted/45 px-6 py-4 md:px-8">
-          <SkeletonBlock className="h-4 w-44 rounded-full" />
-        </div>
+      </div>
+
+      <div className="max-w-3xl overflow-hidden rounded-xl border bg-card p-6">
+        <SkeletonBlock className="h-5 w-32 rounded-full" />
+        <SkeletonBlock className="mt-3 h-4 w-64 rounded-full" />
+      </div>
+
+      <div className="max-w-3xl overflow-hidden rounded-xl border bg-card p-6">
+        <SkeletonBlock className="h-5 w-40 rounded-full" />
+        <SkeletonBlock className="mt-3 h-20 w-full rounded-lg" />
+      </div>
+
+      <div className="max-w-3xl overflow-hidden rounded-xl border bg-card p-6">
+        <SkeletonBlock className="h-5 w-36 rounded-full" />
+        <SkeletonBlock className="mt-3 h-16 w-full rounded-lg" />
       </div>
     </div>
   );

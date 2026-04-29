@@ -1,5 +1,23 @@
 # TODOS
 
+## Contact Info Self-Service — Prerequisites
+
+### Upgrade CiviCRM API key to read-write (BLOCKER)
+- **What:** Change the CiviCRM API user's permissions from read-only to read-write (or grant write access to Address and Phone entities).
+- **Why:** The contact info self-service feature requires Address.create, Address.update, Address.delete, Phone.create, Phone.update, Phone.delete. Current key is read-only.
+- **How:** CiviCRM admin panel → API users/permissions. Grant write access to Address and Phone entities at minimum.
+- **Context:** Key lives in .env as CIVICRM_API_KEY. Must be done before integration testing. Server-side only, never exposed to frontend.
+- **Blocked by:** Nothing. This is a prerequisite for the feature.
+
+## Contact Info Self-Service — Future Enhancements
+
+### JSM email change request form
+- **What:** Replace the "Contact IT staff" mailto link on the profile email section with a link to a Jira Service Management request form for email changes.
+- **Why:** A JSM form creates a trackable ticket, assigns it to the right person, gives the Fellow visibility into request status.
+- **How:** Create a JSM request type for "Email change request." Link from the profile page to the JSM portal URL (pre-filled with the Fellow's current email as context). JIRA_* env vars already exist in env.ts.
+- **Context:** The help form pattern already exists (helpRoutes). Initial implementation ships with a mailto link. This captures the upgrade path.
+- **Depends on:** Contact info self-service feature landing first.
+
 ## ~~Email Log — Follow-ups from /ship adversarial review~~ (RESOLVED)
 
 ### ~~Add pagination or date-bounded query to email events list endpoint~~ (RESOLVED)

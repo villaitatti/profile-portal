@@ -3,6 +3,7 @@ import { KnownRoles } from '@itatti/shared';
 import { healthRoutes } from './health.routes.js';
 import { applicationsRoutes } from './applications.routes.js';
 import { profileRoutes } from './profile.routes.js';
+import { profileContactRoutes } from './profile-contact.routes.js';
 import { rolesRoutes } from './roles.routes.js';
 import { claimRoutes } from './claim.routes.js';
 import { helpRoutes } from './help.routes.js';
@@ -34,6 +35,7 @@ export function registerRoutes(app: Express) {
 
   // Protected routes (auth required)
   app.use('/api/profile', authMiddleware, extractUser, profileRoutes);
+  app.use('/api/profile/contact', authMiddleware, extractUser, profileContactRoutes);
   app.use('/api/applications', authMiddleware, extractUser, applicationsRoutes);
   app.use('/api/roles', authMiddleware, extractUser, rolesRoutes);
 

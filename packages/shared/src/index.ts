@@ -1,6 +1,7 @@
 export * from './types/auth.js';
 export * from './types/applications.js';
 export * from './types/civicrm.js';
+export * from './types/contact.js';
 export * from './types/jira.js';
 export * from './types/appointee-email.js';
 export * from './types/forms.js';
