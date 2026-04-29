@@ -537,10 +537,12 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
             number
           > = {
             nominated: 0,
-            accepted: 1,
-            'vit-id-sent': 2,
-            'vit-id-claimed': 3,
-            enrolled: 4,
+            'nomination-sent': 1,
+            'form-submitted': 2,
+            accepted: 3,
+            'vit-id-sent': 4,
+            'vit-id-claimed': 5,
+            enrolled: 6,
           };
           cmp = order[a.appointeeStatus] - order[b.appointeeStatus];
           break;
