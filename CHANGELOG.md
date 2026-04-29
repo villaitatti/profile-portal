@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.10.0] - 2026-04-29
+
+### Added
+- **Appointee Forms system.** Replaces Google Forms with an in-app token-based form workflow. Angela generates a unique link per appointee from the portal; the appointee fills the form without logging in; Angela receives an email notification with the responses as a PDF attachment. Full workflow: generate invitation → appointee submits → async PDF generation → email notification → admin can view/download responses.
+- **Code-driven form definitions** in the shared package (`FormDef` type system). The fellowship acceptance form ships as the first definition. New forms are added by creating a TypeScript object in `form-registry.ts` with sections, fields, conditional visibility rules, and appointment type mapping.
+- **Dynamic public form renderer** at `/forms/:token`. Handles all field types (text, textarea, email, date, select, radio, checkbox), conditional field visibility, client-side validation, and a success confirmation screen. No authentication required.
+- **Server-side PDF generation** using `@react-pdf/renderer` (React.createElement API). Produces branded A4 PDFs with section headers, field labels/values, conditional field filtering, and a generation date footer.
+- **pg-boss job queue** for async form notification processing. Embedded in the Express server, uses the existing PostgreSQL database. Retries 3x with 60s delay, archives after 7 days.
+- **Admin form management routes** (`/api/admin/forms`): generate invitations (idempotent per fellowship+formType+year), list/filter invitations, view responses, download PDFs on demand, mark nomination as sent, reset invitations (new token, preserves audit trail).
+- **Two new appointee lifecycle states**: `nomination-sent` (Angela sent the nomination letter) and `form-submitted` (appointee completed the required form). These appear between `nominated` and `accepted` in the pipeline, reflected in the AppointeeStatusBadge with distinct color treatments (slate and indigo).
+- **Admin Forms reference page** (`/admin/forms`) showing all defined form definitions with their sections, fields, and appointment type badges.
+- **React Query hooks** for all form endpoints: `useFormRegistry`, `useFormInvitations`, `useGenerateFormInvitation`, `useFormResponse`, `useResetFormInvitation`, `usePublicForm`, `useSubmitForm`.
+- Countries constant list (240 entries) for nationality/country form fields.
+- Sidebar "Forms" nav item under VIT ID Administration.
+
+### Changed
+- `computeAppointeeStatus()` now accepts `nominationSent` and `formSubmitted` flags and returns the new intermediate states before `accepted`.
+- `fellows.service.ts` batch-loads form invitations per contact (single query, O(1) index lookup) and passes nomination/submission signals to the status computation.
+- `FellowsManagementPage.tsx` appointee status sort order expanded from 5 to 7 states.
+- `AppointeeStatusBadge` test expectations updated for new states.
+
+### Database
+- New `form_invitations` table with unique constraints on `token` and `(fellowship_id, form_type, academic_year)`. Index on `(status, academic_year)` for filtered admin queries.
+- New `form_responses` table with 1:1 relation to `form_invitations` (unique on `invitation_id`).
+
+### For contributors
+- **No new env vars required.** Uses existing SES config and DATABASE_URL. pg-boss auto-creates its schema tables on first start.
+- **Deploy requires** `prisma migrate deploy` before starting the server (new tables).
+- `form-schema.ts` builds Zod validation schemas from FormDef at runtime (handles all field types, conditional fields made optional).
+- `form-invitation.service.ts` uses atomic `WHERE status = 'pending'` guard on submit to prevent race conditions on double-click.
+- Form notification worker uses pg-boss v10 `batchSize: 1` API with array iteration pattern.
+
+### Known follow-ups
+- File upload field type (photo, CV, grant letter) deferred to v1.1. Tracked in TODOS.md.
+- Forms for non-Fellow appointment types blocked on Angela providing templates. Tracked in TODOS.md.
+- Fellows Management page UI integration (per-row generate link button, copy-to-clipboard) not in this release.
+
 ## [0.9.0] - 2026-04-28
 
 ### Added
