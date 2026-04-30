@@ -39,31 +39,37 @@ export function AddressSection() {
   }
 
   async function handleSave(input: CreateAddressInput) {
-    if (editingAddress) {
-      const updateInput: UpdateAddressInput & { id: number } = { id: editingAddress.id, ...input };
-      await updateAddress.mutateAsync(updateInput);
-    } else {
-      await createAddress.mutateAsync(input);
-    }
-    setModalOpen(false);
-    setEditingAddress(null);
+    try {
+      if (editingAddress) {
+        const updateInput: UpdateAddressInput & { id: number } = { id: editingAddress.id, ...input };
+        await updateAddress.mutateAsync(updateInput);
+      } else {
+        await createAddress.mutateAsync(input);
+      }
+      setModalOpen(false);
+      setEditingAddress(null);
+    } catch { /* handled by mutation onError */ }
   }
 
   async function handleDelete() {
     if (deletingId !== null) {
-      await deleteAddress.mutateAsync(deletingId);
-      setDeletingId(null);
+      try {
+        await deleteAddress.mutateAsync(deletingId);
+        setDeletingId(null);
+      } catch { /* handled by mutation onError */ }
     }
   }
 
   async function handlePreferred(id: number) {
-    const result = await setPreferred.mutateAsync(id);
-    if (result.oldPrimaryId) {
-      setReclassifyTarget({
-        id: result.oldPrimaryId,
-        currentType: result.oldPrimaryLocationType || 'Main',
-      });
-    }
+    try {
+      const result = await setPreferred.mutateAsync(id);
+      if (result.oldPrimaryId) {
+        setReclassifyTarget({
+          id: result.oldPrimaryId,
+          currentType: result.oldPrimaryLocationType || 'Main',
+        });
+      }
+    } catch { /* handled by mutation onError */ }
   }
 
   function handleReclassify(locationTypeId: number) {

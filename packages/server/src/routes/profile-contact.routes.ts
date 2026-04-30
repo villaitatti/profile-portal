@@ -129,7 +129,7 @@ router.put('/addresses/:id', async (req, res) => {
       return;
     }
 
-    const { streetAddress, supplementalAddress1, city, postalCode, stateProvinceId, countryId } = req.body;
+    const { streetAddress, supplementalAddress1, city, postalCode, stateProvinceId, countryId, locationTypeId } = req.body;
     const input: Record<string, unknown> = {};
     if (streetAddress !== undefined) input.streetAddress = String(streetAddress);
     if (supplementalAddress1 !== undefined) input.supplementalAddress1 = String(supplementalAddress1);
@@ -137,6 +137,7 @@ router.put('/addresses/:id', async (req, res) => {
     if (postalCode !== undefined) input.postalCode = String(postalCode);
     if (stateProvinceId !== undefined) input.stateProvinceId = stateProvinceId ? Number(stateProvinceId) : undefined;
     if (countryId !== undefined) input.countryId = Number(countryId);
+    if (locationTypeId !== undefined) input.locationTypeId = Number(locationTypeId);
 
     await contactInfoService.updateAddress(recordId, input);
     res.json({ success: true });

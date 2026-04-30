@@ -244,6 +244,7 @@ export async function updateAddress(
   if (input.postalCode !== undefined) values.postal_code = input.postalCode || null;
   if (input.stateProvinceId !== undefined) values.state_province_id = input.stateProvinceId || null;
   if (input.countryId !== undefined) values.country_id = input.countryId;
+  if (input.locationTypeId !== undefined) values.location_type_id = input.locationTypeId;
 
   await civiApiCall('Address', 'update', {
     where: [['id', '=', recordId]],

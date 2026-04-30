@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch, useApiToken } from './client';
 import { toast } from 'sonner';
+import { LOCATION_TYPES } from '@itatti/shared';
 import type {
   CiviCRMAddress,
   CiviCRMPhone,
@@ -8,6 +9,7 @@ import type {
   UpdateAddressInput,
   CreatePhoneInput,
   UpdatePhoneInput,
+  LocationTypeLabel,
   CountryOption,
   StateProvinceOption,
 } from '@itatti/shared';
@@ -54,7 +56,7 @@ export function useCreateAddress() {
         stateProvinceId: input.stateProvinceId,
         countryId: input.countryId,
         locationTypeId: input.locationTypeId || 1,
-        locationType: 'Home',
+        locationType: (LOCATION_TYPES.find(t => t.id === (input.locationTypeId || 1))?.label || 'Home') as LocationTypeLabel,
         isPrimary: !previous || previous.length === 0,
       };
       queryClient.setQueryData<CiviCRMAddress[]>(['profile', 'addresses'], (old) =>
