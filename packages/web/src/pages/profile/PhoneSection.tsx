@@ -39,20 +39,24 @@ export function PhoneSection() {
   }
 
   async function handleSave(input: CreatePhoneInput) {
-    if (editingPhone) {
-      const updateInput: UpdatePhoneInput & { id: number } = { id: editingPhone.id, ...input };
-      await updatePhone.mutateAsync(updateInput);
-    } else {
-      await createPhone.mutateAsync(input);
-    }
-    setModalOpen(false);
-    setEditingPhone(null);
+    try {
+      if (editingPhone) {
+        const updateInput: UpdatePhoneInput & { id: number } = { id: editingPhone.id, ...input };
+        await updatePhone.mutateAsync(updateInput);
+      } else {
+        await createPhone.mutateAsync(input);
+      }
+      setModalOpen(false);
+      setEditingPhone(null);
+    } catch { /* handled by mutation onError */ }
   }
 
   async function handleDelete() {
     if (deletingId !== null) {
-      await deletePhone.mutateAsync(deletingId);
-      setDeletingId(null);
+      try {
+        await deletePhone.mutateAsync(deletingId);
+        setDeletingId(null);
+      } catch { /* handled by mutation onError */ }
     }
   }
 

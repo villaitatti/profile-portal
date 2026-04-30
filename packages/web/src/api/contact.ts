@@ -94,7 +94,14 @@ export function useUpdateAddress() {
       await queryClient.cancelQueries({ queryKey: ['profile', 'addresses'] });
       const previous = queryClient.getQueryData<CiviCRMAddress[]>(['profile', 'addresses']);
       queryClient.setQueryData<CiviCRMAddress[]>(['profile', 'addresses'], (old) =>
-        old?.map((a) => (a.id === id ? { ...a, ...input } : a))
+        old?.map((a) => {
+          if (a.id !== id) return a;
+          const merged = { ...a, ...input };
+          if (input.locationTypeId !== undefined) {
+            merged.locationType = (LOCATION_TYPES.find(t => t.id === input.locationTypeId)?.label || a.locationType) as LocationTypeLabel;
+          }
+          return merged;
+        })
       );
       return { previous };
     },

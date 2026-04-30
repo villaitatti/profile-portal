@@ -178,6 +178,7 @@ describe('PUT /contact/addresses/:id/preferred', () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.oldPrimaryId).toBe(2);
+    expect(res.body.oldPrimaryLocationType).toBe('Home');
     expect(mockService.setPreferredAddress).toHaveBeenCalledWith(42, 1);
   });
 });

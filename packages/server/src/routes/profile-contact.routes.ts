@@ -130,6 +130,12 @@ router.put('/addresses/:id', async (req, res) => {
     }
 
     const { streetAddress, supplementalAddress1, city, postalCode, stateProvinceId, countryId, locationTypeId } = req.body;
+
+    if (locationTypeId !== undefined && ![1, 2, 4, 5].includes(Number(locationTypeId))) {
+      res.status(400).json({ error: 'Location type must be Home (1), Work (2), Temporary (4), or Other (5)', code: 'VALIDATION_ERROR' });
+      return;
+    }
+
     const input: Record<string, unknown> = {};
     if (streetAddress !== undefined) input.streetAddress = String(streetAddress);
     if (supplementalAddress1 !== undefined) input.supplementalAddress1 = String(supplementalAddress1);

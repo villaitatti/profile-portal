@@ -4,7 +4,7 @@ export interface CiviCRMErrorResult {
   code: string;
 }
 
-const KNOWN_PATTERNS: Array<{ pattern: RegExp; message: string; code: string }> = [
+const KNOWN_PATTERNS: Array<{ pattern: RegExp; message: string; code: string; status?: number }> = [
   {
     pattern: /DB Error.*Duplicate entry/i,
     message: 'A record with this configuration already exists.',
@@ -19,6 +19,7 @@ const KNOWN_PATTERNS: Array<{ pattern: RegExp; message: string; code: string }> 
     pattern: /not found/i,
     message: 'The record was not found. It may have been deleted.',
     code: 'NOT_FOUND',
+    status: 404,
   },
   {
     pattern: /permission|unauthorized|access denied/i,
@@ -39,9 +40,9 @@ export function parseCiviCRMError(err: unknown, fallbackMessage: string): CiviCR
     return { status: 503, message: 'CiviCRM is temporarily unavailable. Please try again in a moment.', code: 'CIVICRM_TIMEOUT' };
   }
 
-  for (const { pattern, message, code } of KNOWN_PATTERNS) {
-    if (pattern.test(raw)) {
-      return { status: 400, message, code };
+  for (const entry of KNOWN_PATTERNS) {
+    if (entry.pattern.test(raw)) {
+      return { status: entry.status || 400, message: entry.message, code: entry.code };
     }
   }
 

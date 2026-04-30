@@ -100,7 +100,7 @@ export async function reclassifyAddress(
 
 // --- Location type fallback (shared) ---
 
-const LOCATION_TYPE_IDS_PHONE = [3, 1, 2, 4, 5];
+const LOCATION_TYPE_PRIORITY_ORDER = [3, 1, 2, 4, 5];
 
 async function pickLocationTypeId(
   entity: 'Address' | 'Phone',
@@ -114,7 +114,7 @@ async function pickLocationTypeId(
 
   const usedTypes = new Set(existing.values.map((r) => Number(r.location_type_id)));
 
-  for (const typeId of LOCATION_TYPE_IDS_PHONE) {
+  for (const typeId of LOCATION_TYPE_PRIORITY_ORDER) {
     if (!usedTypes.has(typeId)) return typeId;
   }
 

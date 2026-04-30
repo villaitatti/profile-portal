@@ -20,7 +20,7 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving }: A
   const [postalCode, setPostalCode] = useState('');
   const [countryId, setCountryId] = useState<number | undefined>(undefined);
   const [stateProvinceId, setStateProvinceId] = useState<number | undefined>(undefined);
-  const [locationTypeId, setLocationTypeId] = useState<number>(1);
+  const [locationTypeId, setLocationTypeId] = useState<number>(LOCATION_TYPES[0]?.id ?? 1);
 
   const { data: countries } = useCountries();
   const { data: states } = useStateProvinces(countryId);
@@ -49,7 +49,7 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving }: A
         setPostalCode('');
         setCountryId(undefined);
         setStateProvinceId(undefined);
-        setLocationTypeId(1);
+        setLocationTypeId(LOCATION_TYPES[0]?.id ?? 1);
       }
     }
   }, [open, address]);
@@ -97,11 +97,15 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving }: A
           </Dialog.Title>
 
           <form onSubmit={handleSubmit} className="mt-5 space-y-4">
-            <Field label="Type" required>
+            <fieldset>
+              <legend className="mb-1.5 text-sm font-medium text-foreground">
+                Type<span className="ml-0.5 text-destructive">*</span>
+              </legend>
               <div className="flex flex-wrap gap-3">
                 {LOCATION_TYPES.map((type) => (
-                  <label key={type.id} className="flex items-center gap-2 cursor-pointer">
+                  <label key={type.id} htmlFor={`location-type-${type.id}`} className="flex items-center gap-2 cursor-pointer">
                     <input
+                      id={`location-type-${type.id}`}
                       type="radio"
                       name="location-type"
                       value={type.id}
@@ -113,7 +117,7 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving }: A
                   </label>
                 ))}
               </div>
-            </Field>
+            </fieldset>
 
             <Field label="Street address" required>
               <input
