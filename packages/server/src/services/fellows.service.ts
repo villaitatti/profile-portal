@@ -415,6 +415,8 @@ export async function getFellowsDashboard(
       const contactForms = formInvitationsByContact.get(entry.civicrmId) ?? [];
       const formInvitations: FormInvitationSummaryEntry[] = contactForms.map((inv) => ({
         id: inv.id,
+        fellowshipId: inv.fellowshipId,
+        academicYear: inv.academicYear,
         formType: inv.formType,
         formTitle: getFormDef(inv.formType)?.title ?? inv.formType,
         status: inv.status as 'pending' | 'submitted' | 'expired',

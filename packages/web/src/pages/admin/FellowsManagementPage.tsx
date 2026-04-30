@@ -825,7 +825,9 @@ function FormLinkButton({ fellow }: { fellow: FellowDashboardEntry }) {
   const [copied, setCopied] = useState(false);
 
   const existingInvitation = fellow.formInvitations.find(
-    (inv) => inv.status === 'pending' || inv.status === 'submitted'
+    (inv) =>
+      inv.fellowshipId === fellow.fellowshipId &&
+      (inv.status === 'pending' || inv.status === 'submitted')
   );
 
   const formLink = existingInvitation
