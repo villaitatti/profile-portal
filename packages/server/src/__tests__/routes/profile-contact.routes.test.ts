@@ -25,6 +25,8 @@ vi.mock('../../services/contact-info.service.js', () => ({
   setPrimary: vi.fn(),
   setPreferredAddress: vi.fn(),
   reclassifyAddress: vi.fn(),
+  getUsedLocationTypes: vi.fn().mockResolvedValue([]),
+  isLocationTypeDuplicate: vi.fn().mockReturnValue(false),
   getPhones: vi.fn(),
   createPhone: vi.fn(),
   updatePhone: vi.fn(),
@@ -131,6 +133,25 @@ describe('PUT /contact/addresses/:id', () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(mockService.updateAddress).toHaveBeenCalledWith(1, expect.objectContaining({ city: 'Milan' }));
+  });
+
+  it('allows locationTypeId=Main (3) when address is primary', async () => {
+    mockService.verifyOwnership.mockResolvedValue(true);
+    mockService.isAddressPrimary.mockResolvedValue(true);
+    mockService.updateAddress.mockResolvedValue(undefined);
+    const app = makeApp('42');
+    const res = await request(app).put('/contact/addresses/1').send({ city: 'Milan', locationTypeId: 3 });
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+  });
+
+  it('rejects locationTypeId=Main (3) when address is not primary', async () => {
+    mockService.verifyOwnership.mockResolvedValue(true);
+    mockService.isAddressPrimary.mockResolvedValue(false);
+    const app = makeApp('42');
+    const res = await request(app).put('/contact/addresses/1').send({ city: 'Milan', locationTypeId: 3 });
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'Main type is reserved for the primary address', code: 'VALIDATION_ERROR' });
   });
 });
 
