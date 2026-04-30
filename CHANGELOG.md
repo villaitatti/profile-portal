@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.12.1] - 2026-04-30
+
+### Fixed
+- Server now rejects duplicate address location types (Home, Work, Temporary, Other) with a clear error message, matching CiviCRM's own constraint.
+- Unhandled async error when CiviCRM is unavailable during duplicate type check now returns a proper 503 response.
+
+### Changed
+- Address form disables location types already in use (shown as greyed-out with "(in use)" label).
+- "Add address" button hidden when all 4 location types are occupied.
+- Reclassify dialog after primary change now only shows available (unused) types.
+- Primary indicator copy replaced with star icon + explanatory text for both addresses and phone numbers.
+
 ## [0.12.0] - 2026-04-30
 
 ### Added

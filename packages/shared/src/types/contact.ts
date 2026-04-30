@@ -7,6 +7,10 @@ export const LOCATION_TYPES = [
 
 export const LOCATION_TYPE_MAIN_ID = 3;
 
+export const LOCATION_TYPE_LABELS: Record<number, string> = Object.fromEntries(
+  LOCATION_TYPES.map((t) => [t.id, t.label]),
+);
+
 export type LocationTypeLabel = 'Home' | 'Work' | 'Main' | 'Temporary' | 'Other';
 
 export interface CiviCRMAddress {

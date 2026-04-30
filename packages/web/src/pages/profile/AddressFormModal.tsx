@@ -11,9 +11,10 @@ interface AddressFormModalProps {
   onSave: (input: CreateAddressInput) => Promise<void>;
   address: CiviCRMAddress | null;
   isSaving: boolean;
+  usedLocationTypes: number[];
 }
 
-export function AddressFormModal({ open, onClose, onSave, address, isSaving }: AddressFormModalProps) {
+export function AddressFormModal({ open, onClose, onSave, address, isSaving, usedLocationTypes }: AddressFormModalProps) {
   const [streetAddress, setStreetAddress] = useState('');
   const [supplementalAddress1, setSupplementalAddress1] = useState('');
   const [city, setCity] = useState('');
@@ -49,10 +50,11 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving }: A
         setPostalCode('');
         setCountryId(undefined);
         setStateProvinceId(undefined);
-        setLocationTypeId(LOCATION_TYPES[0]?.id ?? 1);
+        const firstAvailable = LOCATION_TYPES.find((t) => !usedLocationTypes.includes(t.id));
+        setLocationTypeId(firstAvailable?.id ?? LOCATION_TYPES[0]?.id ?? 1);
       }
     }
-  }, [open, address]);
+  }, [open, address, usedLocationTypes]);
 
   function handleCountryChange(value: string) {
     setCountryId(Number(value));
@@ -102,20 +104,30 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving }: A
                 Type<span className="ml-0.5 text-destructive">*</span>
               </legend>
               <div className="flex flex-wrap gap-3">
-                {LOCATION_TYPES.map((type) => (
-                  <label key={type.id} htmlFor={`location-type-${type.id}`} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      id={`location-type-${type.id}`}
-                      type="radio"
-                      name="location-type"
-                      value={type.id}
-                      checked={locationTypeId === type.id}
-                      onChange={() => setLocationTypeId(type.id)}
-                      className="h-4 w-4 accent-primary"
-                    />
-                    <span className="text-[0.95rem] text-foreground">{type.label}</span>
-                  </label>
-                ))}
+                {LOCATION_TYPES.map((type) => {
+                  const isDisabled = usedLocationTypes.includes(type.id);
+                  return (
+                    <label
+                      key={type.id}
+                      htmlFor={`location-type-${type.id}`}
+                      className={`flex items-center gap-2 ${isDisabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+                    >
+                      <input
+                        id={`location-type-${type.id}`}
+                        type="radio"
+                        name="location-type"
+                        value={type.id}
+                        checked={locationTypeId === type.id}
+                        onChange={() => setLocationTypeId(type.id)}
+                        disabled={isDisabled}
+                        className="h-4 w-4 accent-primary"
+                      />
+                      <span className={`text-[0.95rem] ${isDisabled ? 'text-muted-foreground' : 'text-foreground'}`}>
+                        {type.label}{isDisabled ? ' (in use)' : ''}
+                      </span>
+                    </label>
+                  );
+                })}
               </div>
             </fieldset>
 

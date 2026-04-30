@@ -122,6 +122,31 @@ async function pickLocationTypeId(
   return LOCATION_TYPE_MAIN_ID;
 }
 
+// --- Duplicate location type check ---
+
+export async function getUsedLocationTypes(
+  entity: 'Address' | 'Phone',
+  contactId: number,
+  excludeRecordId?: number
+): Promise<number[]> {
+  const existing = await civiApiCall(entity, 'get', {
+    select: ['id', 'location_type_id'],
+    where: [['contact_id', '=', contactId]],
+    limit: 0,
+  });
+
+  return existing.values
+    .filter((r) => excludeRecordId === undefined || Number(r.id) !== excludeRecordId)
+    .map((r) => Number(r.location_type_id));
+}
+
+export function isLocationTypeDuplicate(
+  usedTypes: number[],
+  locationTypeId: number
+): boolean {
+  return usedTypes.includes(locationTypeId);
+}
+
 // --- Primary reconciliation (race-safe) ---
 
 async function reconcilePrimary(
