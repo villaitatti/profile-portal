@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { MapPin, Plus, Pencil, Trash2, RefreshCw } from 'lucide-react';
+import * as Dialog from '@radix-ui/react-dialog';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import {
@@ -8,8 +9,10 @@ import {
   useUpdateAddress,
   useDeleteAddress,
   useSetPreferredAddress,
+  useReclassifyAddress,
 } from '@/api/contact';
 import { AddressFormModal } from './AddressFormModal';
+import { LOCATION_TYPES } from '@itatti/shared';
 import type { CiviCRMAddress, CreateAddressInput, UpdateAddressInput } from '@itatti/shared';
 
 export function AddressSection() {
@@ -18,12 +21,12 @@ export function AddressSection() {
   const updateAddress = useUpdateAddress();
   const deleteAddress = useDeleteAddress();
   const setPreferred = useSetPreferredAddress();
+  const reclassify = useReclassifyAddress();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingAddress, setEditingAddress] = useState<CiviCRMAddress | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [reclassifyTarget, setReclassifyTarget] = useState<{ id: number; currentType: string } | null>(null);
 
   function handleAdd() {
     setEditingAddress(null);
@@ -36,35 +39,45 @@ export function AddressSection() {
   }
 
   async function handleSave(input: CreateAddressInput) {
-    try {
-      setSaveError(null);
-      if (editingAddress) {
-        const updateInput: UpdateAddressInput & { id: number } = { id: editingAddress.id, ...input };
-        await updateAddress.mutateAsync(updateInput);
-      } else {
-        await createAddress.mutateAsync(input);
-      }
-      setModalOpen(false);
-      setEditingAddress(null);
-    } catch {
-      setSaveError('Failed to save address. Please try again.');
+    if (editingAddress) {
+      const updateInput: UpdateAddressInput & { id: number } = { id: editingAddress.id, ...input };
+      await updateAddress.mutateAsync(updateInput);
+    } else {
+      await createAddress.mutateAsync(input);
     }
+    setModalOpen(false);
+    setEditingAddress(null);
   }
 
   async function handleDelete() {
     if (deletingId !== null) {
-      try {
-        setDeleteError(null);
-        await deleteAddress.mutateAsync(deletingId);
-        setDeletingId(null);
-      } catch {
-        setDeleteError('Failed to delete address. Please try again.');
-      }
+      await deleteAddress.mutateAsync(deletingId);
+      setDeletingId(null);
     }
   }
 
-  function handlePreferred(id: number) {
-    setPreferred.mutate(id);
+  async function handlePreferred(id: number) {
+    const result = await setPreferred.mutateAsync(id);
+    if (result.oldPrimaryId) {
+      setReclassifyTarget({
+        id: result.oldPrimaryId,
+        currentType: result.oldPrimaryLocationType || 'Main',
+      });
+    }
+  }
+
+  function handleReclassify(locationTypeId: number) {
+    if (reclassifyTarget) {
+      reclassify.mutate({ id: reclassifyTarget.id, locationTypeId });
+      setReclassifyTarget(null);
+    }
+  }
+
+  function handleReclassifyDismiss() {
+    if (reclassifyTarget) {
+      reclassify.mutate({ id: reclassifyTarget.id, locationTypeId: 1 });
+      setReclassifyTarget(null);
+    }
   }
 
   if (isLoading) {
@@ -114,7 +127,7 @@ export function AddressSection() {
       </div>
 
       <p className="mt-2 text-[0.88rem] leading-6 text-muted-foreground">
-        This is the address I Tatti would use if we need to send you anything by post.
+        Select a primary address — this is where I Tatti will send any postal correspondence.
       </p>
 
       {addresses && addresses.length === 0 ? (
@@ -128,17 +141,22 @@ export function AddressSection() {
           {addresses?.map((address) => (
             <div
               key={address.id}
-              className="rounded-lg border p-4"
+              className="rounded-lg border p-4 animate-in fade-in-0 slide-in-from-bottom-2 duration-200"
             >
-              <div className="text-[0.95rem] leading-6 text-foreground">
-                <p>{address.streetAddress}</p>
-                {address.supplementalAddress1 && <p>{address.supplementalAddress1}</p>}
-                <p>
-                  {[address.postalCode, address.city, address.stateProvince]
-                    .filter(Boolean)
-                    .join(', ')}
-                  {address.country && `, ${address.country}`}
-                </p>
+              <div className="flex items-start justify-between gap-3">
+                <div className="text-[0.95rem] leading-6 text-foreground">
+                  <p>{address.streetAddress}</p>
+                  {address.supplementalAddress1 && <p>{address.supplementalAddress1}</p>}
+                  <p>
+                    {[address.postalCode, address.city, address.stateProvince]
+                      .filter(Boolean)
+                      .join(', ')}
+                    {address.country && `, ${address.country}`}
+                  </p>
+                </div>
+                <span className="flex-shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.78rem] font-medium text-muted-foreground">
+                  {address.locationType}
+                </span>
               </div>
 
               <div className="mt-3 flex items-center justify-between">
@@ -151,7 +169,7 @@ export function AddressSection() {
                     className="h-4 w-4 text-primary accent-primary"
                   />
                   <span className={address.isPrimary ? 'font-medium text-primary' : 'text-muted-foreground'}>
-                    Send mail here
+                    Primary address
                   </span>
                 </label>
 
@@ -180,22 +198,75 @@ export function AddressSection() {
 
       <AddressFormModal
         open={modalOpen}
-        onClose={() => { setModalOpen(false); setEditingAddress(null); setSaveError(null); }}
+        onClose={() => { setModalOpen(false); setEditingAddress(null); }}
         onSave={handleSave}
         address={editingAddress}
         isSaving={createAddress.isPending || updateAddress.isPending}
-        error={saveError}
       />
 
       <ConfirmDialog
         open={deletingId !== null}
         onConfirm={handleDelete}
-        onCancel={() => { setDeletingId(null); setDeleteError(null); }}
+        onCancel={() => setDeletingId(null)}
         title="Delete address"
-        description={deleteError || 'Delete this address? This cannot be undone.'}
+        description="Delete this address? This cannot be undone."
         confirmLabel="Delete"
         variant="danger"
       />
+
+      <ReclassifyDialog
+        open={reclassifyTarget !== null}
+        currentType={reclassifyTarget?.currentType || ''}
+        onSelect={handleReclassify}
+        onDismiss={handleReclassifyDismiss}
+      />
     </div>
+  );
+}
+
+function ReclassifyDialog({
+  open,
+  currentType,
+  onSelect,
+  onDismiss,
+}: {
+  open: boolean;
+  currentType: string;
+  onSelect: (locationTypeId: number) => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <Dialog.Root open={open} onOpenChange={(isOpen: boolean) => { if (!isOpen) onDismiss(); }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgba(29,37,44,0.32)] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 duration-200" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-xl border bg-card p-7 shadow-lg data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=open]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.97] duration-200">
+          <Dialog.Title className="text-lg font-semibold tracking-tight text-foreground">
+            Reclassify previous address
+          </Dialog.Title>
+          <Dialog.Description className="mt-2 text-[0.88rem] leading-6 text-muted-foreground">
+            The previous primary address was labeled &ldquo;{currentType}&rdquo;. What type should it be now?
+          </Dialog.Description>
+
+          <div className="mt-5 grid grid-cols-2 gap-2">
+            {LOCATION_TYPES.map((type) => (
+              <button
+                key={type.id}
+                onClick={() => onSelect(type.id)}
+                className="rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              >
+                {type.label}
+              </button>
+            ))}
+          </div>
+
+          <button
+            onClick={onDismiss}
+            className="mt-3 w-full rounded-md border px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent"
+          >
+            Skip (default to Home)
+          </button>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }

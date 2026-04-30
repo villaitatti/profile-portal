@@ -8,7 +8,9 @@ import type {
   UpdatePhoneInput,
   CountryOption,
   StateProvinceOption,
+  LocationTypeLabel,
 } from '@itatti/shared';
+import { LOCATION_TYPE_MAIN_ID } from '@itatti/shared';
 
 // --- Ownership verification (shared) ---
 
@@ -39,9 +41,66 @@ export async function setPrimary(
   });
 }
 
+export interface SetPreferredAddressResult {
+  oldPrimaryId: number | null;
+  oldPrimaryLocationType: LocationTypeLabel | null;
+}
+
+export async function setPreferredAddress(
+  contactId: number,
+  newPrimaryId: number
+): Promise<SetPreferredAddressResult> {
+  const before = await civiApiCall('Address', 'get', {
+    select: ['id', 'is_primary', 'location_type_id'],
+    where: [['contact_id', '=', contactId]],
+    limit: 0,
+  });
+
+  const oldPrimary = before.values.find((a) => !!a.is_primary && Number(a.id) !== newPrimaryId);
+  const oldPrimaryId = oldPrimary ? Number(oldPrimary.id) : null;
+  const oldPrimaryLocationType = oldPrimary
+    ? (LOCATION_TYPE_LABELS[Number(oldPrimary.location_type_id)] || 'Other')
+    : null;
+
+  await civiApiCall('Address', 'update', {
+    where: [['id', '=', newPrimaryId]],
+    values: { is_primary: true, location_type_id: LOCATION_TYPE_MAIN_ID },
+  });
+
+  // Verify no duplicate primaries
+  const after = await civiApiCall('Address', 'get', {
+    select: ['id', 'is_primary'],
+    where: [['contact_id', '=', contactId]],
+    limit: 0,
+  });
+  const primaries = after.values.filter((a) => !!a.is_primary);
+  if (primaries.length > 1) {
+    for (const p of primaries) {
+      if (Number(p.id) !== newPrimaryId) {
+        await civiApiCall('Address', 'update', {
+          where: [['id', '=', Number(p.id)]],
+          values: { is_primary: false },
+        });
+      }
+    }
+  }
+
+  return { oldPrimaryId, oldPrimaryLocationType };
+}
+
+export async function reclassifyAddress(
+  recordId: number,
+  locationTypeId: number
+): Promise<void> {
+  await civiApiCall('Address', 'update', {
+    where: [['id', '=', recordId]],
+    values: { location_type_id: locationTypeId },
+  });
+}
+
 // --- Location type fallback (shared) ---
 
-const LOCATION_TYPE_IDS = [1, 2, 3, 4, 5];
+const LOCATION_TYPE_IDS_PHONE = [3, 1, 2, 4, 5];
 
 async function pickLocationTypeId(
   entity: 'Address' | 'Phone',
@@ -55,11 +114,12 @@ async function pickLocationTypeId(
 
   const usedTypes = new Set(existing.values.map((r) => Number(r.location_type_id)));
 
-  for (const typeId of LOCATION_TYPE_IDS) {
+  for (const typeId of LOCATION_TYPE_IDS_PHONE) {
     if (!usedTypes.has(typeId)) return typeId;
   }
 
-  return LOCATION_TYPE_IDS[0];
+  // All 5 standard types used — use Main as fallback (CiviCRM allows multiple if location differs)
+  return LOCATION_TYPE_MAIN_ID;
 }
 
 // --- Primary reconciliation (race-safe) ---
@@ -87,6 +147,14 @@ async function reconcilePrimary(
 
 // --- Address functions ---
 
+const LOCATION_TYPE_LABELS: Record<number, LocationTypeLabel> = {
+  1: 'Home',
+  2: 'Work',
+  3: 'Main',
+  4: 'Temporary',
+  5: 'Other',
+};
+
 export async function getAddresses(contactId: number): Promise<CiviCRMAddress[]> {
   const res = await civiApiCall('Address', 'get', {
     select: [
@@ -100,6 +168,7 @@ export async function getAddresses(contactId: number): Promise<CiviCRMAddress[]>
       'state_province_id:label',
       'country_id',
       'country_id:label',
+      'location_type_id',
       'is_primary',
     ],
     where: [['contact_id', '=', contactId]],
@@ -118,6 +187,8 @@ export async function getAddresses(contactId: number): Promise<CiviCRMAddress[]>
     stateProvince: a['state_province_id:label'] ? String(a['state_province_id:label']) : undefined,
     countryId: Number(a.country_id || 0),
     country: a['country_id:label'] ? String(a['country_id:label']) : undefined,
+    locationTypeId: Number(a.location_type_id || 1),
+    locationType: LOCATION_TYPE_LABELS[Number(a.location_type_id)] || 'Other',
     isPrimary: !!a.is_primary,
   }));
 }
@@ -126,7 +197,7 @@ export async function createAddress(
   contactId: number,
   input: CreateAddressInput
 ): Promise<CiviCRMAddress> {
-  const locationTypeId = await pickLocationTypeId('Address', contactId);
+  const locationTypeId = input.locationTypeId || await pickLocationTypeId('Address', contactId);
 
   const res = await civiApiCall('Address', 'create', {
     values: {
@@ -156,6 +227,8 @@ export async function createAddress(
     postalCode: input.postalCode,
     stateProvinceId: input.stateProvinceId,
     countryId: input.countryId,
+    locationTypeId,
+    locationType: LOCATION_TYPE_LABELS[locationTypeId] || 'Other',
     isPrimary,
   };
 }

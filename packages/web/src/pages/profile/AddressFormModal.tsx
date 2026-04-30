@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useCountries, useStateProvinces } from '@/api/contact';
 import { SearchableCombobox } from '@/components/shared/SearchableCombobox';
+import { LOCATION_TYPES } from '@itatti/shared';
 import type { CiviCRMAddress, CreateAddressInput } from '@itatti/shared';
 
 interface AddressFormModalProps {
@@ -10,16 +11,16 @@ interface AddressFormModalProps {
   onSave: (input: CreateAddressInput) => Promise<void>;
   address: CiviCRMAddress | null;
   isSaving: boolean;
-  error?: string | null;
 }
 
-export function AddressFormModal({ open, onClose, onSave, address, isSaving, error }: AddressFormModalProps) {
+export function AddressFormModal({ open, onClose, onSave, address, isSaving }: AddressFormModalProps) {
   const [streetAddress, setStreetAddress] = useState('');
   const [supplementalAddress1, setSupplementalAddress1] = useState('');
   const [city, setCity] = useState('');
   const [postalCode, setPostalCode] = useState('');
   const [countryId, setCountryId] = useState<number | undefined>(undefined);
   const [stateProvinceId, setStateProvinceId] = useState<number | undefined>(undefined);
+  const [locationTypeId, setLocationTypeId] = useState<number>(1);
 
   const { data: countries } = useCountries();
   const { data: states } = useStateProvinces(countryId);
@@ -40,6 +41,7 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving, err
         setPostalCode(address.postalCode || '');
         setCountryId(address.countryId);
         setStateProvinceId(address.stateProvinceId);
+        setLocationTypeId(address.locationTypeId || 1);
       } else {
         setStreetAddress('');
         setSupplementalAddress1('');
@@ -47,6 +49,7 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving, err
         setPostalCode('');
         setCountryId(undefined);
         setStateProvinceId(undefined);
+        setLocationTypeId(1);
       }
     }
   }, [open, address]);
@@ -67,6 +70,7 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving, err
       postalCode: postalCode || undefined,
       stateProvinceId,
       countryId,
+      locationTypeId,
     });
   }
 
@@ -93,6 +97,24 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving, err
           </Dialog.Title>
 
           <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+            <Field label="Type" required>
+              <div className="flex flex-wrap gap-3">
+                {LOCATION_TYPES.map((type) => (
+                  <label key={type.id} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="location-type"
+                      value={type.id}
+                      checked={locationTypeId === type.id}
+                      onChange={() => setLocationTypeId(type.id)}
+                      className="h-4 w-4 accent-primary"
+                    />
+                    <span className="text-[0.95rem] text-foreground">{type.label}</span>
+                  </label>
+                ))}
+              </div>
+            </Field>
+
             <Field label="Street address" required>
               <input
                 type="text"
@@ -156,12 +178,6 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving, err
                   placeholder="Select state/province"
                 />
               </Field>
-            )}
-
-            {error && (
-              <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                {error}
-              </p>
             )}
 
             <div className="flex justify-end gap-3 pt-2">

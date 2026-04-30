@@ -62,7 +62,8 @@ describe('getAddresses', () => {
       values: [{
         id: 1, contact_id: 42, street_address: '123 Main', supplemental_address_1: 'Apt 4',
         city: 'Florence', postal_code: '50135', state_province_id: 10,
-        'state_province_id:label': 'Toscana', country_id: 1107, 'country_id:label': 'Italy', is_primary: true,
+        'state_province_id:label': 'Toscana', country_id: 1107, 'country_id:label': 'Italy',
+        location_type_id: 1, is_primary: true,
       }],
     }));
 
@@ -70,7 +71,8 @@ describe('getAddresses', () => {
     expect(result).toEqual([{
       id: 1, contactId: 42, streetAddress: '123 Main', supplementalAddress1: 'Apt 4',
       city: 'Florence', postalCode: '50135', stateProvinceId: 10,
-      stateProvince: 'Toscana', countryId: 1107, country: 'Italy', isPrimary: true,
+      stateProvince: 'Toscana', countryId: 1107, country: 'Italy',
+      locationTypeId: 1, locationType: 'Home', isPrimary: true,
     }]);
   });
 
