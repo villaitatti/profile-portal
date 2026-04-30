@@ -26,7 +26,7 @@ export function AddressSection() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingAddress, setEditingAddress] = useState<CiviCRMAddress | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [reclassifyTarget, setReclassifyTarget] = useState<{ id: number; currentType: string } | null>(null);
+  const [reclassifyTarget, setReclassifyTarget] = useState<{ id: number; currentType: string; freedTypeId?: number } | null>(null);
 
   const usedLocationTypes = useMemo(() => {
     if (!addresses) return [];
@@ -78,11 +78,13 @@ export function AddressSection() {
 
   async function handlePreferred(id: number) {
     try {
+      const newPrimary = addresses?.find((a) => a.id === id);
       const result = await setPreferred.mutateAsync(id);
       if (result.oldPrimaryId) {
         setReclassifyTarget({
           id: result.oldPrimaryId,
           currentType: result.oldPrimaryLocationType || 'Main',
+          freedTypeId: newPrimary?.locationTypeId,
         });
       }
     } catch { /* handled by mutation onError */ }
@@ -97,7 +99,10 @@ export function AddressSection() {
 
   function handleReclassifyDismiss() {
     if (reclassifyTarget) {
-      const availableTypes = LOCATION_TYPES.filter((t) => !usedLocationTypes.includes(t.id));
+      const effectiveUsed = reclassifyTarget.freedTypeId
+        ? usedLocationTypes.filter((t) => t !== reclassifyTarget.freedTypeId)
+        : usedLocationTypes;
+      const availableTypes = LOCATION_TYPES.filter((t) => !effectiveUsed.includes(t.id));
       const defaultType = availableTypes[0]?.id ?? 1;
       reclassify.mutate({ id: reclassifyTarget.id, locationTypeId: defaultType });
       setReclassifyTarget(null);
@@ -245,7 +250,9 @@ export function AddressSection() {
       <ReclassifyDialog
         open={reclassifyTarget !== null}
         currentType={reclassifyTarget?.currentType || ''}
-        usedLocationTypes={usedLocationTypes}
+        usedLocationTypes={reclassifyTarget?.freedTypeId
+          ? usedLocationTypes.filter((t) => t !== reclassifyTarget.freedTypeId)
+          : usedLocationTypes}
         onSelect={handleReclassify}
         onSkip={handleReclassifyDismiss}
         onClose={() => setReclassifyTarget(null)}
