@@ -3,6 +3,7 @@ import { isDevMode } from '../env.js';
 import { logger } from '../lib/logger.js';
 import { parseCiviCRMError } from '../lib/civicrm-error.js';
 import * as contactInfoService from '../services/contact-info.service.js';
+import { LOCATION_TYPE_LABELS } from '@itatti/shared';
 import type {
   CiviCRMAddress,
   CiviCRMPhone,
@@ -95,7 +96,7 @@ router.post('/addresses', async (req, res) => {
     if (parsedLocationTypeId) {
       const usedTypes = await contactInfoService.getUsedLocationTypes('Address', contactId);
       if (contactInfoService.isLocationTypeDuplicate(usedTypes, parsedLocationTypeId)) {
-        const label = { 1: 'Home', 2: 'Work', 4: 'Temporary', 5: 'Other' }[parsedLocationTypeId] || 'this type';
+        const label = LOCATION_TYPE_LABELS[parsedLocationTypeId] || 'this type';
         res.status(400).json({
           error: `You already have a ${label} address. Please choose a different type.`,
           code: 'DUPLICATE_LOCATION_TYPE',
@@ -153,7 +154,7 @@ router.put('/addresses/:id', async (req, res) => {
     if (locationTypeId !== undefined) {
       const usedTypes = await contactInfoService.getUsedLocationTypes('Address', contactId, recordId);
       if (contactInfoService.isLocationTypeDuplicate(usedTypes, Number(locationTypeId))) {
-        const label = { 1: 'Home', 2: 'Work', 4: 'Temporary', 5: 'Other' }[Number(locationTypeId)] || 'this type';
+        const label = LOCATION_TYPE_LABELS[Number(locationTypeId)] || 'this type';
         res.status(400).json({
           error: `You already have a ${label} address. Please choose a different type.`,
           code: 'DUPLICATE_LOCATION_TYPE',
@@ -275,7 +276,7 @@ router.put('/addresses/:id/reclassify', async (req, res) => {
 
     const usedTypes = await contactInfoService.getUsedLocationTypes('Address', contactId, recordId);
     if (contactInfoService.isLocationTypeDuplicate(usedTypes, Number(locationTypeId))) {
-      const label = { 1: 'Home', 2: 'Work', 4: 'Temporary', 5: 'Other' }[Number(locationTypeId)] || 'this type';
+      const label = LOCATION_TYPE_LABELS[Number(locationTypeId)] || 'this type';
       res.status(400).json({
         error: `You already have a ${label} address. Please choose a different type.`,
         code: 'DUPLICATE_LOCATION_TYPE',
