@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { MapPin, Plus, Pencil, Trash2, RefreshCw } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { MapPin, Plus, Pencil, Trash2, RefreshCw, Star } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
@@ -12,7 +12,7 @@ import {
   useReclassifyAddress,
 } from '@/api/contact';
 import { AddressFormModal } from './AddressFormModal';
-import { LOCATION_TYPES } from '@itatti/shared';
+import { LOCATION_TYPES, LOCATION_TYPE_MAIN_ID } from '@itatti/shared';
 import type { CiviCRMAddress, CreateAddressInput, UpdateAddressInput } from '@itatti/shared';
 
 export function AddressSection() {
@@ -27,6 +27,22 @@ export function AddressSection() {
   const [editingAddress, setEditingAddress] = useState<CiviCRMAddress | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [reclassifyTarget, setReclassifyTarget] = useState<{ id: number; currentType: string } | null>(null);
+
+  const usedLocationTypes = useMemo(() => {
+    if (!addresses) return [];
+    return addresses
+      .filter((a) => a.locationTypeId !== LOCATION_TYPE_MAIN_ID)
+      .map((a) => a.locationTypeId);
+  }, [addresses]);
+
+  const allTypesUsed = useMemo(() => {
+    return LOCATION_TYPES.every((t) => usedLocationTypes.includes(t.id));
+  }, [usedLocationTypes]);
+
+  const modalUsedTypes = useMemo(() => {
+    if (!editingAddress) return usedLocationTypes;
+    return usedLocationTypes.filter((t) => t !== editingAddress.locationTypeId);
+  }, [usedLocationTypes, editingAddress]);
 
   function handleAdd() {
     setEditingAddress(null);
@@ -81,7 +97,9 @@ export function AddressSection() {
 
   function handleReclassifyDismiss() {
     if (reclassifyTarget) {
-      reclassify.mutate({ id: reclassifyTarget.id, locationTypeId: 1 });
+      const availableTypes = LOCATION_TYPES.filter((t) => !usedLocationTypes.includes(t.id));
+      const defaultType = availableTypes[0]?.id ?? 1;
+      reclassify.mutate({ id: reclassifyTarget.id, locationTypeId: defaultType });
       setReclassifyTarget(null);
     }
   }
@@ -123,17 +141,19 @@ export function AddressSection() {
           <MapPin className="h-5 w-5 text-muted-foreground" />
           <h2 className="text-lg font-semibold tracking-tight">Postal Addresses</h2>
         </div>
-        <button
-          onClick={handleAdd}
-          className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Add address
-        </button>
+        {!allTypesUsed && (
+          <button
+            onClick={handleAdd}
+            className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add address
+          </button>
+        )}
       </div>
 
       <p className="mt-2 text-[0.88rem] leading-6 text-muted-foreground">
-        Select a primary address — this is where I Tatti will send any postal correspondence.
+        <Star className="inline h-3.5 w-3.5 fill-primary text-primary -mt-0.5" /> primary address — where I Tatti will send any postal correspondence.
       </p>
 
       {addresses && addresses.length === 0 ? (
@@ -174,7 +194,8 @@ export function AddressSection() {
                     onChange={() => handlePreferred(address.id)}
                     className="h-4 w-4 text-primary accent-primary"
                   />
-                  <span className={address.isPrimary ? 'font-medium text-primary' : 'text-muted-foreground'}>
+                  <span className={`flex items-center gap-1 ${address.isPrimary ? 'font-medium text-primary' : 'text-muted-foreground'}`}>
+                    {address.isPrimary && <Star className="h-3.5 w-3.5 fill-current" />}
                     Primary address
                   </span>
                 </label>
@@ -208,6 +229,7 @@ export function AddressSection() {
         onSave={handleSave}
         address={editingAddress}
         isSaving={createAddress.isPending || updateAddress.isPending}
+        usedLocationTypes={modalUsedTypes}
       />
 
       <ConfirmDialog
@@ -223,6 +245,7 @@ export function AddressSection() {
       <ReclassifyDialog
         open={reclassifyTarget !== null}
         currentType={reclassifyTarget?.currentType || ''}
+        usedLocationTypes={usedLocationTypes}
         onSelect={handleReclassify}
         onSkip={handleReclassifyDismiss}
         onClose={() => setReclassifyTarget(null)}
@@ -234,16 +257,21 @@ export function AddressSection() {
 function ReclassifyDialog({
   open,
   currentType,
+  usedLocationTypes,
   onSelect,
   onSkip,
   onClose,
 }: {
   open: boolean;
   currentType: string;
+  usedLocationTypes: number[];
   onSelect: (locationTypeId: number) => void;
   onSkip: () => void;
   onClose: () => void;
 }) {
+  const availableTypes = LOCATION_TYPES.filter((t) => !usedLocationTypes.includes(t.id));
+  const defaultSkipType = availableTypes[0];
+
   return (
     <Dialog.Root open={open} onOpenChange={(isOpen: boolean) => { if (!isOpen) onClose(); }}>
       <Dialog.Portal>
@@ -257,7 +285,7 @@ function ReclassifyDialog({
           </Dialog.Description>
 
           <div className="mt-5 grid grid-cols-2 gap-2">
-            {LOCATION_TYPES.map((type) => (
+            {availableTypes.map((type) => (
               <button
                 key={type.id}
                 onClick={() => onSelect(type.id)}
@@ -268,12 +296,14 @@ function ReclassifyDialog({
             ))}
           </div>
 
-          <button
-            onClick={onSkip}
-            className="mt-3 w-full rounded-md border px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent"
-          >
-            Skip (default to Home)
-          </button>
+          {defaultSkipType && (
+            <button
+              onClick={onSkip}
+              className="mt-3 w-full rounded-md border px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent"
+            >
+              Skip (default to {defaultSkipType.label})
+            </button>
+          )}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

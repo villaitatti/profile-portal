@@ -89,17 +89,31 @@ router.post('/addresses', async (req, res) => {
     return;
   }
 
-  const input: CreateAddressInput = {
-    streetAddress,
-    supplementalAddress1: supplementalAddress1 || undefined,
-    city,
-    postalCode: postalCode || undefined,
-    stateProvinceId: stateProvinceId ? Number(stateProvinceId) : undefined,
-    countryId: Number(countryId),
-    locationTypeId: locationTypeId ? Number(locationTypeId) : undefined,
-  };
+  const parsedLocationTypeId = locationTypeId ? Number(locationTypeId) : undefined;
 
   try {
+    if (parsedLocationTypeId) {
+      const usedTypes = await contactInfoService.getUsedLocationTypes('Address', contactId);
+      if (contactInfoService.isLocationTypeDuplicate(usedTypes, parsedLocationTypeId)) {
+        const label = { 1: 'Home', 2: 'Work', 4: 'Temporary', 5: 'Other' }[parsedLocationTypeId] || 'this type';
+        res.status(400).json({
+          error: `You already have a ${label} address. Please choose a different type.`,
+          code: 'DUPLICATE_LOCATION_TYPE',
+        });
+        return;
+      }
+    }
+
+    const input: CreateAddressInput = {
+      streetAddress,
+      supplementalAddress1: supplementalAddress1 || undefined,
+      city,
+      postalCode: postalCode || undefined,
+      stateProvinceId: stateProvinceId ? Number(stateProvinceId) : undefined,
+      countryId: Number(countryId),
+      locationTypeId: parsedLocationTypeId,
+    };
+
     const created = await contactInfoService.createAddress(contactId, input);
     res.status(201).json(created);
   } catch (err) {
@@ -134,6 +148,18 @@ router.put('/addresses/:id', async (req, res) => {
     if (locationTypeId !== undefined && ![1, 2, 4, 5].includes(Number(locationTypeId))) {
       res.status(400).json({ error: 'Location type must be Home (1), Work (2), Temporary (4), or Other (5)', code: 'VALIDATION_ERROR' });
       return;
+    }
+
+    if (locationTypeId !== undefined) {
+      const usedTypes = await contactInfoService.getUsedLocationTypes('Address', contactId, recordId);
+      if (contactInfoService.isLocationTypeDuplicate(usedTypes, Number(locationTypeId))) {
+        const label = { 1: 'Home', 2: 'Work', 4: 'Temporary', 5: 'Other' }[Number(locationTypeId)] || 'this type';
+        res.status(400).json({
+          error: `You already have a ${label} address. Please choose a different type.`,
+          code: 'DUPLICATE_LOCATION_TYPE',
+        });
+        return;
+      }
     }
 
     const input: Record<string, unknown> = {};
@@ -244,6 +270,16 @@ router.put('/addresses/:id/reclassify', async (req, res) => {
     const owned = await contactInfoService.verifyOwnership('Address', recordId, contactId);
     if (!owned) {
       res.status(403).json({ error: 'Forbidden', code: 'FORBIDDEN' });
+      return;
+    }
+
+    const usedTypes = await contactInfoService.getUsedLocationTypes('Address', contactId, recordId);
+    if (contactInfoService.isLocationTypeDuplicate(usedTypes, Number(locationTypeId))) {
+      const label = { 1: 'Home', 2: 'Work', 4: 'Temporary', 5: 'Other' }[Number(locationTypeId)] || 'this type';
+      res.status(400).json({
+        error: `You already have a ${label} address. Please choose a different type.`,
+        code: 'DUPLICATE_LOCATION_TYPE',
+      });
       return;
     }
 

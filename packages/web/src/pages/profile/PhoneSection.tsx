@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Phone, Plus, Pencil, Trash2, RefreshCw } from 'lucide-react';
+import { Phone, Plus, Pencil, Trash2, RefreshCw, Star } from 'lucide-react';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import {
@@ -111,7 +111,7 @@ export function PhoneSection() {
       </div>
 
       <p className="mt-2 text-[0.88rem] leading-6 text-muted-foreground">
-        Select a primary number — this is how I Tatti will reach you by phone if needed.
+        <Star className="inline h-3.5 w-3.5 fill-primary text-primary -mt-0.5" /> primary number — how I Tatti will reach you by phone if needed.
       </p>
 
       {phones && phones.length === 0 ? (
@@ -143,7 +143,8 @@ export function PhoneSection() {
                     onChange={() => handlePreferred(phone.id)}
                     className="h-4 w-4 text-primary accent-primary"
                   />
-                  <span className={phone.isPrimary ? 'font-medium text-primary' : 'text-muted-foreground'}>
+                  <span className={`flex items-center gap-1 ${phone.isPrimary ? 'font-medium text-primary' : 'text-muted-foreground'}`}>
+                    {phone.isPrimary && <Star className="h-3.5 w-3.5 fill-current" />}
                     Primary number
                   </span>
                 </label>
