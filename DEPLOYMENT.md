@@ -89,11 +89,14 @@ The appointee email system covers both the **bio & project description** email (
 | `APPOINTEE_EMAIL_BCC` | optional, suppressed automatically when redirect is active | optional |
 | `APPOINTEE_EMAIL_FROM_NAME_VIT_ID` | `I Tatti - VIT ID` (default) | `I Tatti - VIT ID` (default) |
 | `APPOINTEE_EMAIL_FROM_NAME_BIO` | `I Tatti - Bio & Project` (default) | `I Tatti - Bio & Project` (default) |
+| `FORM_NOTIFICATION_EMAIL` | VIT ID staff inbox (e.g. `angela@…`) | VIT ID staff inbox |
 | `FORM_NOTIFICATION_OVERRIDE_TO` | developer inbox (e.g. `andrea@…`) | **unset** |
 
 The server refuses to start if `APPOINTEE_EMAIL_REDIRECT_TO` is set under `NODE_ENV=production` without `APPOINTEE_EMAIL_ALLOW_REDIRECT=true`. This is an intentional guard against accidentally leaving the redirect on in real production.
 
-`FORM_NOTIFICATION_OVERRIDE_TO` redirects the form-submission notification email (sent to admins when an appointee submits a form) to a specific address. When set, the email bypasses the dev-mode skip and always sends. Useful for testing the notification flow locally without needing real admin recipients.
+`FORM_NOTIFICATION_EMAIL` is the production recipient for form-submission notifications (sent to VIT ID staff when an appointee submits a form). This is separate from `ADMIN_NOTIFICATION_EMAIL` which goes to IT.
+
+`FORM_NOTIFICATION_OVERRIDE_TO` redirects form notifications to a specific address for dev/staging testing. When set, the email bypasses the dev-mode skip and always sends, regardless of `FORM_NOTIFICATION_EMAIL`.
 
 The cron dispatches **only** bio-email rows; VIT ID invitations are manual-send-only. `CLAIM_VIT_ID_URL` and `PORTAL_PUBLIC_URL` are required for the invitation email's CTA and logo asset respectively — the server refuses to start without them.
 

@@ -123,8 +123,11 @@ const envSchema = z.object({
   APPOINTEE_EMAIL_FROM_NAME_VIT_ID: z.string().min(1).default('I Tatti - VIT ID'),
   APPOINTEE_EMAIL_FROM_NAME_BIO: z.string().min(1).default('I Tatti - Bio & Project'),
 
-  // Form notification override: when set, form submission notification emails
-  // go to this address instead of ADMIN_NOTIFICATION_EMAIL, even in dev mode.
+  // Form submission notifications — sent to VIT ID staff (not IT).
+  // Required for form notification emails to be sent in production.
+  FORM_NOTIFICATION_EMAIL: z.string().email().optional().or(z.literal('')),
+  // Dev/staging override: when set, form notification emails go to this address
+  // instead of FORM_NOTIFICATION_EMAIL, bypassing the dev-mode skip.
   // Allows testing the full email+PDF flow locally without touching production.
   FORM_NOTIFICATION_OVERRIDE_TO: z.string().email().optional().or(z.literal('')),
 });

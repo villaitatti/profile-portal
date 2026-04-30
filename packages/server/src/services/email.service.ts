@@ -432,13 +432,14 @@ export interface FormNotificationEmailInput {
 
 export async function sendFormNotificationEmail(input: FormNotificationEmailInput): Promise<void> {
   const overrideTo = env.FORM_NOTIFICATION_OVERRIDE_TO?.trim();
+  const formRecipient = env.FORM_NOTIFICATION_EMAIL?.trim();
 
-  if (!overrideTo && !isAdminNotificationEmailConfigured()) {
-    logger.warn('Skipping form notification email: admin email not configured');
+  if (!overrideTo && !formRecipient) {
+    logger.warn('Skipping form notification email: FORM_NOTIFICATION_EMAIL not configured');
     return;
   }
 
-  const recipient = overrideTo || env.ADMIN_NOTIFICATION_EMAIL!;
+  const recipient = overrideTo || formRecipient!;
 
   const subject = `Form Submitted: ${input.formTitle} — Fellowship ${input.fellowshipId} (${input.academicYear})`;
 
