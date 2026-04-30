@@ -1,3 +1,4 @@
+import { useAuth0 } from '@auth0/auth0-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { useProfile } from '@/api/profile';
@@ -7,6 +8,7 @@ import { AddressSection } from './AddressSection';
 import { PhoneSection } from './PhoneSection';
 
 export function ProfilePage() {
+  const { user } = useAuth0();
   const { data: profile, isLoading, error } = useProfile();
 
   if (isLoading) return <ProfilePageSkeleton />;
@@ -32,9 +34,18 @@ export function ProfilePage() {
             <User className="h-5 w-5 text-muted-foreground" />
             <h2 className="text-lg font-semibold tracking-tight">Name</h2>
           </div>
-          <p className="mt-4 text-base text-foreground">
-            {[profile?.firstName, profile?.lastName].filter(Boolean).join(' ') || '—'}
-          </p>
+          <div className="mt-4 flex items-center gap-4">
+            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
+              {profile?.imageUrl || user?.picture ? (
+                <img src={profile?.imageUrl || user?.picture} alt="" className="h-12 w-12 rounded-full object-cover" />
+              ) : (
+                <User className="h-6 w-6 text-primary" />
+              )}
+            </div>
+            <p className="text-base font-medium text-foreground">
+              {[profile?.firstName, profile?.lastName].filter(Boolean).join(' ') || '—'}
+            </p>
+          </div>
         </div>
 
         <EmailSection email={profile?.email} />

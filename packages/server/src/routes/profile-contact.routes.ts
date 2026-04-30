@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { isDevMode } from '../env.js';
 import { logger } from '../lib/logger.js';
+import { parseCiviCRMError } from '../lib/civicrm-error.js';
 import * as contactInfoService from '../services/contact-info.service.js';
 import type {
   CiviCRMAddress,
@@ -31,6 +32,8 @@ router.get('/addresses', async (req, res) => {
         postalCode: '50135',
         countryId: 1107,
         country: 'Italy',
+        locationTypeId: 3,
+        locationType: 'Main',
         isPrimary: true,
       },
       {
@@ -43,6 +46,8 @@ router.get('/addresses', async (req, res) => {
         stateProvince: 'Massachusetts',
         countryId: 1228,
         country: 'United States',
+        locationTypeId: 1,
+        locationType: 'Home',
         isPrimary: false,
       },
     ];
@@ -72,10 +77,15 @@ router.post('/addresses', async (req, res) => {
     return;
   }
 
-  const { streetAddress, supplementalAddress1, city, postalCode, stateProvinceId, countryId } = req.body;
+  const { streetAddress, supplementalAddress1, city, postalCode, stateProvinceId, countryId, locationTypeId } = req.body;
 
   if (!streetAddress || !city || !countryId) {
     res.status(400).json({ error: 'Street address, city, and country are required', code: 'VALIDATION_ERROR' });
+    return;
+  }
+
+  if (locationTypeId !== undefined && ![1, 2, 4, 5].includes(Number(locationTypeId))) {
+    res.status(400).json({ error: 'Location type must be Home (1), Work (2), Temporary (4), or Other (5)', code: 'VALIDATION_ERROR' });
     return;
   }
 
@@ -86,6 +96,7 @@ router.post('/addresses', async (req, res) => {
     postalCode: postalCode || undefined,
     stateProvinceId: stateProvinceId ? Number(stateProvinceId) : undefined,
     countryId: Number(countryId),
+    locationTypeId: locationTypeId ? Number(locationTypeId) : undefined,
   };
 
   try {
@@ -93,7 +104,8 @@ router.post('/addresses', async (req, res) => {
     res.status(201).json(created);
   } catch (err) {
     logger.error({ err, contactId }, 'Failed to create address');
-    res.status(503).json({ error: 'Failed to create address', code: 'CIVICRM_UNAVAILABLE' });
+    const parsed = parseCiviCRMError(err, 'Failed to create address. Please try again.');
+    res.status(parsed.status).json({ error: parsed.message, code: parsed.code });
   }
 });
 
@@ -117,7 +129,13 @@ router.put('/addresses/:id', async (req, res) => {
       return;
     }
 
-    const { streetAddress, supplementalAddress1, city, postalCode, stateProvinceId, countryId } = req.body;
+    const { streetAddress, supplementalAddress1, city, postalCode, stateProvinceId, countryId, locationTypeId } = req.body;
+
+    if (locationTypeId !== undefined && ![1, 2, 4, 5].includes(Number(locationTypeId))) {
+      res.status(400).json({ error: 'Location type must be Home (1), Work (2), Temporary (4), or Other (5)', code: 'VALIDATION_ERROR' });
+      return;
+    }
+
     const input: Record<string, unknown> = {};
     if (streetAddress !== undefined) input.streetAddress = String(streetAddress);
     if (supplementalAddress1 !== undefined) input.supplementalAddress1 = String(supplementalAddress1);
@@ -125,12 +143,14 @@ router.put('/addresses/:id', async (req, res) => {
     if (postalCode !== undefined) input.postalCode = String(postalCode);
     if (stateProvinceId !== undefined) input.stateProvinceId = stateProvinceId ? Number(stateProvinceId) : undefined;
     if (countryId !== undefined) input.countryId = Number(countryId);
+    if (locationTypeId !== undefined) input.locationTypeId = Number(locationTypeId);
 
     await contactInfoService.updateAddress(recordId, input);
     res.json({ success: true });
   } catch (err) {
     logger.error({ err, contactId, recordId }, 'Failed to update address');
-    res.status(503).json({ error: 'Failed to update address', code: 'CIVICRM_UNAVAILABLE' });
+    const parsed = parseCiviCRMError(err, 'Failed to update address. Please try again.');
+    res.status(parsed.status).json({ error: parsed.message, code: parsed.code });
   }
 });
 
@@ -167,7 +187,8 @@ router.delete('/addresses/:id', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     logger.error({ err, contactId, recordId }, 'Failed to delete address');
-    res.status(503).json({ error: 'Failed to delete address', code: 'CIVICRM_UNAVAILABLE' });
+    const parsed = parseCiviCRMError(err, 'Failed to delete address. Please try again.');
+    res.status(parsed.status).json({ error: parsed.message, code: parsed.code });
   }
 });
 
@@ -191,11 +212,47 @@ router.put('/addresses/:id/preferred', async (req, res) => {
       return;
     }
 
-    await contactInfoService.setPrimary('Address', recordId);
-    res.json({ success: true });
+    const result = await contactInfoService.setPreferredAddress(contactId, recordId);
+    res.json({ success: true, ...result });
   } catch (err) {
     logger.error({ err, contactId, recordId }, 'Failed to set preferred address');
-    res.status(503).json({ error: 'Failed to set preferred address', code: 'CIVICRM_UNAVAILABLE' });
+    const parsed = parseCiviCRMError(err, 'Failed to set preferred address. Please try again.');
+    res.status(parsed.status).json({ error: parsed.message, code: parsed.code });
+  }
+});
+
+router.put('/addresses/:id/reclassify', async (req, res) => {
+  const contactId = getCivicrmId(req);
+  if (!contactId) {
+    res.status(400).json({ error: 'Missing CiviCRM contact ID', code: 'NO_CIVICRM_ID' });
+    return;
+  }
+
+  const recordId = Number(req.params.id);
+  if (!Number.isFinite(recordId)) {
+    res.status(400).json({ error: 'Invalid address ID', code: 'VALIDATION_ERROR' });
+    return;
+  }
+
+  const { locationTypeId } = req.body;
+  if (!locationTypeId || ![1, 2, 4, 5].includes(Number(locationTypeId))) {
+    res.status(400).json({ error: 'Location type must be Home (1), Work (2), Temporary (4), or Other (5)', code: 'VALIDATION_ERROR' });
+    return;
+  }
+
+  try {
+    const owned = await contactInfoService.verifyOwnership('Address', recordId, contactId);
+    if (!owned) {
+      res.status(403).json({ error: 'Forbidden', code: 'FORBIDDEN' });
+      return;
+    }
+
+    await contactInfoService.reclassifyAddress(recordId, Number(locationTypeId));
+    res.json({ success: true });
+  } catch (err) {
+    logger.warn({ err, contactId, recordId }, 'Failed to reclassify address');
+    const parsed = parseCiviCRMError(err, 'Could not update address type. You can edit it manually.');
+    res.status(parsed.status).json({ error: parsed.message, code: parsed.code });
   }
 });
 
@@ -273,7 +330,8 @@ router.post('/phones', async (req, res) => {
     res.status(201).json(created);
   } catch (err) {
     logger.error({ err, contactId }, 'Failed to create phone');
-    res.status(503).json({ error: 'Failed to create phone', code: 'CIVICRM_UNAVAILABLE' });
+    const parsed = parseCiviCRMError(err, 'Failed to save phone number. Please try again.');
+    res.status(parsed.status).json({ error: parsed.message, code: parsed.code });
   }
 });
 
@@ -321,7 +379,8 @@ router.put('/phones/:id', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     logger.error({ err, contactId, recordId }, 'Failed to update phone');
-    res.status(503).json({ error: 'Failed to update phone', code: 'CIVICRM_UNAVAILABLE' });
+    const parsed = parseCiviCRMError(err, 'Failed to update phone number. Please try again.');
+    res.status(parsed.status).json({ error: parsed.message, code: parsed.code });
   }
 });
 
@@ -358,7 +417,8 @@ router.delete('/phones/:id', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     logger.error({ err, contactId, recordId }, 'Failed to delete phone');
-    res.status(503).json({ error: 'Failed to delete phone', code: 'CIVICRM_UNAVAILABLE' });
+    const parsed = parseCiviCRMError(err, 'Failed to delete phone number. Please try again.');
+    res.status(parsed.status).json({ error: parsed.message, code: parsed.code });
   }
 });
 
@@ -386,7 +446,8 @@ router.put('/phones/:id/preferred', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     logger.error({ err, contactId, recordId }, 'Failed to set preferred phone');
-    res.status(503).json({ error: 'Failed to set preferred phone', code: 'CIVICRM_UNAVAILABLE' });
+    const parsed = parseCiviCRMError(err, 'Failed to set preferred phone number. Please try again.');
+    res.status(parsed.status).json({ error: parsed.message, code: parsed.code });
   }
 });
 

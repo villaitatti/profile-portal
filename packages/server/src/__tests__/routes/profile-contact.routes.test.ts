@@ -23,6 +23,8 @@ vi.mock('../../services/contact-info.service.js', () => ({
   verifyOwnership: vi.fn(),
   isAddressPrimary: vi.fn(),
   setPrimary: vi.fn(),
+  setPreferredAddress: vi.fn(),
+  reclassifyAddress: vi.fn(),
   getPhones: vi.fn(),
   createPhone: vi.fn(),
   updatePhone: vi.fn(),
@@ -64,7 +66,7 @@ describe('GET /contact/addresses', () => {
 
   it('returns addresses for valid contact', async () => {
     mockService.getAddresses.mockResolvedValue([
-      { id: 1, contactId: 42, streetAddress: '123 Main', city: 'Florence', countryId: 1107, isPrimary: true },
+      { id: 1, contactId: 42, streetAddress: '123 Main', city: 'Florence', countryId: 1107, locationTypeId: 3, locationType: 'Main' as const, isPrimary: true },
     ]);
     const app = makeApp('42');
     const res = await request(app).get('/contact/addresses');
@@ -92,7 +94,7 @@ describe('POST /contact/addresses', () => {
 
   it('creates address with valid input', async () => {
     mockService.createAddress.mockResolvedValue({
-      id: 10, contactId: 42, streetAddress: '1 Via Roma', city: 'Rome', countryId: 1107, isPrimary: true,
+      id: 10, contactId: 42, streetAddress: '1 Via Roma', city: 'Rome', countryId: 1107, locationTypeId: 3, locationType: 'Main' as const, isPrimary: true,
     });
     const app = makeApp('42');
     const res = await request(app).post('/contact/addresses').send({
@@ -170,11 +172,14 @@ describe('PUT /contact/addresses/:id/preferred', () => {
 
   it('sets preferred address when owned', async () => {
     mockService.verifyOwnership.mockResolvedValue(true);
-    mockService.setPrimary.mockResolvedValue(undefined);
+    mockService.setPreferredAddress.mockResolvedValue({ oldPrimaryId: 2, oldPrimaryLocationType: 'Home' });
     const app = makeApp('42');
     const res = await request(app).put('/contact/addresses/1/preferred');
     expect(res.status).toBe(200);
-    expect(mockService.setPrimary).toHaveBeenCalledWith('Address', 1);
+    expect(res.body.success).toBe(true);
+    expect(res.body.oldPrimaryId).toBe(2);
+    expect(res.body.oldPrimaryLocationType).toBe('Home');
+    expect(mockService.setPreferredAddress).toHaveBeenCalledWith(42, 1);
   });
 });
 

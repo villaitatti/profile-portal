@@ -27,8 +27,6 @@ export function PhoneSection() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingPhone, setEditingPhone] = useState<CiviCRMPhone | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
 
   function handleAdd() {
     setEditingPhone(null);
@@ -42,7 +40,6 @@ export function PhoneSection() {
 
   async function handleSave(input: CreatePhoneInput) {
     try {
-      setSaveError(null);
       if (editingPhone) {
         const updateInput: UpdatePhoneInput & { id: number } = { id: editingPhone.id, ...input };
         await updatePhone.mutateAsync(updateInput);
@@ -51,20 +48,15 @@ export function PhoneSection() {
       }
       setModalOpen(false);
       setEditingPhone(null);
-    } catch {
-      setSaveError('Failed to save phone number. Please try again.');
-    }
+    } catch { /* handled by mutation onError */ }
   }
 
   async function handleDelete() {
     if (deletingId !== null) {
       try {
-        setDeleteError(null);
         await deletePhone.mutateAsync(deletingId);
         setDeletingId(null);
-      } catch {
-        setDeleteError('Failed to delete phone number. Please try again.');
-      }
+      } catch { /* handled by mutation onError */ }
     }
   }
 
@@ -119,7 +111,7 @@ export function PhoneSection() {
       </div>
 
       <p className="mt-2 text-[0.88rem] leading-6 text-muted-foreground">
-        Phone numbers where I Tatti can reach you if needed.
+        Select a primary number — this is how I Tatti will reach you by phone if needed.
       </p>
 
       {phones && phones.length === 0 ? (
@@ -133,7 +125,7 @@ export function PhoneSection() {
           {phones?.map((phone) => (
             <div
               key={phone.id}
-              className="rounded-lg border p-4"
+              className="rounded-lg border p-4 animate-in fade-in-0 slide-in-from-bottom-2 duration-200"
             >
               <div className="flex items-center gap-3">
                 <span className="text-[0.95rem] leading-6 text-foreground">{phone.phone}</span>
@@ -152,7 +144,7 @@ export function PhoneSection() {
                     className="h-4 w-4 text-primary accent-primary"
                   />
                   <span className={phone.isPrimary ? 'font-medium text-primary' : 'text-muted-foreground'}>
-                    Call this number
+                    Primary number
                   </span>
                 </label>
 
@@ -181,19 +173,18 @@ export function PhoneSection() {
 
       <PhoneFormModal
         open={modalOpen}
-        onClose={() => { setModalOpen(false); setEditingPhone(null); setSaveError(null); }}
+        onClose={() => { setModalOpen(false); setEditingPhone(null); }}
         onSave={handleSave}
         phone={editingPhone}
         isSaving={createPhone.isPending || updatePhone.isPending}
-        error={saveError}
       />
 
       <ConfirmDialog
         open={deletingId !== null}
         onConfirm={handleDelete}
-        onCancel={() => { setDeletingId(null); setDeleteError(null); }}
+        onCancel={() => setDeletingId(null)}
         title="Delete phone number"
-        description={deleteError || 'Delete this phone number? This cannot be undone.'}
+        description="Delete this phone number? This cannot be undone."
         confirmLabel="Delete"
         variant="danger"
       />

@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.12.0] - 2026-04-30
+
+### Added
+- **Location type system.** Users select Home, Work, Temporary, or Other when adding an address. The primary address is automatically labeled "Main" in CiviCRM. When switching primary, a reclassify dialog prompts the user to re-label the old primary.
+- **CiviCRM error parsing utility.** All API errors now surface user-friendly messages instead of raw CiviCRM responses (duplicate entry, permission denied, not found).
+- **Primary integrity guarantee.** After setting a new primary address, the system verifies no duplicate primaries exist in CiviCRM and cleans up if found.
+- Toast notifications on all contact mutations (success and error feedback).
+- Card entry animations (fade-in + slide-up) for addresses and phone numbers.
+- Profile avatar display in the name card.
+
+### Changed
+- Address and phone section copy revised to explain what "primary" means for I Tatti correspondence.
+- Address edit form now persists location type changes.
+- Optimistic UI for address creation now shows the correct location type badge immediately.
+
+### Fixed
+- Unhandled promise rejections in address/phone action handlers.
+
 ## [0.11.1] - 2026-04-29
 
 ### Changed

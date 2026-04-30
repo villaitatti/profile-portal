@@ -8,7 +8,6 @@ interface PhoneFormModalProps {
   onSave: (input: CreatePhoneInput) => Promise<void>;
   phone: CiviCRMPhone | null;
   isSaving: boolean;
-  error?: string | null;
 }
 
 const PHONE_TYPES = [
@@ -16,7 +15,7 @@ const PHONE_TYPES = [
   { id: 2, label: 'Mobile' },
 ];
 
-export function PhoneFormModal({ open, onClose, onSave, phone, isSaving, error }: PhoneFormModalProps) {
+export function PhoneFormModal({ open, onClose, onSave, phone, isSaving }: PhoneFormModalProps) {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [phoneTypeId, setPhoneTypeId] = useState(1);
 
@@ -84,12 +83,6 @@ export function PhoneFormModal({ open, onClose, onSave, phone, isSaving, error }
                 ))}
               </div>
             </fieldset>
-
-            {error && (
-              <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                {error}
-              </p>
-            )}
 
             <div className="flex justify-end gap-3 pt-2">
               <button
