@@ -217,6 +217,7 @@ export async function getFellowsDashboard(
           appointment: f.appointment,
           fellowship: f.fellowship,
           fellowshipYear: yearLabel,
+          fellowshipId: f.fellowshipId,
         },
         latestStart: f.startDate,
         displayFellowshipId: f.fellowshipId,
@@ -237,6 +238,7 @@ export async function getFellowsDashboard(
           appointment: f.appointment,
           fellowship: f.fellowship,
           fellowshipYear: yearLabel,
+          fellowshipId: f.fellowshipId,
         };
         existing.latestStart = f.startDate;
         existing.displayFellowshipId = f.fellowshipId;

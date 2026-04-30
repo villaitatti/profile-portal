@@ -147,6 +147,7 @@ export interface FellowDashboardEntry {
   appointment?: string;
   fellowship?: string;
   fellowshipYear: string;
+  fellowshipId: number;
   status: VitIdStatus;
   matchedVia?: MatchedVia;
   matched?: Auth0Candidate;
