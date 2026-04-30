@@ -19,6 +19,7 @@ import {
   type EmailPreviewReason,
   type EmailPreviewType,
 } from '@/api/fellows';
+import { useGenerateFormInvitation } from '@/api/forms';
 import { getCurrentAcademicYear } from './utils/academic-year';
 import {
   Users,
@@ -33,6 +34,9 @@ import {
   UserPlus,
   Loader2,
   Repeat2,
+  FileText,
+  Copy,
+  Check,
 } from 'lucide-react';
 import type {
   FellowDashboardEntry,
@@ -244,7 +248,7 @@ export function FellowsManagementPage() {
           }
         />
       ) : (
-        <FellowsTable fellows={filteredFellows} />
+        <FellowsTable fellows={filteredFellows} paginate={!selectedYear} />
       )}
     </div>
   );
@@ -461,7 +465,7 @@ type SortField =
   | 'status'
   | 'bioEmail';
 type SortDir = 'asc' | 'desc';
-const FELLOWS_PER_PAGE = 25;
+const FELLOWS_PER_PAGE = 50;
 
 /**
  * Which email the preview modal is set up for. Null = closed.
@@ -472,7 +476,7 @@ type ActiveSend = {
   mode?: 'send' | 'resend';
 };
 
-function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
+function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEntry[]; paginate: boolean }) {
   // Default sort: appointment asc → lastName asc. Groups fellows by role type
   // (Fellow, Visiting Fellow, Visiting Professor, ...), then alphabetical
   // within each group. Amber/red badges carry the attention signal.
@@ -570,8 +574,10 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
     });
   }, [fellows, sortField, sortDir]);
 
-  const totalPages = Math.ceil(sorted.length / FELLOWS_PER_PAGE);
-  const paginated = sorted.slice((page - 1) * FELLOWS_PER_PAGE, page * FELLOWS_PER_PAGE);
+  const totalPages = paginate ? Math.ceil(sorted.length / FELLOWS_PER_PAGE) : 1;
+  const paginated = paginate
+    ? sorted.slice((page - 1) * FELLOWS_PER_PAGE, page * FELLOWS_PER_PAGE)
+    : sorted;
 
   function toggleSort(field: SortField) {
     if (sortField === field) {
@@ -749,7 +755,7 @@ function FellowsTable({ fellows }: { fellows: FellowDashboardEntry[] }) {
           await sendActiveEmail();
         }}
       />
-      {totalPages > 1 && (
+      {paginate && totalPages > 1 && (
         <div className="mt-4 flex items-center justify-between text-sm">
           <span className="text-muted-foreground">
             Showing {(page - 1) * FELLOWS_PER_PAGE + 1}–{Math.min(page * FELLOWS_PER_PAGE, sorted.length)} of {sorted.length}
@@ -814,9 +820,101 @@ function SortHeader({
   );
 }
 
-// Module-scope row component. Previously this was inlined ~180 lines deep
-// inside FellowsTable, braiding row rendering with sort / pagination / modal
-// state. Extracting lets the four concerns be read independently.
+function FormLinkButton({ fellow }: { fellow: FellowDashboardEntry }) {
+  const generateMutation = useGenerateFormInvitation();
+  const [copied, setCopied] = useState(false);
+
+  const existingInvitation = fellow.formInvitations.find(
+    (inv) =>
+      inv.fellowshipId === fellow.fellowshipId &&
+      (inv.status === 'pending' || inv.status === 'submitted')
+  );
+
+  const formLink = existingInvitation
+    ? `${window.location.origin}/forms/${existingInvitation.token}`
+    : null;
+
+  async function handleGenerate() {
+    if (!fellow.appointment) return;
+    let link: string;
+    try {
+      const result = await generateMutation.mutateAsync({
+        fellowshipId: fellow.fellowshipId,
+        contactId: fellow.civicrmId,
+        academicYear: fellow.fellowshipYear,
+        formType: 'fellow-memorandum',
+      });
+      link = `${window.location.origin}/forms/${result.token}`;
+    } catch {
+      toast.error('Failed to generate form link.');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(link);
+      toast.success(`Form link generated and copied for ${fellow.firstName} ${fellow.lastName}.`);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.success(`Form link generated for ${fellow.firstName} ${fellow.lastName}. Copy it from the button.`);
+    }
+  }
+
+  async function handleCopy() {
+    if (!formLink) return;
+    try {
+      await navigator.clipboard.writeText(formLink);
+      setCopied(true);
+      toast.success('Form link copied to clipboard.');
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error('Failed to copy link.');
+    }
+  }
+
+  if (existingInvitation?.status === 'submitted') {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded-md border border-green-200 bg-green-50 px-2 py-1 text-xs font-medium text-green-700"
+        title={`Form submitted${existingInvitation.submittedAt ? ` on ${new Date(existingInvitation.submittedAt).toLocaleDateString()}` : ''}`}
+      >
+        <Check className="h-3 w-3" />
+        Form done
+      </span>
+    );
+  }
+
+  if (formLink) {
+    return (
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 transition-colors hover:bg-indigo-100"
+        title="Click to copy form link"
+      >
+        {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+        <span>{copied ? 'Copied!' : 'Copy form link'}</span>
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleGenerate}
+      disabled={generateMutation.isPending}
+      className="inline-flex items-center gap-1 rounded-md border border-indigo-300 bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 transition-colors hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60"
+      title="Generate a form link for this appointee and copy it"
+    >
+      {generateMutation.isPending ? (
+        <Loader2 className="h-3 w-3 animate-spin" />
+      ) : (
+        <FileText className="h-3 w-3" />
+      )}
+      <span>Generate form link</span>
+    </button>
+  );
+}
+
 function FellowRow({
   fellow,
   pendingContactId,
@@ -930,7 +1028,8 @@ function FellowRow({
         />
       </td>
       <td className="px-4 py-3">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <FormLinkButton fellow={fellow} />
           {fellow.vitIdInvitation.canManuallySend && (
             <button
               type="button"

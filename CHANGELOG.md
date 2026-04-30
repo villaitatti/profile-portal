@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.12.2] - 2026-04-30
+
+### Added
+- **Generate Form Link button** on the Manage Appointees page. Angela can generate invitation links for appointees and copy them to clipboard in one click. Previously this required an API call.
+- **Appointee lifecycle info popup.** Each status badge now has an info icon that opens a diagram showing all 7 lifecycle stages with the current step highlighted.
+- **Form notification email override.** New `FORM_NOTIFICATION_OVERRIDE_TO` env var redirects form submission notification emails to a specific address, even in dev mode. Enables local testing of the full email+PDF flow.
+
+### Changed
+- Pagination disabled when viewing a specific academic year (all fellows shown in one table). Pagination remains for the "All years" view with page size increased to 50.
+- `FellowDashboardEntry` type now includes `fellowshipId` for form generation API calls.
+
 ## [0.12.1] - 2026-04-30
 
 ### Fixed

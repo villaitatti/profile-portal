@@ -130,6 +130,8 @@ export interface VitIdInvitationSummary {
 
 export interface FormInvitationSummaryEntry {
   id: string;
+  fellowshipId: number;
+  academicYear: string;
   formType: string;
   formTitle: string;
   status: 'pending' | 'submitted' | 'expired';
@@ -147,6 +149,7 @@ export interface FellowDashboardEntry {
   appointment?: string;
   fellowship?: string;
   fellowshipYear: string;
+  fellowshipId: number;
   status: VitIdStatus;
   matchedVia?: MatchedVia;
   matched?: Auth0Candidate;

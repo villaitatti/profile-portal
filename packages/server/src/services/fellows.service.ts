@@ -217,6 +217,7 @@ export async function getFellowsDashboard(
           appointment: f.appointment,
           fellowship: f.fellowship,
           fellowshipYear: yearLabel,
+          fellowshipId: f.fellowshipId,
         },
         latestStart: f.startDate,
         displayFellowshipId: f.fellowshipId,
@@ -237,6 +238,7 @@ export async function getFellowsDashboard(
           appointment: f.appointment,
           fellowship: f.fellowship,
           fellowshipYear: yearLabel,
+          fellowshipId: f.fellowshipId,
         };
         existing.latestStart = f.startDate;
         existing.displayFellowshipId = f.fellowshipId;
@@ -413,6 +415,8 @@ export async function getFellowsDashboard(
       const contactForms = formInvitationsByContact.get(entry.civicrmId) ?? [];
       const formInvitations: FormInvitationSummaryEntry[] = contactForms.map((inv) => ({
         id: inv.id,
+        fellowshipId: inv.fellowshipId,
+        academicYear: inv.academicYear,
         formType: inv.formType,
         formTitle: getFormDef(inv.formType)?.title ?? inv.formType,
         status: inv.status as 'pending' | 'submitted' | 'expired',
@@ -491,6 +495,8 @@ export async function getFellowsDashboard(
     const contactForms = formInvitationsByContact.get(entry.civicrmId) ?? [];
     const formInvitations: FormInvitationSummaryEntry[] = contactForms.map((inv) => ({
       id: inv.id,
+      fellowshipId: inv.fellowshipId,
+      academicYear: inv.academicYear,
       formType: inv.formType,
       formTitle: getFormDef(inv.formType)?.title ?? inv.formType,
       status: inv.status as 'pending' | 'submitted' | 'expired',

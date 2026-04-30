@@ -122,6 +122,11 @@ const envSchema = z.object({
   // decisions from /plan-design-review 2026-04-22.
   APPOINTEE_EMAIL_FROM_NAME_VIT_ID: z.string().min(1).default('I Tatti - VIT ID'),
   APPOINTEE_EMAIL_FROM_NAME_BIO: z.string().min(1).default('I Tatti - Bio & Project'),
+
+  // Form notification override: when set, form submission notification emails
+  // go to this address instead of ADMIN_NOTIFICATION_EMAIL, even in dev mode.
+  // Allows testing the full email+PDF flow locally without touching production.
+  FORM_NOTIFICATION_OVERRIDE_TO: z.string().email().optional().or(z.literal('')),
 });
 
 function loadEnv() {

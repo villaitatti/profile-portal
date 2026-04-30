@@ -431,10 +431,14 @@ export interface FormNotificationEmailInput {
 }
 
 export async function sendFormNotificationEmail(input: FormNotificationEmailInput): Promise<void> {
-  if (!isAdminNotificationEmailConfigured()) {
+  const overrideTo = env.FORM_NOTIFICATION_OVERRIDE_TO?.trim();
+
+  if (!overrideTo && !isAdminNotificationEmailConfigured()) {
     logger.warn('Skipping form notification email: admin email not configured');
     return;
   }
+
+  const recipient = overrideTo || env.ADMIN_NOTIFICATION_EMAIL!;
 
   const subject = `Form Submitted: ${input.formTitle} — Fellowship ${input.fellowshipId} (${input.academicYear})`;
 
@@ -457,7 +461,7 @@ export async function sendFormNotificationEmail(input: FormNotificationEmailInpu
     `A PDF copy is attached. You can also view and download the response from the Profile Portal.`,
   ].join('\n');
 
-  if (isDevMode) {
+  if (isDevMode && !overrideTo) {
     logger.info(
       { subject, fellowshipId: input.fellowshipId, pdfSize: input.pdfBuffer.length },
       'Form notification email (dev mode): would send with PDF attachment'
@@ -477,7 +481,7 @@ export async function sendFormNotificationEmail(input: FormNotificationEmailInpu
 
   const rawMessage = [
     `From: ${buildSesSource()}`,
-    `To: ${env.ADMIN_NOTIFICATION_EMAIL}`,
+    `To: ${recipient}`,
     `Subject: ${subject}`,
     `MIME-Version: 1.0`,
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
@@ -503,5 +507,8 @@ export async function sendFormNotificationEmail(input: FormNotificationEmailInpu
   });
 
   await client.send(command);
-  logger.info({ subject, fellowshipId: input.fellowshipId }, 'Form notification email sent');
+  logger.info(
+    { subject, fellowshipId: input.fellowshipId, to: recipient, overrideActive: !!overrideTo },
+    'Form notification email sent'
+  );
 }
