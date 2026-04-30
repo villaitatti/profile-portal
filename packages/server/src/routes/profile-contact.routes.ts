@@ -3,7 +3,7 @@ import { isDevMode } from '../env.js';
 import { logger } from '../lib/logger.js';
 import { parseCiviCRMError } from '../lib/civicrm-error.js';
 import * as contactInfoService from '../services/contact-info.service.js';
-import { LOCATION_TYPE_LABELS } from '@itatti/shared';
+import { LOCATION_TYPE_LABELS, LOCATION_TYPE_MAIN_ID } from '@itatti/shared';
 import type {
   CiviCRMAddress,
   CiviCRMPhone,
@@ -146,12 +146,21 @@ router.put('/addresses/:id', async (req, res) => {
 
     const { streetAddress, supplementalAddress1, city, postalCode, stateProvinceId, countryId, locationTypeId } = req.body;
 
-    if (locationTypeId !== undefined && ![1, 2, 4, 5].includes(Number(locationTypeId))) {
-      res.status(400).json({ error: 'Location type must be Home (1), Work (2), Temporary (4), or Other (5)', code: 'VALIDATION_ERROR' });
-      return;
+    if (locationTypeId !== undefined) {
+      const typeNum = Number(locationTypeId);
+      if (typeNum === LOCATION_TYPE_MAIN_ID) {
+        const isPrimary = await contactInfoService.isAddressPrimary(recordId);
+        if (!isPrimary) {
+          res.status(400).json({ error: 'Main type is reserved for the primary address', code: 'VALIDATION_ERROR' });
+          return;
+        }
+      } else if (![1, 2, 4, 5].includes(typeNum)) {
+        res.status(400).json({ error: 'Location type must be Home (1), Work (2), Temporary (4), or Other (5)', code: 'VALIDATION_ERROR' });
+        return;
+      }
     }
 
-    if (locationTypeId !== undefined) {
+    if (locationTypeId !== undefined && Number(locationTypeId) !== LOCATION_TYPE_MAIN_ID) {
       const usedTypes = await contactInfoService.getUsedLocationTypes('Address', contactId, recordId);
       if (contactInfoService.isLocationTypeDuplicate(usedTypes, Number(locationTypeId))) {
         const label = LOCATION_TYPE_LABELS[Number(locationTypeId)] || 'this type';

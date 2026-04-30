@@ -72,7 +72,7 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving, use
       postalCode: postalCode || undefined,
       stateProvinceId,
       countryId,
-      locationTypeId,
+      locationTypeId: address?.isPrimary ? undefined : locationTypeId,
     });
   }
 
@@ -99,6 +99,11 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving, use
           </Dialog.Title>
 
           <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+            {address?.isPrimary ? (
+              <p className="text-[0.88rem] text-muted-foreground">
+                Type: <span className="font-medium text-foreground">Main</span> (primary address)
+              </p>
+            ) : (
             <fieldset>
               <legend className="mb-1.5 text-sm font-medium text-foreground">
                 Type<span className="ml-0.5 text-destructive">*</span>
@@ -130,6 +135,7 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving, use
                 })}
               </div>
             </fieldset>
+            )}
 
             <Field label="Street address" required>
               <input
