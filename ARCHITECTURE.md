@@ -56,7 +56,7 @@ Outcomes: `no-account`, `active`, `active-different-email`, `needs-review` (with
 Two appointee-facing emails share one infrastructure: the **VIT ID invitation** (sent when an appointee is accepted, invites them to claim) and the **bio & project description** request (sent 24h after a successful claim).
 
 **Lifecycle derivation** (`packages/shared/src/appointee-status.ts`):
-Appointee status is a pure function of `(fellowshipAccepted, matchTier, invitationEvent, bioEmailEvent)` — no separate state column in the database. The five states are *Nominated*, *Accepted*, *VIT ID Sent*, *VIT ID Claimed*, *Enrolled*. Returning fellows (match ladder finds an existing VIT ID) skip straight from *Nominated* → *VIT ID Claimed* the moment the fellowship is accepted.
+Appointee status is a pure function of `(fellowshipAccepted, matchTier, invitationEvent, bioEmailEvent, formInvitationEvents)` — no separate state column in the database. The seven states are *Nominated*, *Nomination Sent*, *Form Submitted*, *Accepted*, *VIT ID Sent*, *VIT ID Claimed*, *Enrolled*. Returning fellows (match ladder finds an existing VIT ID) skip straight from *Form Submitted* → *VIT ID Claimed* the moment the fellowship is accepted.
 
 **MJML template pipeline** (`packages/server/src/templates/emails/*.mjml`):
 Authoring format is MJML 5 with shared `_head.mjml` / `_header.mjml` / `_footer.mjml` partials. `pnpm --filter @itatti/server build:email-templates` compiles each `*.mjml` to a checked-in `*.compiled.html` next to a hand-authored `*.txt` plaintext fallback. Production never loads MJML at runtime — it reads the pre-compiled HTML off disk. CI re-runs the compile on every PR and fails on a non-empty `git diff` to prevent stale compiled output.
