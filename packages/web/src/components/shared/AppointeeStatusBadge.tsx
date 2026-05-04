@@ -1,5 +1,5 @@
 import * as Popover from '@radix-ui/react-popover';
-import { Info } from 'lucide-react';
+import { Check, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { AppointeeStatus } from '@itatti/shared';
 
@@ -76,25 +76,51 @@ export function AppointeeStatusBadge({
           >
             <div className="mb-3 font-semibold text-sm">Appointee Lifecycle</div>
             <div className="space-y-0">
+              {/*
+                Completed, current, and future steps need distinct visual
+                language. Without this, past steps look identical to future
+                steps when the current lifecycle state is in the middle.
+              */}
               {LIFECYCLE_STEPS.map((step, i) => {
                 const isCurrent = step.key === status;
+                const currentIndex = LIFECYCLE_STEPS.findIndex((s) => s.key === status);
+                const isComplete = i < currentIndex;
                 return (
                   <div key={step.key} className="flex items-start gap-2">
                     <div className="flex flex-col items-center">
                       <div
                         className={cn(
-                          'h-3 w-3 rounded-full border-2 flex-shrink-0 mt-0.5',
+                          'mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border-2',
                           isCurrent
                             ? 'border-primary bg-primary'
-                            : 'border-muted-foreground/40 bg-background'
+                            : isComplete
+                              ? 'border-green-600 bg-green-600'
+                              : 'border-muted-foreground/40 bg-background'
                         )}
-                      />
+                      >
+                        {isComplete && (
+                          <Check className="h-2.5 w-2.5 text-white" aria-hidden="true" />
+                        )}
+                      </div>
                       {i < LIFECYCLE_STEPS.length - 1 && (
-                        <div className="w-0.5 h-4 bg-muted-foreground/20" />
+                        <div
+                          className={cn(
+                            'h-4 w-0.5',
+                            i < currentIndex ? 'bg-green-600/60' : 'bg-muted-foreground/20'
+                          )}
+                        />
                       )}
                     </div>
                     <div className={cn('pb-2', isCurrent && 'font-medium')}>
-                      <span className={cn(isCurrent ? 'text-primary' : 'text-foreground')}>
+                      <span
+                        className={cn(
+                          isCurrent
+                            ? 'text-primary'
+                            : isComplete
+                              ? 'text-green-700'
+                              : 'text-foreground'
+                        )}
+                      >
                         {step.label}
                       </span>
                       <span className="block text-[0.75rem] text-muted-foreground">

@@ -4,8 +4,9 @@ import { FORM_REGISTRY, getFormDef } from '@itatti/shared';
 import { validate } from '../middleware/validate.js';
 import { prisma } from '../lib/prisma.js';
 import * as formService from '../services/form-invitation.service.js';
+import * as civicrmService from '../services/civicrm.service.js';
 import { generateFormPdf } from '../services/form-pdf.service.js';
-import { logger } from '../lib/logger.js';
+import { isDevMode } from '../env.js';
 
 const generateSchema = z.object({
   fellowshipId: z.number().int().positive(),
@@ -16,6 +17,17 @@ const generateSchema = z.object({
 
 const resetSchema = z.object({
   invitationId: z.string().min(1),
+});
+
+const nominationSentSchema = z.object({
+  nominationSentOn: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD')
+    .refine((value) => {
+      const date = new Date(`${value}T12:00:00.000Z`);
+      return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+    }, 'must be a real calendar date')
+    .optional(),
 });
 
 const router = Router();
@@ -48,23 +60,52 @@ router.get('/invitations', async (req, res) => {
 router.post('/generate', validate(generateSchema), async (req, res) => {
   const triggeredBy = `admin:${req.userId}`;
   try {
+    let appointmentType: string | undefined;
+
+    if (!isDevMode) {
+      const fellowships = await civicrmService.getFellowsWithContacts();
+      const fellowship = fellowships.find(
+        (f) =>
+          f.fellowshipId === req.body.fellowshipId &&
+          f.contactId === req.body.contactId
+      );
+      if (!fellowship) {
+        res.status(400).json({ error: 'matching_fellowship_not_found' });
+        return;
+      }
+      appointmentType = fellowship.appointment;
+    }
+
     const result = await formService.generateInvitation({
       ...req.body,
+      appointmentType,
+      enforceAppointmentType: !isDevMode,
       triggeredBy,
     });
     res.status(result.created ? 201 : 200).json(result);
   } catch (err) {
     if (err instanceof formService.ServiceError) {
-      res.status(err.statusCode).json({ error: err.message });
+      res.status(err.statusCode).json({
+        error:
+          typeof err.details === 'object' &&
+          err.details !== null &&
+          'code' in err.details
+            ? (err.details as { code: string }).code
+            : err.message,
+        details: err.details,
+      });
       return;
     }
     throw err;
   }
 });
 
-router.post('/nomination-sent/:id', async (req, res) => {
+router.post('/nomination-sent/:id', validate(nominationSentSchema), async (req, res) => {
   try {
-    const updated = await formService.markNominationSent(req.params.id);
+    const updated = await formService.markNominationSent(
+      String(req.params.id),
+      req.body.nominationSentOn
+    );
     res.json({ id: updated.id, nominationSentAt: updated.nominationSentAt?.toISOString() });
   } catch (err) {
     if (err instanceof formService.ServiceError) {

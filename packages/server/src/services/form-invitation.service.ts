@@ -11,6 +11,8 @@ export interface GenerateInvitationArgs {
   contactId: number;
   academicYear: string;
   formType: string;
+  appointmentType?: string;
+  enforceAppointmentType?: boolean;
   triggeredBy: string;
 }
 
@@ -28,6 +30,16 @@ export async function generateInvitation(
   const formDef = getFormDef(args.formType);
   if (!formDef) {
     throw new ServiceError(`Unknown form type: ${args.formType}`, 400);
+  }
+  if (
+    args.enforceAppointmentType &&
+    (!args.appointmentType || !formDef.appointmentTypes.includes(args.appointmentType))
+  ) {
+    throw new ServiceError('No form configured for this appointment type', 400, {
+      code: 'no_form_configured',
+      appointmentType: args.appointmentType ?? null,
+      formType: args.formType,
+    });
   }
 
   const existing = await prisma.formInvitation.findUnique({
@@ -149,11 +161,29 @@ export async function getResponseByInvitationId(invitationId: string) {
   return prisma.formResponse.findUnique({ where: { invitationId } });
 }
 
-export async function markNominationSent(invitationId: string) {
+export async function markNominationSent(invitationId: string, nominationSentOn?: string) {
+  const nominationSentAt = nominationSentOn
+    ? parseNominationSentDate(nominationSentOn)
+    : new Date();
+
   return prisma.formInvitation.update({
     where: { id: invitationId },
-    data: { nominationSentAt: new Date() },
+    data: { nominationSentAt },
   });
+}
+
+function parseNominationSentDate(nominationSentOn: string): Date {
+  const nominationSentAt = new Date(`${nominationSentOn}T12:00:00.000Z`);
+  if (
+    Number.isNaN(nominationSentAt.getTime()) ||
+    nominationSentAt.toISOString().slice(0, 10) !== nominationSentOn
+  ) {
+    throw new ServiceError('Invalid nomination sent date', 400, {
+      code: 'invalid_nomination_sent_on',
+      nominationSentOn,
+    });
+  }
+  return nominationSentAt;
 }
 
 export async function resetInvitation(invitationId: string, triggeredBy: string) {
