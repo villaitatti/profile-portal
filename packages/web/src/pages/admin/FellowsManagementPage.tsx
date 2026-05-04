@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
@@ -37,6 +38,7 @@ import {
   FileText,
   Copy,
   Check,
+  MoreHorizontal,
 } from 'lucide-react';
 import type {
   FellowDashboardEntry,
@@ -681,7 +683,7 @@ function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEntry[]; 
               <SortHeader field="appointeeStatus" label="Appointee Status" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
               <SortHeader field="status" label="VIT ID Status" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
               <SortHeader field="bioEmail" label="Bio Email" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
-              <th className="px-4 py-3 text-left text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+              <th className="px-4 py-3 text-center text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">
                 Actions
               </th>
             </tr>
@@ -820,7 +822,7 @@ function SortHeader({
   );
 }
 
-function FormLinkButton({ fellow }: { fellow: FellowDashboardEntry }) {
+function FormLinkMenuItem({ fellow }: { fellow: FellowDashboardEntry }) {
   const generateMutation = useGenerateFormInvitation();
   const [copied, setCopied] = useState(false);
 
@@ -851,11 +853,15 @@ function FormLinkButton({ fellow }: { fellow: FellowDashboardEntry }) {
     }
     try {
       await navigator.clipboard.writeText(link);
-      toast.success(`Form link generated and copied for ${fellow.firstName} ${fellow.lastName}.`);
+      toast.success(
+        `Form link generated and copied for ${fellow.firstName} ${fellow.lastName}.`
+      );
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      toast.success(`Form link generated for ${fellow.firstName} ${fellow.lastName}. Copy it from the button.`);
+      toast.success(
+        `Form link generated for ${fellow.firstName} ${fellow.lastName}. Copy it from the button.`
+      );
     }
   }
 
@@ -873,45 +879,172 @@ function FormLinkButton({ fellow }: { fellow: FellowDashboardEntry }) {
 
   if (existingInvitation?.status === 'submitted') {
     return (
-      <span
-        className="inline-flex items-center gap-1 rounded-md border border-green-200 bg-green-50 px-2 py-1 text-xs font-medium text-green-700"
-        title={`Form submitted${existingInvitation.submittedAt ? ` on ${new Date(existingInvitation.submittedAt).toLocaleDateString()}` : ''}`}
+      <DropdownMenu.Item
+        disabled
+        className="flex cursor-default items-center gap-2 rounded-md px-3 py-2 text-sm text-green-700 outline-none data-[disabled]:opacity-100"
       >
-        <Check className="h-3 w-3" />
-        Form done
-      </span>
+        <Check className="h-4 w-4" />
+        <span className="flex flex-col">
+          <span className="font-medium">Form done</span>
+          {existingInvitation.submittedAt && (
+            <span className="text-xs text-muted-foreground">
+              Submitted {new Date(existingInvitation.submittedAt).toLocaleDateString()}
+            </span>
+          )}
+        </span>
+      </DropdownMenu.Item>
     );
   }
 
   if (formLink) {
     return (
-      <button
-        type="button"
-        onClick={handleCopy}
-        className="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 transition-colors hover:bg-indigo-100"
-        title="Click to copy form link"
+      <DropdownMenu.Item
+        onSelect={(event) => {
+          event.preventDefault();
+          void handleCopy();
+        }}
+        className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-foreground outline-none transition-colors focus:bg-muted"
       >
-        {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+        {copied ? (
+          <Check className="h-4 w-4 text-green-700" />
+        ) : (
+          <Copy className="h-4 w-4 text-indigo-700" />
+        )}
         <span>{copied ? 'Copied!' : 'Copy form link'}</span>
-      </button>
+      </DropdownMenu.Item>
     );
   }
 
   return (
-    <button
-      type="button"
-      onClick={handleGenerate}
+    <DropdownMenu.Item
       disabled={generateMutation.isPending}
-      className="inline-flex items-center gap-1 rounded-md border border-indigo-300 bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 transition-colors hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60"
-      title="Generate a form link for this appointee and copy it"
+      onSelect={(event) => {
+        event.preventDefault();
+        void handleGenerate();
+      }}
+      className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-foreground outline-none transition-colors focus:bg-muted data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
     >
       {generateMutation.isPending ? (
-        <Loader2 className="h-3 w-3 animate-spin" />
+        <Loader2 className="h-4 w-4 animate-spin text-indigo-700" />
       ) : (
-        <FileText className="h-3 w-3" />
+        <FileText className="h-4 w-4 text-indigo-700" />
       )}
       <span>Generate form link</span>
-    </button>
+    </DropdownMenu.Item>
+  );
+}
+
+function FellowActionsMenu({
+  fellow,
+  isPending,
+  onSendClick,
+}: {
+  fellow: FellowDashboardEntry;
+  isPending: boolean;
+  onSendClick: (
+    kind: 'vit_id_invitation' | 'bio_project_description',
+    mode?: 'send' | 'resend'
+  ) => void;
+}) {
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button
+          type="button"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          aria-label={`Open actions for ${fellow.firstName} ${fellow.lastName}`}
+        >
+          <MoreHorizontal className="h-4 w-4" />
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          align="end"
+          collisionPadding={8}
+          sideOffset={6}
+          className="z-50 min-w-[15rem] rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg data-[side=bottom]:animate-in data-[side=bottom]:slide-in-from-top-1 data-[side=top]:animate-in data-[side=top]:slide-in-from-bottom-1"
+        >
+          <FormLinkMenuItem fellow={fellow} />
+
+          {fellow.vitIdInvitation.canManuallySend && (
+            <DropdownMenu.Item
+              disabled={isPending}
+              onSelect={() => onSendClick('vit_id_invitation')}
+              className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-foreground outline-none transition-colors focus:bg-muted data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
+            >
+              {isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              ) : (
+                <UserPlus className="h-4 w-4 text-primary" />
+              )}
+              <span>Send VIT ID email</span>
+            </DropdownMenu.Item>
+          )}
+
+          {fellow.status === 'needs-review' && (
+            <DropdownMenu.Item
+              disabled
+              className="flex cursor-default items-start gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground outline-none data-[disabled]:opacity-100"
+            >
+              <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-700" />
+              <span className="flex flex-col">
+                <span className="font-medium text-foreground">Send disabled</span>
+                <span className="text-xs leading-5">
+                  Resolve the VIT ID status conflict first.
+                </span>
+              </span>
+            </DropdownMenu.Item>
+          )}
+
+          {fellow.bioEmail.canManuallySend && (
+            <DropdownMenu.Item
+              disabled={isPending}
+              onSelect={() => onSendClick('bio_project_description')}
+              className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-foreground outline-none transition-colors focus:bg-muted data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
+            >
+              {isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Mail className="h-4 w-4" />
+              )}
+              <span>Send bio email</span>
+            </DropdownMenu.Item>
+          )}
+
+          {fellow.bioEmail.status === 'sent' && fellow.bioEmail.targetAcademicYear && (
+            <DropdownMenu.Item
+              disabled={isPending}
+              onSelect={() => onSendClick('bio_project_description', 'resend')}
+              className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-amber-900 outline-none transition-colors focus:bg-amber-50 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
+            >
+              {isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Repeat2 className="h-4 w-4" />
+              )}
+              <span>Re-send bio email</span>
+            </DropdownMenu.Item>
+          )}
+
+          {CIVICRM_URL && (
+            <>
+              <DropdownMenu.Separator className="my-1 h-px bg-border" />
+              <DropdownMenu.Item asChild>
+                <a
+                  href={`${CIVICRM_URL}/civicrm/contact/view?reset=1&cid=${fellow.civicrmId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-primary outline-none transition-colors focus:bg-muted"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  <span>Open in CiviCRM</span>
+                </a>
+              </DropdownMenu.Item>
+            </>
+          )}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   );
 }
 
@@ -1027,87 +1160,12 @@ function FellowRow({
           targetAcademicYear={fellow.bioEmail.targetAcademicYear}
         />
       </td>
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-3 flex-wrap">
-          <FormLinkButton fellow={fellow} />
-          {fellow.vitIdInvitation.canManuallySend && (
-            <button
-              type="button"
-              onClick={() => onSendClick('vit_id_invitation')}
-              disabled={isPending}
-              className="inline-flex items-center gap-1 rounded-md border border-primary/30 bg-primary/5 px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
-              title={
-                fellow.vitIdInvitation.targetAcademicYear
-                  ? `Send VIT ID invitation email for ${fellow.vitIdInvitation.targetAcademicYear}`
-                  : 'Send VIT ID invitation email'
-              }
-            >
-              {isPending ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <UserPlus className="h-3 w-3" />
-              )}
-              <span>Send VIT ID email</span>
-            </button>
-          )}
-          {fellow.status === 'needs-review' && (
-            // Always show the pill for needs-review rows so the Actions
-            // column is never silently empty for a conflicted row.
-            <span
-              className="inline-flex items-center gap-1 rounded-md border border-muted bg-muted/40 px-2 py-1 text-xs font-medium text-muted-foreground"
-              title="Resolve the VIT ID Status data conflict first: pick a candidate from the list in the VIT ID Status column, or merge the duplicates in CiviCRM."
-            >
-              <AlertTriangle className="h-3 w-3" />
-              Send disabled
-            </span>
-          )}
-          {fellow.bioEmail.canManuallySend && (
-            <button
-              type="button"
-              onClick={() => onSendClick('bio_project_description')}
-              disabled={isPending}
-              className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-              title={
-                fellow.bioEmail.targetAcademicYear
-                  ? `Send bio & project description email for ${fellow.bioEmail.targetAcademicYear}`
-                  : 'Send bio & project description email'
-              }
-            >
-              {isPending ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <Mail className="h-3 w-3" />
-              )}
-              <span>Send bio email</span>
-            </button>
-          )}
-          {fellow.bioEmail.status === 'sent' && fellow.bioEmail.targetAcademicYear && (
-            <button
-              type="button"
-              onClick={() => onSendClick('bio_project_description', 'resend')}
-              disabled={isPending}
-              className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-900 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
-              title={`Re-send bio & project description email for ${fellow.bioEmail.targetAcademicYear}`}
-            >
-              {isPending ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <Repeat2 className="h-3 w-3" />
-              )}
-              <span>Re-send bio email</span>
-            </button>
-          )}
-          {CIVICRM_URL && (
-            <a
-              href={`${CIVICRM_URL}/civicrm/contact/view?reset=1&cid=${fellow.civicrmId}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-            >
-              CiviCRM <ExternalLink className="h-3 w-3" />
-            </a>
-          )}
-        </div>
+      <td className="px-4 py-3 text-center">
+        <FellowActionsMenu
+          fellow={fellow}
+          isPending={isPending}
+          onSendClick={onSendClick}
+        />
       </td>
     </tr>
   );
