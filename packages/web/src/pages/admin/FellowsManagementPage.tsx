@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import * as Popover from '@radix-ui/react-popover';
+import * as Dialog from '@radix-ui/react-dialog';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
@@ -830,8 +831,10 @@ function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEntry[]; 
               `Nomination sent date saved for ${activeNominationSent.fellow.firstName} ${activeNominationSent.fellow.lastName}.`
             );
             setActiveNominationSent(null);
-          } catch {
-            toast.error('Failed to save nomination sent date.');
+          } catch (err) {
+            toast.error(
+              err instanceof Error ? err.message : 'Failed to save nomination sent date.'
+            );
           }
         }}
       />
@@ -914,6 +917,43 @@ function SortHeader({
   );
 }
 
+function formLinkForToken(token: string): string {
+  return `${window.location.origin}/forms/${token}`;
+}
+
+function formLinkCopiedMessage(fellow: FellowDashboardEntry): string {
+  return `Form link for Appointee ${fellow.firstName} ${fellow.lastName} copied`;
+}
+
+function useCopyFormLink(fellow: FellowDashboardEntry) {
+  const [copied, setCopied] = useState(false);
+
+  async function copyFormLink(
+    token: string,
+    options: {
+      onCopyFailure?: () => void;
+      failureMessage?: string;
+    } = {}
+  ): Promise<boolean> {
+    try {
+      await navigator.clipboard.writeText(formLinkForToken(token));
+      setCopied(true);
+      toast.success(formLinkCopiedMessage(fellow));
+      setTimeout(() => setCopied(false), 2000);
+      return true;
+    } catch {
+      if (options.onCopyFailure) {
+        options.onCopyFailure();
+      } else {
+        toast.error(options.failureMessage ?? 'Failed to copy link.');
+      }
+      return false;
+    }
+  }
+
+  return { copied, copyFormLink };
+}
+
 function CopyFormLinkButton({
   fellow,
   invitation,
@@ -921,24 +961,14 @@ function CopyFormLinkButton({
   fellow: FellowDashboardEntry;
   invitation: FormInvitationSummaryEntry;
 }) {
-  const [copied, setCopied] = useState(false);
-  const formLink = `${window.location.origin}/forms/${invitation.token}`;
-
-  async function handleCopy() {
-    try {
-      await navigator.clipboard.writeText(formLink);
-      setCopied(true);
-      toast.success(`Form link for Appointee ${fellow.firstName} ${fellow.lastName} copied`);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      toast.error('Failed to copy link.');
-    }
-  }
+  const { copied, copyFormLink } = useCopyFormLink(fellow);
 
   return (
     <button
       type="button"
-      onClick={handleCopy}
+      onClick={() => {
+        void copyFormLink(invitation.token);
+      }}
       title="Copy form link"
       aria-label={`Copy form link for ${fellow.firstName} ${fellow.lastName}`}
       className="inline-flex h-7 w-7 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -964,7 +994,7 @@ function FormStatusCell({ fellow }: { fellow: FellowDashboardEntry }) {
   let canCopy = false;
 
   if (!configuredForm) {
-    label = 'No Form';
+    label = 'Not configured';
     tone = 'bg-red-50 text-red-700';
     description = `${formatLabel(fellow.appointment) || 'This appointment type'} has no Profile Portal form configured yet. Add a form mapping before generating links for this fellowship.`;
   } else if (invitation?.status === 'submitted') {
@@ -1042,18 +1072,14 @@ function FormStatusCell({ fellow }: { fellow: FellowDashboardEntry }) {
 
 function FormLinkMenuItem({ fellow }: { fellow: FellowDashboardEntry }) {
   const generateMutation = useGenerateFormInvitation();
-  const [copied, setCopied] = useState(false);
+  const { copied, copyFormLink } = useCopyFormLink(fellow);
   const configuredForm = getPrimaryConfiguredForm(fellow);
 
   const existingInvitation = getFormInvitation(fellow);
 
-  const formLink = existingInvitation
-    ? `${window.location.origin}/forms/${existingInvitation.token}`
-    : null;
-
   async function handleGenerate() {
     if (!configuredForm) return;
-    let link: string;
+    let token: string;
     try {
       const result = await generateMutation.mutateAsync({
         fellowshipId: fellow.fellowshipId,
@@ -1061,35 +1087,23 @@ function FormLinkMenuItem({ fellow }: { fellow: FellowDashboardEntry }) {
         academicYear: fellow.fellowshipYear,
         formType: configuredForm.id,
       });
-      link = `${window.location.origin}/forms/${result.token}`;
+      token = result.token;
     } catch {
       toast.error('Failed to generate form link.');
       return;
     }
-    try {
-      await navigator.clipboard.writeText(link);
-      toast.success(
-        `Form link for Appointee ${fellow.firstName} ${fellow.lastName} copied`
-      );
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      toast.success(
-        `Form link generated for ${fellow.firstName} ${fellow.lastName}. Copy it from the button.`
-      );
-    }
+
+    await copyFormLink(token, {
+      onCopyFailure: () =>
+        toast.success(
+          `Form link generated for ${fellow.firstName} ${fellow.lastName}. Copy it from the button.`
+        ),
+    });
   }
 
   async function handleCopy() {
-    if (!formLink) return;
-    try {
-      await navigator.clipboard.writeText(formLink);
-      setCopied(true);
-      toast.success(`Form link for Appointee ${fellow.firstName} ${fellow.lastName} copied`);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      toast.error('Failed to copy link.');
-    }
+    if (!existingInvitation) return;
+    await copyFormLink(existingInvitation.token);
   }
 
   if (!configuredForm) {
@@ -1128,7 +1142,7 @@ function FormLinkMenuItem({ fellow }: { fellow: FellowDashboardEntry }) {
     );
   }
 
-  if (formLink) {
+  if (existingInvitation) {
     return (
       <DropdownMenu.Item
         onSelect={(event) => {
@@ -1516,74 +1530,77 @@ function NominationSentDialog({
     if (open) setNominationSentOn(todayInputValue());
   }, [open, fellow?.civicrmId]);
 
-  if (!open || !fellow) return null;
-
-  const fellowName = `${fellow.firstName} ${fellow.lastName}`;
+  const fellowName = fellow ? `${fellow.firstName} ${fellow.lastName}` : '';
 
   return (
-    <div
-      role="presentation"
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-[rgba(29,37,44,0.38)] px-4"
+    <Dialog.Root
+      open={open}
+      onOpenChange={(isOpen) => {
+        if (!isOpen) onCancel();
+      }}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="nomination-sent-title"
-        className="w-full max-w-md rounded-lg border bg-card shadow-lg"
-      >
-        <div className="border-b px-5 py-4">
-          <h2
-            id="nomination-sent-title"
-            className="text-lg font-semibold tracking-tight text-foreground"
-          >
-            Nomination sent
-          </h2>
-        </div>
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            void onConfirm(nominationSentOn);
-          }}
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-[60] bg-[rgba(29,37,44,0.38)] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 duration-150" />
+        <Dialog.Content
+          aria-labelledby="nomination-sent-title"
+          className="fixed left-1/2 top-1/2 z-[61] w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border bg-card shadow-lg data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.97] duration-150"
         >
-          <div className="space-y-4 px-5 py-4">
-            <p className="text-[0.95rem] leading-6 text-muted-foreground">
-              Record when the nomination email was sent to {fellowName}. The
-              appointee status will move forward and the form will show as
-              waiting for submission.
-            </p>
-            <label className="block space-y-2">
-              <span className="text-sm font-medium text-foreground">
-                Nomination sent on
-              </span>
-              <input
-                type="date"
-                value={nominationSentOn}
-                onChange={(event) => setNominationSentOn(event.target.value)}
-                required
-                className="w-full rounded-md border bg-background px-3.5 py-2.5 text-[0.95rem] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-              />
-            </label>
-          </div>
-          <div className="flex justify-end gap-3 border-t px-5 py-4">
-            <button
-              type="button"
-              onClick={onCancel}
-              disabled={submitting}
-              className="rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+          <div className="border-b px-5 py-4">
+            <Dialog.Title
+              id="nomination-sent-title"
+              className="text-lg font-semibold tracking-tight text-foreground"
             >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-              Save
-            </button>
+              Nomination sent
+            </Dialog.Title>
           </div>
-        </form>
-      </div>
-    </div>
+          {fellow && (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void onConfirm(nominationSentOn);
+              }}
+            >
+              <div className="space-y-4 px-5 py-4">
+                <p className="text-[0.95rem] leading-6 text-muted-foreground">
+                  Record when the nomination email was sent to {fellowName}. The
+                  appointee status will move forward and the form will show as
+                  waiting for submission.
+                </p>
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium text-foreground">
+                    Nomination sent on
+                  </span>
+                  <input
+                    type="date"
+                    value={nominationSentOn}
+                    onChange={(event) => setNominationSentOn(event.target.value)}
+                    required
+                    className="w-full rounded-md border bg-background px-3.5 py-2.5 text-[0.95rem] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  />
+                </label>
+              </div>
+              <div className="flex justify-end gap-3 border-t px-5 py-4">
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  disabled={submitting}
+                  className="rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Save
+                </button>
+              </div>
+            </form>
+          )}
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }

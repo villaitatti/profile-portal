@@ -14,6 +14,11 @@ function hashEmail(email: string): string {
 // this at any given time, but we chunk defensively so the query stays fast
 // and doesn't trip any CiviCRM URL-length limits.
 const EMAIL_GET_IN_CHUNK = 500;
+const FELLOWS_WITH_CONTACTS_CACHE_TTL_MS = 60_000;
+
+let fellowsWithContactsCache:
+  | { expiresAt: number; fellows: CiviCRMFellowWithContact[] }
+  | null = null;
 
 function parseContact(c: Record<string, unknown>, fallbackEmail?: string): CiviCRMContact {
   return {
@@ -74,7 +79,7 @@ export interface CiviCRMFellowWithContact {
   fellowshipAccepted?: boolean;
 }
 
-export async function getFellowsWithContacts(): Promise<CiviCRMFellowWithContact[]> {
+async function fetchFellowsWithContacts(): Promise<CiviCRMFellowWithContact[]> {
   const entity = env.CIVICRM_FELLOWSHIP_ENTITY;
   const startField = env.CIVICRM_FIELD_START_DATE;
   const endField = env.CIVICRM_FIELD_END_DATE;
@@ -113,6 +118,20 @@ export async function getFellowsWithContacts(): Promise<CiviCRMFellowWithContact
     endDate: String(f[endField]),
     fellowshipAccepted: f[acceptedField] === true || f[acceptedField] === 1,
   }));
+}
+
+export async function getFellowsWithContacts(): Promise<CiviCRMFellowWithContact[]> {
+  const now = Date.now();
+  if (fellowsWithContactsCache && fellowsWithContactsCache.expiresAt > now) {
+    return fellowsWithContactsCache.fellows;
+  }
+
+  const fellows = await fetchFellowsWithContacts();
+  fellowsWithContactsCache = {
+    expiresAt: now + FELLOWS_WITH_CONTACTS_CACHE_TTL_MS,
+    fellows,
+  };
+  return fellows;
 }
 
 export interface ContactEmails {
