@@ -121,6 +121,27 @@ export function useGenerateFormInvitation() {
   });
 }
 
+export function useMarkNominationSent() {
+  const getToken = useApiToken();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: { invitationId: string; nominationSentOn: string }) => {
+      const token = await getToken();
+      const res = await apiFetch(`/api/admin/forms/nomination-sent/${data.invitationId}`, {
+        token,
+        method: 'POST',
+        body: JSON.stringify({ nominationSentOn: data.nominationSentOn }),
+      });
+      return res.json() as Promise<{ id: string; nominationSentAt: string | null }>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['form-invitations'] });
+      queryClient.invalidateQueries({ queryKey: ['fellows'] });
+    },
+  });
+}
+
 export function useFormResponse(invitationId: string | null) {
   const getToken = useApiToken();
 

@@ -1,5 +1,7 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import * as Popover from '@radix-ui/react-popover';
+import * as Dialog from '@radix-ui/react-dialog';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
@@ -20,7 +22,7 @@ import {
   type EmailPreviewReason,
   type EmailPreviewType,
 } from '@/api/fellows';
-import { useGenerateFormInvitation } from '@/api/forms';
+import { useGenerateFormInvitation, useMarkNominationSent } from '@/api/forms';
 import { getCurrentAcademicYear } from './utils/academic-year';
 import {
   Users,
@@ -39,12 +41,17 @@ import {
   Copy,
   Check,
   MoreHorizontal,
+  Info,
+  CalendarCheck,
 } from 'lucide-react';
 import type {
   FellowDashboardEntry,
   VitIdStatus,
   BioEmailStatus,
+  FormDef,
+  FormInvitationSummaryEntry,
 } from '@itatti/shared';
+import { getFormsForAppointmentType } from '@itatti/shared';
 
 const CIVICRM_URL = import.meta.env.VITE_CIVICRM_URL || '';
 
@@ -290,19 +297,19 @@ function FellowsManagementSkeleton() {
 
         <div className="overflow-hidden rounded-xl border bg-card">
           <div className="border-b bg-muted/50 px-4 py-3">
-            {/* 8 columns matches the real table: Name, Email, Appointment,
-                Fellowship, Appointee Status, VIT ID Status, Bio Email,
+            {/* 9 columns matches the real table: Name, Email, Appointment,
+                Fellowship, Appointee Status, Form, VIT ID Status, Bio Email,
                 Actions. Previously the skeleton used grid-cols-6 which
                 caused a visible layout shift when data arrived. */}
-            <div className="grid grid-cols-8 gap-4">
-              {Array.from({ length: 8 }).map((_, index) => (
+            <div className="grid grid-cols-9 gap-4">
+              {Array.from({ length: 9 }).map((_, index) => (
                 <SkeletonBlock key={index} className="h-3.5 rounded-full" />
               ))}
             </div>
           </div>
           <div className="divide-y">
             {Array.from({ length: 5 }).map((_, index) => (
-              <div key={index} className="grid grid-cols-8 items-center gap-4 px-4 py-4">
+              <div key={index} className="grid grid-cols-9 items-center gap-4 px-4 py-4">
                 <div className="flex items-center gap-3">
                   <SkeletonBlock className="h-8 w-8 rounded-full bg-muted/80" />
                   <div className="space-y-2">
@@ -311,9 +318,9 @@ function FellowsManagementSkeleton() {
                   </div>
                 </div>
                 {/* Middle columns = Email, Appointment, Fellowship,
-                    Appointee Status, VIT ID Status, Bio Email. Last cell
+                    Appointee Status, Form, VIT ID Status, Bio Email. Last cell
                     is Actions. */}
-                {Array.from({ length: 6 }).map((__, column) => (
+                {Array.from({ length: 7 }).map((__, column) => (
                   <SkeletonBlock key={column} className="h-4 w-20 rounded-full" />
                 ))}
                 <SkeletonBlock className="h-4 w-14 rounded-full" />
@@ -458,12 +465,54 @@ function formatLabel(value?: string): string {
   return value.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString();
+}
+
+function todayInputValue(): string {
+  // Seeds the picker with the admin's local calendar date. The server stores
+  // the selected day at noon UTC to avoid timezone rollover in normal use.
+  const today = new Date();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${today.getFullYear()}-${month}-${day}`;
+}
+
+function getConfiguredForms(fellow: FellowDashboardEntry): FormDef[] {
+  return getFormsForAppointmentType(fellow.appointment || '');
+}
+
+function getPrimaryConfiguredForm(fellow: FellowDashboardEntry): FormDef | null {
+  // v0.13 intentionally handles one configured form per appointment type.
+  // When a second form is added, render one status per configured form here.
+  return getConfiguredForms(fellow)[0] ?? null;
+}
+
+function getFormInvitation(
+  fellow: FellowDashboardEntry
+): FormInvitationSummaryEntry | null {
+  const form = getPrimaryConfiguredForm(fellow);
+  if (!form) return null;
+  return (
+    fellow.formInvitations.find(
+      (inv) =>
+        inv.fellowshipId === fellow.fellowshipId &&
+        inv.academicYear === fellow.fellowshipYear &&
+        inv.formType === form.id &&
+        (inv.status === 'pending' ||
+          inv.status === 'submitted' ||
+          inv.status === 'expired')
+    ) ?? null
+  );
+}
+
 type SortField =
   | 'name'
   | 'appointment'
   | 'email'
   | 'fellowship'
   | 'appointeeStatus'
+  | 'form'
   | 'status'
   | 'bioEmail';
 type SortDir = 'asc' | 'desc';
@@ -478,6 +527,11 @@ type ActiveSend = {
   mode?: 'send' | 'resend';
 };
 
+type ActiveNominationSent = {
+  fellow: FellowDashboardEntry;
+  invitation: FormInvitationSummaryEntry;
+};
+
 function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEntry[]; paginate: boolean }) {
   // Default sort: appointment asc → lastName asc. Groups fellows by role type
   // (Fellow, Visiting Fellow, Visiting Professor, ...), then alphabetical
@@ -486,10 +540,13 @@ function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEntry[]; 
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [page, setPage] = useState(1);
   const [activeSend, setActiveSend] = useState<ActiveSend | null>(null);
+  const [activeNominationSent, setActiveNominationSent] =
+    useState<ActiveNominationSent | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [resendConfirmOpen, setResendConfirmOpen] = useState(false);
   const sendBioEmail = useSendBioEmail();
   const sendVitIdEmail = useSendVitIdEmail();
+  const markNominationSent = useMarkNominationSent();
   const [pendingContactId, setPendingContactId] = useState<number | null>(null);
 
   // Preview fetches when modal is open; each open triggers a fresh preview.
@@ -551,6 +608,19 @@ function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEntry[]; 
             enrolled: 6,
           };
           cmp = order[a.appointeeStatus] - order[b.appointeeStatus];
+          break;
+        }
+        case 'form': {
+          const priority = (fellow: FellowDashboardEntry): number => {
+            const invitation = getFormInvitation(fellow);
+            if (!getPrimaryConfiguredForm(fellow)) return 5;
+            if (!invitation) return 0;
+            if (invitation.status === 'submitted') return 4;
+            if (invitation.status === 'expired') return 3;
+            if (invitation.nominationSentAt) return 2;
+            return 1;
+          };
+          cmp = priority(a) - priority(b);
           break;
         }
         case 'status':
@@ -681,6 +751,7 @@ function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEntry[]; 
               <SortHeader field="appointment" label="Appointment" className="hidden lg:table-cell" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
               <SortHeader field="fellowship" label="Fellowship Type" className="hidden lg:table-cell" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
               <SortHeader field="appointeeStatus" label="Appointee Status" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
+              <SortHeader field="form" label="Form" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
               <SortHeader field="status" label="VIT ID Status" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
               <SortHeader field="bioEmail" label="Bio Email" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
               <th className="px-4 py-3 text-center text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">
@@ -695,6 +766,9 @@ function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEntry[]; 
                 fellow={fellow}
                 pendingContactId={pendingContactId}
                 onSendClick={(kind, mode) => setActiveSend({ fellow, kind, mode })}
+                onNominationSentClick={(invitation) =>
+                  setActiveNominationSent({ fellow, invitation })
+                }
               />
             ))}
           </tbody>
@@ -742,6 +816,31 @@ function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEntry[]; 
         }
         sendError={sendError}
         submitting={pendingContactId !== null}
+      />
+      <NominationSentDialog
+        open={activeNominationSent !== null}
+        fellow={activeNominationSent?.fellow ?? null}
+        submitting={markNominationSent.isPending}
+        onCancel={() => {
+          if (!markNominationSent.isPending) setActiveNominationSent(null);
+        }}
+        onConfirm={async (nominationSentOn) => {
+          if (!activeNominationSent) return;
+          try {
+            await markNominationSent.mutateAsync({
+              invitationId: activeNominationSent.invitation.id,
+              nominationSentOn,
+            });
+            toast.success(
+              `Nomination sent date saved for ${activeNominationSent.fellow.firstName} ${activeNominationSent.fellow.lastName}.`
+            );
+            setActiveNominationSent(null);
+          } catch (err) {
+            toast.error(
+              err instanceof Error ? err.message : 'Failed to save nomination sent date.'
+            );
+          }
+        }}
       />
       <ConfirmResendDialog
         open={resendConfirmOpen}
@@ -822,59 +921,218 @@ function SortHeader({
   );
 }
 
+function formLinkForToken(token: string): string {
+  return `${window.location.origin}/forms/${token}`;
+}
+
+function formLinkCopiedMessage(fellow: FellowDashboardEntry): string {
+  return `Form link for Appointee ${fellow.firstName} ${fellow.lastName} copied`;
+}
+
+function useCopyFormLink(fellow: FellowDashboardEntry) {
+  const [copied, setCopied] = useState(false);
+  const resetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (resetTimeoutRef.current) clearTimeout(resetTimeoutRef.current);
+    };
+  }, []);
+
+  async function copyFormLink(
+    token: string,
+    options: {
+      onCopyFailure?: () => void;
+      failureMessage?: string;
+    } = {}
+  ): Promise<boolean> {
+    try {
+      await navigator.clipboard.writeText(formLinkForToken(token));
+      setCopied(true);
+      toast.success(formLinkCopiedMessage(fellow));
+      if (resetTimeoutRef.current) clearTimeout(resetTimeoutRef.current);
+      resetTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
+      return true;
+    } catch {
+      if (options.onCopyFailure) {
+        options.onCopyFailure();
+      } else {
+        toast.error(options.failureMessage ?? 'Failed to copy link.');
+      }
+      return false;
+    }
+  }
+
+  return { copied, copyFormLink };
+}
+
+function CopyFormLinkButton({
+  fellow,
+  invitation,
+}: {
+  fellow: FellowDashboardEntry;
+  invitation: FormInvitationSummaryEntry;
+}) {
+  const { copied, copyFormLink } = useCopyFormLink(fellow);
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void copyFormLink(invitation.token);
+      }}
+      title="Copy form link"
+      aria-label={`Copy form link for ${fellow.firstName} ${fellow.lastName}`}
+      className="inline-flex h-7 w-7 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+    >
+      {copied ? (
+        <Check className="h-3.5 w-3.5 text-green-700" aria-hidden="true" />
+      ) : (
+        <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+      )}
+    </button>
+  );
+}
+
+function FormStatusCell({ fellow }: { fellow: FellowDashboardEntry }) {
+  const configuredForm = getPrimaryConfiguredForm(fellow);
+  const invitation = getFormInvitation(fellow);
+
+  let label = 'Ready';
+  let tone = 'bg-muted text-muted-foreground';
+  let description =
+    'A form is configured for this appointment type. Generate the link, then paste it into Angela’s nomination email.';
+  let subLabel: string | null = null;
+  let canCopy = false;
+
+  if (!configuredForm) {
+    label = 'Not configured';
+    tone = 'bg-red-50 text-red-700';
+    description = `${formatLabel(fellow.appointment) || 'This appointment type'} has no Profile Portal form configured yet. Add a form mapping before generating links for this fellowship.`;
+  } else if (invitation?.status === 'submitted') {
+    label = 'Submitted';
+    tone = 'bg-green-50 text-green-700';
+    description =
+      'The appointee submitted the form. The appointee lifecycle can now move to Form Submitted.';
+    subLabel = invitation.submittedAt ? `on ${formatDate(invitation.submittedAt)}` : null;
+  } else if (invitation?.status === 'expired') {
+    label = 'Expired';
+    tone = 'bg-muted text-muted-foreground';
+    description =
+      'This form link is expired. Reset or generate a new link before sending.';
+  } else if (invitation?.nominationSentAt) {
+    label = 'Waiting';
+    tone = 'bg-amber-50 text-amber-700';
+    description =
+      'Angela marked the nomination email as sent. The portal is waiting for the appointee to submit the form.';
+    subLabel = `sent ${formatDate(invitation.nominationSentAt)}`;
+    canCopy = true;
+  } else if (invitation) {
+    label = 'Link Generated';
+    tone = 'bg-slate-100 text-slate-700';
+    description =
+      'The private form link exists. Copy it into Angela’s nomination email, then mark Nomination sent from the Actions menu.';
+    canCopy = true;
+  }
+
+  return (
+    <div className="inline-flex items-start gap-1.5">
+      <div className="flex flex-col items-start gap-1">
+        <div className="inline-flex items-center gap-1.5">
+          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${tone}`}>
+            {label}
+          </span>
+          {canCopy && invitation && (
+            <CopyFormLinkButton fellow={fellow} invitation={invitation} />
+          )}
+        </div>
+        {subLabel && (
+          <span className="text-[0.75rem] leading-4 text-muted-foreground">
+            {subLabel}
+          </span>
+        )}
+      </div>
+      <Popover.Root>
+        <Popover.Trigger asChild>
+          <button
+            type="button"
+            aria-label="View form status details"
+            className="mt-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+          >
+            <Info className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Content
+            sideOffset={6}
+            className="z-50 w-72 rounded-lg border bg-card p-4 text-[0.82rem] leading-5 text-foreground shadow-lg data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 duration-150"
+          >
+            <div className="mb-1 font-semibold text-sm">Form Status</div>
+            <p className="text-muted-foreground">{description}</p>
+            {configuredForm && (
+              <p className="mt-3 text-[0.75rem] text-muted-foreground">
+                Configured form: {configuredForm.title}
+              </p>
+            )}
+            <Popover.Arrow className="fill-card" />
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
+    </div>
+  );
+}
+
 function FormLinkMenuItem({ fellow }: { fellow: FellowDashboardEntry }) {
   const generateMutation = useGenerateFormInvitation();
-  const [copied, setCopied] = useState(false);
+  const { copied, copyFormLink } = useCopyFormLink(fellow);
+  const configuredForm = getPrimaryConfiguredForm(fellow);
 
-  const existingInvitation = fellow.formInvitations.find(
-    (inv) =>
-      inv.fellowshipId === fellow.fellowshipId &&
-      (inv.status === 'pending' || inv.status === 'submitted')
-  );
-
-  const formLink = existingInvitation
-    ? `${window.location.origin}/forms/${existingInvitation.token}`
-    : null;
+  const existingInvitation = getFormInvitation(fellow);
 
   async function handleGenerate() {
-    if (!fellow.appointment) return;
-    let link: string;
+    if (!configuredForm) return;
+    let token: string;
     try {
       const result = await generateMutation.mutateAsync({
         fellowshipId: fellow.fellowshipId,
         contactId: fellow.civicrmId,
         academicYear: fellow.fellowshipYear,
-        formType: 'fellow-memorandum',
+        formType: configuredForm.id,
       });
-      link = `${window.location.origin}/forms/${result.token}`;
+      token = result.token;
     } catch {
       toast.error('Failed to generate form link.');
       return;
     }
-    try {
-      await navigator.clipboard.writeText(link);
-      toast.success(
-        `Form link generated and copied for ${fellow.firstName} ${fellow.lastName}.`
-      );
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      toast.success(
-        `Form link generated for ${fellow.firstName} ${fellow.lastName}. Copy it from the button.`
-      );
-    }
+
+    await copyFormLink(token, {
+      onCopyFailure: () =>
+        toast.success(
+          `Form link generated for ${fellow.firstName} ${fellow.lastName}. Copy it from the button.`
+        ),
+    });
   }
 
   async function handleCopy() {
-    if (!formLink) return;
-    try {
-      await navigator.clipboard.writeText(formLink);
-      setCopied(true);
-      toast.success('Form link copied to clipboard.');
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      toast.error('Failed to copy link.');
-    }
+    if (!existingInvitation) return;
+    await copyFormLink(existingInvitation.token);
+  }
+
+  if (!configuredForm) {
+    return (
+      <DropdownMenu.Item
+        disabled
+        className="flex cursor-default items-start gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground outline-none data-[disabled]:opacity-100"
+      >
+        <AlertTriangle className="mt-0.5 h-4 w-4 text-destructive" />
+        <span className="flex flex-col">
+          <span className="font-medium text-foreground">No form configured</span>
+          <span className="text-xs leading-5">
+            {formatLabel(fellow.appointment) || 'This appointment type'} has no form yet.
+          </span>
+        </span>
+      </DropdownMenu.Item>
+    );
   }
 
   if (existingInvitation?.status === 'submitted') {
@@ -896,7 +1154,7 @@ function FormLinkMenuItem({ fellow }: { fellow: FellowDashboardEntry }) {
     );
   }
 
-  if (formLink) {
+  if (existingInvitation) {
     return (
       <DropdownMenu.Item
         onSelect={(event) => {
@@ -938,6 +1196,7 @@ function FellowActionsMenu({
   fellow,
   isPending,
   onSendClick,
+  onNominationSentClick,
 }: {
   fellow: FellowDashboardEntry;
   isPending: boolean;
@@ -945,7 +1204,14 @@ function FellowActionsMenu({
     kind: 'vit_id_invitation' | 'bio_project_description',
     mode?: 'send' | 'resend'
   ) => void;
+  onNominationSentClick: (invitation: FormInvitationSummaryEntry) => void;
 }) {
+  const formInvitation = getFormInvitation(fellow);
+  const canMarkNominationSent =
+    !!formInvitation &&
+    formInvitation.status === 'pending' &&
+    !formInvitation.nominationSentAt;
+
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
@@ -965,6 +1231,19 @@ function FellowActionsMenu({
           className="z-50 min-w-[15rem] rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg data-[side=bottom]:animate-in data-[side=bottom]:slide-in-from-top-1 data-[side=top]:animate-in data-[side=top]:slide-in-from-bottom-1"
         >
           <FormLinkMenuItem fellow={fellow} />
+
+          {canMarkNominationSent && (
+            <DropdownMenu.Item
+              disabled={isPending}
+              onSelect={() => {
+                if (formInvitation) onNominationSentClick(formInvitation);
+              }}
+              className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-foreground outline-none transition-colors focus:bg-muted data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
+            >
+              <CalendarCheck className="h-4 w-4 text-primary" />
+              <span>Nomination sent</span>
+            </DropdownMenu.Item>
+          )}
 
           {fellow.vitIdInvitation.canManuallySend && (
             <DropdownMenu.Item
@@ -1052,6 +1331,7 @@ function FellowRow({
   fellow,
   pendingContactId,
   onSendClick,
+  onNominationSentClick,
 }: {
   fellow: FellowDashboardEntry;
   pendingContactId: number | null;
@@ -1059,6 +1339,7 @@ function FellowRow({
     kind: 'vit_id_invitation' | 'bio_project_description',
     mode?: 'send' | 'resend'
   ) => void;
+  onNominationSentClick: (invitation: FormInvitationSummaryEntry) => void;
 }) {
   const isPending = pendingContactId === fellow.civicrmId;
   return (
@@ -1110,6 +1391,9 @@ function FellowRow({
           }
           subLabelTone="destructive"
         />
+      </td>
+      <td className="px-4 py-3">
+        <FormStatusCell fellow={fellow} />
       </td>
       <td className="px-4 py-3">
         <div className="flex flex-col gap-1">
@@ -1165,6 +1449,7 @@ function FellowRow({
           fellow={fellow}
           isPending={isPending}
           onSendClick={onSendClick}
+          onNominationSentClick={onNominationSentClick}
         />
       </td>
     </tr>
@@ -1235,5 +1520,99 @@ function ConfirmResendDialog({
         </div>
       </div>
     </div>
+  );
+}
+
+function NominationSentDialog({
+  open,
+  fellow,
+  submitting,
+  onCancel,
+  onConfirm,
+}: {
+  open: boolean;
+  fellow: FellowDashboardEntry | null;
+  submitting: boolean;
+  onCancel: () => void;
+  onConfirm: (nominationSentOn: string) => Promise<void> | void;
+}) {
+  const [nominationSentOn, setNominationSentOn] = useState(todayInputValue());
+
+  useEffect(() => {
+    if (open) setNominationSentOn(todayInputValue());
+  }, [open, fellow?.civicrmId]);
+
+  const fellowName = fellow ? `${fellow.firstName} ${fellow.lastName}` : '';
+
+  return (
+    <Dialog.Root
+      open={open}
+      onOpenChange={(isOpen) => {
+        if (!isOpen) onCancel();
+      }}
+    >
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-[60] bg-[rgba(29,37,44,0.38)] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 duration-150" />
+        <Dialog.Content
+          aria-labelledby="nomination-sent-title"
+          className="fixed left-1/2 top-1/2 z-[61] w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border bg-card shadow-lg data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.97] duration-150"
+        >
+          <div className="border-b px-5 py-4">
+            <Dialog.Title
+              id="nomination-sent-title"
+              className="text-lg font-semibold tracking-tight text-foreground"
+            >
+              Nomination sent
+            </Dialog.Title>
+          </div>
+          {fellow && (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void onConfirm(nominationSentOn);
+              }}
+            >
+              <div className="space-y-4 px-5 py-4">
+                <p className="text-[0.95rem] leading-6 text-muted-foreground">
+                  Record when the nomination email was sent to {fellowName}. The
+                  appointee status will move forward and the form will show as
+                  waiting for submission.
+                </p>
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium text-foreground">
+                    Nomination sent on
+                  </span>
+                  <input
+                    type="date"
+                    value={nominationSentOn}
+                    onChange={(event) => setNominationSentOn(event.target.value)}
+                    required
+                    className="w-full rounded-md border bg-background px-3.5 py-2.5 text-[0.95rem] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  />
+                </label>
+              </div>
+              <div className="flex justify-end gap-3 border-t px-5 py-4">
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  disabled={submitting}
+                  className="rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Save
+                </button>
+              </div>
+            </form>
+          )}
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import { AppointeeStatusBadge } from '@/components/shared/AppointeeStatusBadge';
 import type { AppointeeStatus } from '@itatti/shared';
@@ -46,4 +46,14 @@ describe('AppointeeStatusBadge', () => {
       expect(title.length).toBeGreaterThan(10);
     }
   );
+
+  it('distinguishes completed lifecycle steps from future steps in the popup', () => {
+    const { container } = render(<AppointeeStatusBadge status="accepted" />);
+
+    fireEvent.click(screen.getByLabelText('View appointee lifecycle stages'));
+
+    expect(document.querySelectorAll('.border-green-600')).toHaveLength(3);
+    expect(document.querySelectorAll('.border-primary')).toHaveLength(1);
+    expect(document.querySelectorAll('.border-muted-foreground\\/40')).toHaveLength(3);
+  });
 });

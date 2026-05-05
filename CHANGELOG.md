@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.13.0] - 2026-05-04
+
+### Added
+- **Form status column on Manage Appointees.** Angela can now see whether an appointee is ready for a form link, has no configured form, has a generated link, is waiting for submission, or has submitted the form.
+- **Copy form link shortcut.** Generated form links can be copied directly from the Form column with a dedicated icon button and appointee-specific toast confirmation.
+- **Nomination sent action.** The Actions menu now includes a "Nomination sent" action for generated links, opening a date picker prefilled with today and moving the form workflow into the waiting-for-submission state.
+
+### Changed
+- Form link generation is now limited to appointment types with configured forms. Non-Fellow appointment types are shown as "No Form" instead of allowing a link that cannot match a configured workflow.
+- Form status colors now follow lifecycle semantics: "Ready" is neutral, generated links are slate, waiting is amber, submitted is green, and missing configuration is red.
+- The appointee lifecycle popover now marks completed states with green check indicators so past steps are visually distinct from future steps.
+
+### Fixed
+- Invalid nomination sent dates are rejected before database writes instead of allowing impossible calendar dates through the form workflow.
+
 ## [0.12.2] - 2026-04-30
 
 ### Added

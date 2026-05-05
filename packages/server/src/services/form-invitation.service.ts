@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { getFormDef, getFormsForAppointmentType } from '@itatti/shared';
 import { buildFormSchema } from '../lib/form-schema.js';
@@ -11,6 +12,8 @@ export interface GenerateInvitationArgs {
   contactId: number;
   academicYear: string;
   formType: string;
+  appointmentType?: string;
+  enforceAppointmentType?: boolean;
   triggeredBy: string;
 }
 
@@ -48,6 +51,19 @@ export async function generateInvitation(
       status: existing.status,
       created: false,
     };
+  }
+
+  // Dev mode passes enforceAppointmentType: false because local CiviCRM is not
+  // populated. Production and direct service calls enforce the form mapping.
+  if (
+    args.enforceAppointmentType !== false &&
+    (!args.appointmentType || !formDef.appointmentTypes.includes(args.appointmentType))
+  ) {
+    throw new ServiceError('No form configured for this appointment type', 400, {
+      code: 'no_form_configured',
+      appointmentType: args.appointmentType ?? null,
+      formType: args.formType,
+    });
   }
 
   const token = crypto.randomBytes(32).toString('base64url');
@@ -149,11 +165,49 @@ export async function getResponseByInvitationId(invitationId: string) {
   return prisma.formResponse.findUnique({ where: { invitationId } });
 }
 
-export async function markNominationSent(invitationId: string) {
-  return prisma.formInvitation.update({
-    where: { id: invitationId },
-    data: { nominationSentAt: new Date() },
-  });
+export async function markNominationSent(invitationId: string, nominationSentOn?: string) {
+  const nominationSentAt = nominationSentOn
+    ? parseNominationSentDate(nominationSentOn)
+    : new Date();
+
+  try {
+    return await prisma.formInvitation.update({
+      where: { id: invitationId, status: 'pending' },
+      data: { nominationSentAt },
+    });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError) {
+      throw new ServiceError(
+        err.code === 'P2025'
+          ? 'Form invitation is not pending or does not exist'
+          : 'Could not mark nomination as sent',
+        err.code === 'P2025' ? 409 : 500,
+        {
+          code: err.code === 'P2025' ? 'nomination_sent_not_allowed' : 'prisma_error',
+          prismaCode: err.code,
+          originalError: {
+            name: err.name,
+            message: err.message,
+          },
+        }
+      );
+    }
+    throw err;
+  }
+}
+
+function parseNominationSentDate(nominationSentOn: string): Date {
+  const nominationSentAt = new Date(`${nominationSentOn}T12:00:00.000Z`);
+  if (
+    Number.isNaN(nominationSentAt.getTime()) ||
+    nominationSentAt.toISOString().slice(0, 10) !== nominationSentOn
+  ) {
+    throw new ServiceError('Invalid nomination sent date', 400, {
+      code: 'invalid_nomination_sent_on',
+      nominationSentOn,
+    });
+  }
+  return nominationSentAt;
 }
 
 export async function resetInvitation(invitationId: string, triggeredBy: string) {
