@@ -7,6 +7,7 @@ import * as formService from '../services/form-invitation.service.js';
 import * as civicrmService from '../services/civicrm.service.js';
 import { generateFormPdf } from '../services/form-pdf.service.js';
 import { isDevMode } from '../env.js';
+import { logger } from '../lib/logger.js';
 
 const generateSchema = z.object({
   fellowshipId: z.number().int().positive(),
@@ -63,13 +64,19 @@ router.post('/generate', validate(generateSchema), async (req, res) => {
     let appointmentType: string | undefined;
 
     if (!isDevMode) {
-      const fellowships = await civicrmService.getFellowsWithContacts();
-      const fellowship = fellowships.find(
-        (f) =>
-          f.fellowshipId === req.body.fellowshipId &&
-          f.contactId === req.body.contactId
+      const fellowship = await civicrmService.getFellowWithContact(
+        req.body.fellowshipId,
+        req.body.contactId
       );
       if (!fellowship) {
+        logger.warn(
+          {
+            fellowshipId: req.body.fellowshipId,
+            contactId: req.body.contactId,
+            formType: req.body.formType,
+          },
+          'form_generation_rejected_no_matching_fellowship'
+        );
         res.status(400).json({ error: 'matching_fellowship_not_found' });
         return;
       }
@@ -85,14 +92,26 @@ router.post('/generate', validate(generateSchema), async (req, res) => {
     res.status(result.created ? 201 : 200).json(result);
   } catch (err) {
     if (err instanceof formService.ServiceError) {
+      const details = err.details;
+      if (
+        typeof details === 'object' &&
+        details !== null &&
+        'code' in details &&
+        (details as { code?: string }).code === 'no_form_configured'
+      ) {
+        logger.warn(
+          {
+            fellowshipId: req.body.fellowshipId,
+            contactId: req.body.contactId,
+            formType: req.body.formType,
+            details,
+          },
+          'form_generation_rejected_no_form_configured'
+        );
+      }
       res.status(err.statusCode).json({
-        error:
-          typeof err.details === 'object' &&
-          err.details !== null &&
-          'code' in err.details
-            ? (err.details as { code: string }).code
-            : err.message,
-        details: err.details,
+        error: err.message,
+        details,
       });
       return;
     }

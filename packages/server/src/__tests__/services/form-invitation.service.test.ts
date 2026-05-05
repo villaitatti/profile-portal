@@ -60,7 +60,15 @@ describe('generateInvitation', () => {
       },
     } satisfies Partial<ServiceError>);
 
-    expect(mockPrisma.formInvitation.findUnique).not.toHaveBeenCalled();
+    expect(mockPrisma.formInvitation.findUnique).toHaveBeenCalledWith({
+      where: {
+        fellowshipId_formType_academicYear: {
+          fellowshipId: 123,
+          formType: 'fellow-memorandum',
+          academicYear: '2026-2027',
+        },
+      },
+    });
     expect(mockPrisma.formInvitation.create).not.toHaveBeenCalled();
   });
 
@@ -82,7 +90,42 @@ describe('generateInvitation', () => {
       },
     });
 
-    expect(mockPrisma.formInvitation.findUnique).not.toHaveBeenCalled();
+    expect(mockPrisma.formInvitation.findUnique).toHaveBeenCalledWith({
+      where: {
+        fellowshipId_formType_academicYear: {
+          fellowshipId: 123,
+          formType: 'fellow-memorandum',
+          academicYear: '2026-2027',
+        },
+      },
+    });
+    expect(mockPrisma.formInvitation.create).not.toHaveBeenCalled();
+  });
+
+  it('returns an existing invitation before enforcing a changed appointment mapping', async () => {
+    mockPrisma.formInvitation.findUnique.mockResolvedValue({
+      id: 'inv_existing',
+      token: 'existing-token',
+      formType: 'fellow-memorandum',
+      status: 'pending',
+    } as any);
+
+    await expect(
+      generateInvitation({
+        fellowshipId: 123,
+        contactId: 456,
+        academicYear: '2026-2027',
+        formType: 'fellow-memorandum',
+        appointmentType: 'Visiting Professor',
+        triggeredBy: 'admin:test',
+      })
+    ).resolves.toMatchObject({
+      id: 'inv_existing',
+      token: 'existing-token',
+      created: false,
+    });
+
+    expect(mockPrisma.formInvitation.create).not.toHaveBeenCalled();
   });
 });
 

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import * as Popover from '@radix-ui/react-popover';
 import * as Dialog from '@radix-ui/react-dialog';
@@ -470,6 +470,8 @@ function formatDate(dateStr: string): string {
 }
 
 function todayInputValue(): string {
+  // Seeds the picker with the admin's local calendar date. The server stores
+  // the selected day at noon UTC to avoid timezone rollover in normal use.
   const today = new Date();
   const month = String(today.getMonth() + 1).padStart(2, '0');
   const day = String(today.getDate()).padStart(2, '0');
@@ -481,6 +483,8 @@ function getConfiguredForms(fellow: FellowDashboardEntry): FormDef[] {
 }
 
 function getPrimaryConfiguredForm(fellow: FellowDashboardEntry): FormDef | null {
+  // v0.13 intentionally handles one configured form per appointment type.
+  // When a second form is added, render one status per configured form here.
   return getConfiguredForms(fellow)[0] ?? null;
 }
 
@@ -927,6 +931,13 @@ function formLinkCopiedMessage(fellow: FellowDashboardEntry): string {
 
 function useCopyFormLink(fellow: FellowDashboardEntry) {
   const [copied, setCopied] = useState(false);
+  const resetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (resetTimeoutRef.current) clearTimeout(resetTimeoutRef.current);
+    };
+  }, []);
 
   async function copyFormLink(
     token: string,
@@ -939,7 +950,8 @@ function useCopyFormLink(fellow: FellowDashboardEntry) {
       await navigator.clipboard.writeText(formLinkForToken(token));
       setCopied(true);
       toast.success(formLinkCopiedMessage(fellow));
-      setTimeout(() => setCopied(false), 2000);
+      if (resetTimeoutRef.current) clearTimeout(resetTimeoutRef.current);
+      resetTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
       return true;
     } catch {
       if (options.onCopyFailure) {

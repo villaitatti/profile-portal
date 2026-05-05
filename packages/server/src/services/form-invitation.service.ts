@@ -31,16 +31,6 @@ export async function generateInvitation(
   if (!formDef) {
     throw new ServiceError(`Unknown form type: ${args.formType}`, 400);
   }
-  if (
-    args.enforceAppointmentType &&
-    (!args.appointmentType || !formDef.appointmentTypes.includes(args.appointmentType))
-  ) {
-    throw new ServiceError('No form configured for this appointment type', 400, {
-      code: 'no_form_configured',
-      appointmentType: args.appointmentType ?? null,
-      formType: args.formType,
-    });
-  }
 
   const existing = await prisma.formInvitation.findUnique({
     where: {
@@ -60,6 +50,19 @@ export async function generateInvitation(
       status: existing.status,
       created: false,
     };
+  }
+
+  // Dev mode passes enforceAppointmentType: false because local CiviCRM is not
+  // populated. Production and direct service calls enforce the form mapping.
+  if (
+    args.enforceAppointmentType !== false &&
+    (!args.appointmentType || !formDef.appointmentTypes.includes(args.appointmentType))
+  ) {
+    throw new ServiceError('No form configured for this appointment type', 400, {
+      code: 'no_form_configured',
+      appointmentType: args.appointmentType ?? null,
+      formType: args.formType,
+    });
   }
 
   const token = crypto.randomBytes(32).toString('base64url');

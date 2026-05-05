@@ -81,55 +81,57 @@ export function AppointeeStatusBadge({
                 language. Without this, past steps look identical to future
                 steps when the current lifecycle state is in the middle.
               */}
-              {LIFECYCLE_STEPS.map((step, i) => {
-                const isCurrent = step.key === status;
+              {(() => {
                 const currentIndex = LIFECYCLE_STEPS.findIndex((s) => s.key === status);
-                const isComplete = i < currentIndex;
-                return (
-                  <div key={step.key} className="flex items-start gap-2">
-                    <div className="flex flex-col items-center">
-                      <div
-                        className={cn(
-                          'mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border-2',
-                          isCurrent
-                            ? 'border-primary bg-primary'
-                            : isComplete
-                              ? 'border-green-600 bg-green-600'
-                              : 'border-muted-foreground/40 bg-background'
-                        )}
-                      >
-                        {isComplete && (
-                          <Check className="h-2.5 w-2.5 text-white" aria-hidden="true" />
-                        )}
-                      </div>
-                      {i < LIFECYCLE_STEPS.length - 1 && (
+                return LIFECYCLE_STEPS.map((step, i) => {
+                  const isCurrent = step.key === status;
+                  const isComplete = i < currentIndex;
+                  return (
+                    <div key={step.key} className="flex items-start gap-2">
+                      <div className="flex flex-col items-center">
                         <div
                           className={cn(
-                            'h-4 w-0.5',
-                            i < currentIndex ? 'bg-green-600/60' : 'bg-muted-foreground/20'
+                            'mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border-2',
+                            isCurrent
+                              ? 'border-primary bg-primary'
+                              : isComplete
+                                ? 'border-green-600 bg-green-600'
+                                : 'border-muted-foreground/40 bg-background'
                           )}
-                        />
-                      )}
-                    </div>
-                    <div className={cn('pb-2', isCurrent && 'font-medium')}>
-                      <span
-                        className={cn(
-                          isCurrent
-                            ? 'text-primary'
-                            : isComplete
-                              ? 'text-green-700'
-                              : 'text-foreground'
+                        >
+                          {isComplete && (
+                            <Check className="h-2.5 w-2.5 text-white" aria-hidden="true" />
+                          )}
+                        </div>
+                        {i < LIFECYCLE_STEPS.length - 1 && (
+                          <div
+                            className={cn(
+                              'h-4 w-0.5',
+                              i < currentIndex ? 'bg-green-600/60' : 'bg-muted-foreground/20'
+                            )}
+                          />
                         )}
-                      >
-                        {step.label}
-                      </span>
-                      <span className="block text-[0.75rem] text-muted-foreground">
-                        {step.description}
-                      </span>
+                      </div>
+                      <div className={cn('pb-2', isCurrent && 'font-medium')}>
+                        <span
+                          className={cn(
+                            isCurrent
+                              ? 'text-primary'
+                              : isComplete
+                                ? 'text-green-700'
+                                : 'text-foreground'
+                          )}
+                        >
+                          {step.label}
+                        </span>
+                        <span className="block text-[0.75rem] text-muted-foreground">
+                          {step.description}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                });
+              })()}
             </div>
             <Popover.Arrow className="fill-card" />
           </Popover.Content>
