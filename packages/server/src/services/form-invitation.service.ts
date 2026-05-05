@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { getFormDef, getFormsForAppointmentType } from '@itatti/shared';
 import { buildFormSchema } from '../lib/form-schema.js';
@@ -169,10 +170,30 @@ export async function markNominationSent(invitationId: string, nominationSentOn?
     ? parseNominationSentDate(nominationSentOn)
     : new Date();
 
-  return prisma.formInvitation.update({
-    where: { id: invitationId },
-    data: { nominationSentAt },
-  });
+  try {
+    return await prisma.formInvitation.update({
+      where: { id: invitationId, status: 'pending' },
+      data: { nominationSentAt },
+    });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError) {
+      throw new ServiceError(
+        err.code === 'P2025'
+          ? 'Form invitation is not pending or does not exist'
+          : 'Could not mark nomination as sent',
+        err.code === 'P2025' ? 409 : 500,
+        {
+          code: err.code === 'P2025' ? 'nomination_sent_not_allowed' : 'prisma_error',
+          prismaCode: err.code,
+          originalError: {
+            name: err.name,
+            message: err.message,
+          },
+        }
+      );
+    }
+    throw err;
+  }
 }
 
 function parseNominationSentDate(nominationSentOn: string): Date {

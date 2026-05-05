@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Prisma } from '@prisma/client';
 
 vi.mock('../../lib/prisma.js', () => ({
   prisma: {
@@ -139,7 +140,7 @@ describe('markNominationSent', () => {
     await markNominationSent('inv_1', '2026-05-04');
 
     expect(mockPrisma.formInvitation.update).toHaveBeenCalledWith({
-      where: { id: 'inv_1' },
+      where: { id: 'inv_1', status: 'pending' },
       data: { nominationSentAt: new Date('2026-05-04T12:00:00.000Z') },
     });
   });
@@ -155,5 +156,56 @@ describe('markNominationSent', () => {
     });
 
     expect(mockPrisma.formInvitation.update).not.toHaveBeenCalled();
+  });
+
+  it('converts non-pending or missing invitations into a ServiceError', async () => {
+    mockPrisma.formInvitation.update.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('Record not found', {
+        code: 'P2025',
+        clientVersion: 'test',
+      })
+    );
+
+    await expect(markNominationSent('inv_submitted', '2026-05-04')).rejects.toMatchObject({
+      name: 'ServiceError',
+      statusCode: 409,
+      message: 'Form invitation is not pending or does not exist',
+      details: {
+        code: 'nomination_sent_not_allowed',
+        prismaCode: 'P2025',
+        originalError: {
+          name: 'PrismaClientKnownRequestError',
+          message: 'Record not found',
+        },
+      },
+    });
+
+    expect(mockPrisma.formInvitation.update).toHaveBeenCalledWith({
+      where: { id: 'inv_submitted', status: 'pending' },
+      data: { nominationSentAt: new Date('2026-05-04T12:00:00.000Z') },
+    });
+  });
+
+  it('wraps other known Prisma errors when saving nomination sent dates', async () => {
+    mockPrisma.formInvitation.update.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('Database constraint failed', {
+        code: 'P2003',
+        clientVersion: 'test',
+      })
+    );
+
+    await expect(markNominationSent('inv_1', '2026-05-04')).rejects.toMatchObject({
+      name: 'ServiceError',
+      statusCode: 500,
+      message: 'Could not mark nomination as sent',
+      details: {
+        code: 'prisma_error',
+        prismaCode: 'P2003',
+        originalError: {
+          name: 'PrismaClientKnownRequestError',
+          message: 'Database constraint failed',
+        },
+      },
+    });
   });
 });

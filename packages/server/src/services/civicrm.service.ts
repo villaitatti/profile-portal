@@ -109,24 +109,28 @@ function fellowshipFields() {
   };
 }
 
+function buildFellowSelect(fields: ReturnType<typeof fellowshipFields>): string[] {
+  return [
+    'id',
+    'entity_id',
+    fields.startField,
+    fields.endField,
+    fields.acceptedField,
+    fields.appointmentField,
+    fields.fellowshipField,
+    'entity_id.first_name',
+    'entity_id.last_name',
+    'entity_id.email_primary.email',
+    'entity_id.image_URL',
+  ];
+}
+
 export async function getFellowsWithContacts(): Promise<CiviCRMFellowWithContact[]> {
   const entity = env.CIVICRM_FELLOWSHIP_ENTITY;
   const fields = fellowshipFields();
 
   const result = await civiApiCall(entity, 'get', {
-    select: [
-      'id',
-      'entity_id',
-      fields.startField,
-      fields.endField,
-      fields.acceptedField,
-      fields.appointmentField,
-      fields.fellowshipField,
-      'entity_id.first_name',
-      'entity_id.last_name',
-      'entity_id.email_primary.email',
-      'entity_id.image_URL',
-    ],
+    select: buildFellowSelect(fields),
     where: [['entity_id.is_deleted', '=', false]],
     orderBy: { [fields.startField]: 'DESC' },
   });
@@ -142,19 +146,7 @@ export async function getFellowWithContact(
   const fields = fellowshipFields();
 
   const result = await civiApiCall(entity, 'get', {
-    select: [
-      'id',
-      'entity_id',
-      fields.startField,
-      fields.endField,
-      fields.acceptedField,
-      fields.appointmentField,
-      fields.fellowshipField,
-      'entity_id.first_name',
-      'entity_id.last_name',
-      'entity_id.email_primary.email',
-      'entity_id.image_URL',
-    ],
+    select: buildFellowSelect(fields),
     where: [
       ['id', '=', fellowshipId],
       ['entity_id', '=', contactId],
