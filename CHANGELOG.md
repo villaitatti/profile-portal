@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.13.2] - 2026-05-06
+
+### Fixed
+- **Editing an address to "Temporary" no longer fails validation.** The update route still allowed the old "Billing" id (5) and rejected the new "Temporary" id (6), so switching an existing non-primary address to Temporary returned a validation error.
+
+### Changed
+- **Contact validation error messages no longer show internal numeric IDs.** Address and phone error messages now list the type names users actually see in the form ("Home, Work, Other, or Temporary" / "Phone or Mobile") instead of parenthesised database IDs.
+
 ## [0.13.1] - 2026-05-06
 
 ### Fixed

@@ -86,7 +86,7 @@ router.post('/addresses', async (req, res) => {
   }
 
   if (locationTypeId !== undefined && ![1, 2, 4, 6].includes(Number(locationTypeId))) {
-    res.status(400).json({ error: 'Location type must be Home (1), Work (2), Other (4), or Temporary (6)', code: 'VALIDATION_ERROR' });
+    res.status(400).json({ error: 'Please choose a valid location type: Home, Work, Other, or Temporary.', code: 'VALIDATION_ERROR' });
     return;
   }
 
@@ -154,8 +154,8 @@ router.put('/addresses/:id', async (req, res) => {
           res.status(400).json({ error: 'Main type is reserved for the primary address', code: 'VALIDATION_ERROR' });
           return;
         }
-      } else if (![1, 2, 4, 5].includes(typeNum)) {
-        res.status(400).json({ error: 'Location type must be Home (1), Work (2), Other (4), or Temporary (6)', code: 'VALIDATION_ERROR' });
+      } else if (![1, 2, 4, 6].includes(typeNum)) {
+        res.status(400).json({ error: 'Please choose a valid location type: Home, Work, Other, or Temporary.', code: 'VALIDATION_ERROR' });
         return;
       }
     }
@@ -272,7 +272,7 @@ router.put('/addresses/:id/reclassify', async (req, res) => {
 
   const { locationTypeId } = req.body;
   if (!locationTypeId || ![1, 2, 4, 6].includes(Number(locationTypeId))) {
-    res.status(400).json({ error: 'Location type must be Home (1), Work (2), Other (4), or Temporary (6)', code: 'VALIDATION_ERROR' });
+    res.status(400).json({ error: 'Please choose a valid location type: Home, Work, Other, or Temporary.', code: 'VALIDATION_ERROR' });
     return;
   }
 
@@ -365,7 +365,7 @@ router.post('/phones', async (req, res) => {
 
   const typeId = Number(phoneTypeId);
   if (typeId !== 1 && typeId !== 2) {
-    res.status(400).json({ error: 'Phone type must be Phone (1) or Mobile (2)', code: 'VALIDATION_ERROR' });
+    res.status(400).json({ error: 'Please choose a valid phone type: Phone or Mobile.', code: 'VALIDATION_ERROR' });
     return;
   }
 
@@ -412,7 +412,7 @@ router.put('/phones/:id', async (req, res) => {
     if (phoneTypeId !== undefined) {
       const typeId = Number(phoneTypeId);
       if (typeId !== 1 && typeId !== 2) {
-        res.status(400).json({ error: 'Phone type must be Phone (1) or Mobile (2)', code: 'VALIDATION_ERROR' });
+        res.status(400).json({ error: 'Please choose a valid phone type: Phone or Mobile.', code: 'VALIDATION_ERROR' });
         return;
       }
     }
