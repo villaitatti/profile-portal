@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.13.3] - 2026-05-06
+
+### Changed
+- **Dates in the Manage Appointees page now display as "24 Apr 2026"** in the Appointee Status and Form columns, replacing the locale-dependent numeric format that could be misread as month/day vs day/month.
+- **The "Nomination sent" date picker uses the European day/month order** via `lang="en-GB"` so the native popup shows DD/MM instead of MM/DD.
+
 ## [0.13.2] - 2026-05-06
 
 ### Fixed

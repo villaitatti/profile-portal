@@ -466,7 +466,12 @@ function formatLabel(value?: string): string {
 }
 
 function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString();
+  // "24 Apr 2026" — unambiguous for the EU/US mixed audience here.
+  return new Date(dateStr).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 }
 
 function todayInputValue(): string {
@@ -1146,7 +1151,7 @@ function FormLinkMenuItem({ fellow }: { fellow: FellowDashboardEntry }) {
           <span className="font-medium">Form done</span>
           {existingInvitation.submittedAt && (
             <span className="text-xs text-muted-foreground">
-              Submitted {new Date(existingInvitation.submittedAt).toLocaleDateString()}
+              Submitted {formatDate(existingInvitation.submittedAt)}
             </span>
           )}
         </span>
@@ -1584,6 +1589,7 @@ function NominationSentDialog({
                   </span>
                   <input
                     type="date"
+                    lang="en-GB"
                     value={nominationSentOn}
                     onChange={(event) => setNominationSentOn(event.target.value)}
                     required
