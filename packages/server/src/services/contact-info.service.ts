@@ -100,7 +100,7 @@ export async function reclassifyAddress(
 
 // --- Location type fallback (shared) ---
 
-const LOCATION_TYPE_PRIORITY_ORDER = [3, 1, 2, 4, 5];
+const LOCATION_TYPE_PRIORITY_ORDER = [3, 1, 2, 4, 6];
 
 async function pickLocationTypeId(
   entity: 'Address' | 'Phone',
@@ -176,8 +176,8 @@ const LOCATION_TYPE_LABELS: Record<number, LocationTypeLabel> = {
   1: 'Home',
   2: 'Work',
   3: 'Main',
-  4: 'Temporary',
-  5: 'Other',
+  4: 'Other',
+  6: 'Temporary',
 };
 
 export async function getAddresses(contactId: number): Promise<CiviCRMAddress[]> {
@@ -325,14 +325,12 @@ export async function createPhone(
   contactId: number,
   input: CreatePhoneInput
 ): Promise<CiviCRMPhone> {
-  const locationTypeId = await pickLocationTypeId('Phone', contactId);
-
   const res = await civiApiCall('Phone', 'create', {
     values: {
       contact_id: contactId,
       phone: input.phone,
       phone_type_id: input.phoneTypeId,
-      location_type_id: locationTypeId,
+      location_type_id: LOCATION_TYPE_MAIN_ID,
       is_primary: false,
     },
   });

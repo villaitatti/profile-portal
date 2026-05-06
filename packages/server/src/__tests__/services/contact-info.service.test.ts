@@ -128,8 +128,6 @@ describe('getPhones', () => {
 
 describe('createPhone', () => {
   it('sets isPrimary=true when contact has no existing primary phone', async () => {
-    // pickLocationTypeId
-    mockFetch.mockResolvedValueOnce(jsonResponse({ values: [] }));
     // create call
     mockFetch.mockResolvedValueOnce(jsonResponse({ values: [{ id: 5 }] }));
     // reconcilePrimary: fetch all phones (none primary)
@@ -140,6 +138,18 @@ describe('createPhone', () => {
     const result = await createPhone(42, { phone: '+1 555 123 4567', phoneTypeId: 2 });
     expect(result.isPrimary).toBe(true);
     expect(result.phoneType).toBe('Mobile');
+  });
+
+  it('always uses Main location type when creating a phone', async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse({ values: [{ id: 5 }] }));
+    mockFetch.mockResolvedValueOnce(jsonResponse({ values: [{ id: 5, is_primary: false }] }));
+    mockFetch.mockResolvedValueOnce(jsonResponse({ values: [{ id: 5 }] }));
+
+    await createPhone(42, { phone: '+1 555 123 4567', phoneTypeId: 1 });
+
+    const createBody = mockFetch.mock.calls[0][1].body as string;
+    const params = JSON.parse(decodeURIComponent(createBody.replace('params=', '')));
+    expect(params.values.location_type_id).toBe(3);
   });
 });
 

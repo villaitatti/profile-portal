@@ -85,8 +85,8 @@ router.post('/addresses', async (req, res) => {
     return;
   }
 
-  if (locationTypeId !== undefined && ![1, 2, 4, 5].includes(Number(locationTypeId))) {
-    res.status(400).json({ error: 'Location type must be Home (1), Work (2), Temporary (4), or Other (5)', code: 'VALIDATION_ERROR' });
+  if (locationTypeId !== undefined && ![1, 2, 4, 6].includes(Number(locationTypeId))) {
+    res.status(400).json({ error: 'Location type must be Home (1), Work (2), Other (4), or Temporary (6)', code: 'VALIDATION_ERROR' });
     return;
   }
 
@@ -155,7 +155,7 @@ router.put('/addresses/:id', async (req, res) => {
           return;
         }
       } else if (![1, 2, 4, 5].includes(typeNum)) {
-        res.status(400).json({ error: 'Location type must be Home (1), Work (2), Temporary (4), or Other (5)', code: 'VALIDATION_ERROR' });
+        res.status(400).json({ error: 'Location type must be Home (1), Work (2), Other (4), or Temporary (6)', code: 'VALIDATION_ERROR' });
         return;
       }
     }
@@ -271,8 +271,8 @@ router.put('/addresses/:id/reclassify', async (req, res) => {
   }
 
   const { locationTypeId } = req.body;
-  if (!locationTypeId || ![1, 2, 4, 5].includes(Number(locationTypeId))) {
-    res.status(400).json({ error: 'Location type must be Home (1), Work (2), Temporary (4), or Other (5)', code: 'VALIDATION_ERROR' });
+  if (!locationTypeId || ![1, 2, 4, 6].includes(Number(locationTypeId))) {
+    res.status(400).json({ error: 'Location type must be Home (1), Work (2), Other (4), or Temporary (6)', code: 'VALIDATION_ERROR' });
     return;
   }
 

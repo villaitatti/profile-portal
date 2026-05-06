@@ -1,8 +1,8 @@
 export const LOCATION_TYPES = [
   { id: 1, label: 'Home' },
   { id: 2, label: 'Work' },
-  { id: 4, label: 'Temporary' },
-  { id: 5, label: 'Other' },
+  { id: 4, label: 'Other' },
+  { id: 6, label: 'Temporary' },
 ] as const;
 
 export const LOCATION_TYPE_MAIN_ID = 3;

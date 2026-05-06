@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.13.1] - 2026-05-06
+
+### Fixed
+- **Address location types now match CiviCRM.** "Temporary" and "Other" were swapped — profiles showed "Temporary" for what CiviCRM stored as "Other" (and vice versa). Location type IDs now correctly map to CiviCRM's configuration (Home=1, Work=2, Main=3, Other=4, Temporary=6). Billing (id 5) is excluded from the selectable options.
+
+### Changed
+- **New phone numbers always use the Main location type.** Previously, phone creation cycled through location types to avoid duplicates; it now hardcodes Main so every phone lives in the same location category.
+
 ## [0.13.0] - 2026-05-04
 
 ### Added
