@@ -121,3 +121,20 @@ export function getFormDef(formId: string): FormDef | undefined {
 export function getFormsForAppointmentType(appointmentType: string): FormDef[] {
   return FORM_REGISTRY.filter((f) => f.appointmentTypes.includes(appointmentType));
 }
+
+/**
+ * Prefix the server emits as formTitle when a submitted invitation's
+ * formType is no longer in FORM_REGISTRY (the form was retired between
+ * submission and display). Shared between server (who builds it) and web
+ * (who parses it) so a typo on one side can't silently break the
+ * retired-form UI branch.
+ */
+export const RETIRED_FORM_TITLE_PREFIX = '(retired form: ';
+
+export function buildRetiredFormTitle(formType: string): string {
+  return `${RETIRED_FORM_TITLE_PREFIX}${formType})`;
+}
+
+export function isRetiredFormTitle(formTitle: string): boolean {
+  return formTitle.startsWith(RETIRED_FORM_TITLE_PREFIX);
+}

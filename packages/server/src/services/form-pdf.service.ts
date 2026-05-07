@@ -102,7 +102,11 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 /**
  * Parse 'YYYY-MM-DD' as a local date and format as 'D MMM YYYY'. Avoids the
  * `new Date("YYYY-MM-DD")` UTC-midnight interpretation that shifts by one
- * day in UTC- timezones. On any parse failure, returns the input unchanged.
+ * day in UTC- timezones. Rejects impossible calendar dates (e.g. 2026-02-31,
+ * 2025-02-29) by constructing a local Date from the parts and confirming
+ * the Date's own y/m/d round-trips identically — Date auto-rolls 2026-02-31
+ * into 2026-03-03, which we detect here. Returns the input unchanged on
+ * any failure.
  */
 function formatDateOnly(s: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
@@ -111,6 +115,14 @@ function formatDateOnly(s: string): string {
   const m = Number(match[2]);
   const d = Number(match[3]);
   if (!y || m < 1 || m > 12 || d < 1 || d > 31) return s;
+  const date = new Date(y, m - 1, d);
+  if (
+    date.getFullYear() !== y ||
+    date.getMonth() !== m - 1 ||
+    date.getDate() !== d
+  ) {
+    return s;
+  }
   return `${d} ${MONTHS[m - 1]} ${y}`;
 }
 

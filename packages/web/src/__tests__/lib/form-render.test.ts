@@ -84,6 +84,16 @@ describe('formatDateOnly (TZ-independent by construction)', () => {
     expect(formatDateOnly('')).toBe('');
     expect(formatDateOnly('2026-13-01')).toBe('2026-13-01'); // month 13 is invalid
   });
+
+  it('rejects impossible calendar dates (would otherwise roll into the next month)', () => {
+    // Date.UTC-or-local constructor silently rolls 2026-02-31 → 2026-03-03.
+    // The round-trip check catches this and returns the input unchanged so
+    // the detail pane doesn't show "31 Feb 2026" as if it were intentional.
+    expect(formatDateOnly('2026-02-31')).toBe('2026-02-31');
+    expect(formatDateOnly('2025-02-29')).toBe('2025-02-29'); // not a leap year
+    expect(formatDateOnly('2026-04-31')).toBe('2026-04-31'); // April has 30 days
+    expect(formatDateOnly('2024-02-29')).toBe('29 Feb 2024'); // 2024 IS a leap year
+  });
 });
 
 describe('getVisibleFields — parity fixture', () => {

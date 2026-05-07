@@ -382,14 +382,24 @@ function SubmissionList({ items, selectedId, onSelect }: SubmissionListProps) {
   }
 
   return (
+    // role="listbox" + role="option" on each row makes aria-selected semantically
+    // valid (plain <li> does not support aria-selected per WAI-ARIA 1.2). The
+    // nested [↓ PDF] button is a pragmatic deviation from the strict "only
+    // checkbox/radio/switch descendants in option" rule — the business case for
+    // a 1-click PDF action per row (OV1 decision) outweighs the ARIA purity
+    // cost, and major screen readers (VoiceOver, NVDA) handle it without
+    // announcing spurious state. If this surfaces as a real accessibility
+    // complaint, move the PDF action to a row-level action menu.
     <ul
       ref={listRef}
+      role="listbox"
       className="space-y-2 rounded-lg border bg-card p-2"
       aria-label="Form submissions"
     >
       {items.map((inv, index) => (
         <li
           key={inv.id}
+          role="option"
           data-invitation-id={inv.id}
           tabIndex={inv.id === selectedId ? 0 : -1}
           aria-selected={inv.id === selectedId}

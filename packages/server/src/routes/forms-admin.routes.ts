@@ -14,11 +14,13 @@ import { logger } from '../lib/logger.js';
 // without a per-request roundtrip. Graceful-degrade: if the CiviCRM fetch
 // fails, the lookup returns a map with no names, and the endpoint still
 // returns rows (the UI shows "Contact #<id>" as a fallback).
-let cachedFellows: { contactId: number; firstName: string; lastName: string }[] | null = null;
+type CachedFellow = { contactId: number; firstName: string; lastName: string };
+
+let cachedFellows: CachedFellow[] | null = null;
 let cachedFellowsExpires = 0;
 const FELLOWS_CACHE_TTL_MS = 120_000;
 
-async function getFellowsCached(): Promise<typeof cachedFellows> {
+async function getFellowsCached(): Promise<CachedFellow[]> {
   const now = Date.now();
   if (cachedFellows && now < cachedFellowsExpires) return cachedFellows;
   const fellows = await civicrmService.getFellowsWithContacts();
@@ -46,7 +48,7 @@ async function buildNameLookup(): Promise<formService.NameLookup> {
   try {
     const fellows = await getFellowsCached();
     const byId = new Map<number, string>();
-    for (const f of fellows ?? []) {
+    for (const f of fellows) {
       const name = `${f.firstName} ${f.lastName}`.trim();
       if (name) byId.set(f.contactId, name);
     }

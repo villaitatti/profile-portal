@@ -108,7 +108,8 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 /**
  * Parse 'YYYY-MM-DD' as a local date and format as 'D MMM YYYY'. Avoids the
  * `new Date("YYYY-MM-DD")` UTC-midnight bug that renders the previous day in
- * UTC- timezones. Returns the input unchanged on any parse failure.
+ * UTC- timezones. Rejects impossible calendar dates (2026-02-31, 2025-02-29)
+ * via a Date round-trip. Returns the input unchanged on any failure.
  */
 export function formatDateOnly(s: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
@@ -117,15 +118,20 @@ export function formatDateOnly(s: string): string {
   const m = Number(match[2]);
   const d = Number(match[3]);
   if (!y || m < 1 || m > 12 || d < 1 || d > 31) return s;
+  const date = new Date(y, m - 1, d);
+  if (
+    date.getFullYear() !== y ||
+    date.getMonth() !== m - 1 ||
+    date.getDate() !== d
+  ) {
+    return s;
+  }
   return `${d} ${MONTHS[m - 1]} ${y}`;
 }
 
-/**
- * True when the given formTitle was produced by the server's "retired form"
- * fallback — the listInvitations endpoint emits this literal prefix when
- * `getFormDef(formType)` misses. Used by the UI to disable PDF download and
- * show an explanatory message in the detail pane.
- */
-export function isRetiredFormTitle(formTitle: string): boolean {
-  return formTitle.startsWith('(retired form:');
-}
+// Re-exported from @itatti/shared so the UI has a single import surface for
+// form-render helpers. The string prefix itself lives in the shared registry
+// module so server (who builds it) and web (who parses it) share a single
+// source of truth — a typo on one side can't silently break the retired-form
+// UI branch.
+export { isRetiredFormTitle } from '@itatti/shared';

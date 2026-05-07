@@ -209,12 +209,12 @@ describe('FormsSubmissionsPage', () => {
     // Scope to the submissions list so we don't pick up the detail pane's
     // Download PDF button. The second row is inv_2 (contactName=null →
     // falls back to "Contact #101" in the aria-label).
-    const list = screen.getByRole('list', { name: 'Form submissions' });
+    const list = screen.getByRole('listbox', { name: 'Form submissions' });
     // data-invitation-id scoping is the cleanest way to target a specific
     // row's button: aria-labels can collide between list-row and detail-pane
     // buttons when the same invitation is both listed and selected.
     const row2 = within(list)
-      .getAllByRole('listitem')
+      .getAllByRole('option')
       .find((li) => li.getAttribute('data-invitation-id') === 'inv_2')!;
     const row2Button = within(row2).getByRole('button', { name: /Download PDF/ });
 
@@ -229,7 +229,7 @@ describe('FormsSubmissionsPage', () => {
 
     // The originally-selected inv_1 row should still be selected —
     // clicking the PDF button must not propagate to the row click.
-    const rows = within(list).getAllByRole('listitem');
+    const rows = within(list).getAllByRole('option');
     expect(rows[0].getAttribute('aria-selected')).toBe('true');
     expect(rows[1].getAttribute('aria-selected')).toBe('false');
   });
@@ -249,9 +249,9 @@ describe('FormsSubmissionsPage', () => {
     // inv_2 belongs to academic year 2025-2026 (older than 2026-2027).
     // The deep-link rule pins the default year to the deep-linked row's
     // year so the row is visible. Assert inv_2 is selected in the list.
-    const list = screen.getByRole('list', { name: 'Form submissions' });
+    const list = screen.getByRole('listbox', { name: 'Form submissions' });
     const selectedRow = within(list)
-      .getAllByRole('listitem')
+      .getAllByRole('option')
       .find((li) => li.getAttribute('aria-selected') === 'true');
     expect(selectedRow?.getAttribute('data-invitation-id')).toBe('inv_2');
   });
@@ -270,8 +270,8 @@ describe('FormsSubmissionsPage', () => {
 
     render(<FormsSubmissionsPage />, { wrapper: makeWrapper() });
 
-    const list = screen.getByRole('list', { name: 'Form submissions' });
-    const firstRow = within(list).getAllByRole('listitem')[0];
+    const list = screen.getByRole('listbox', { name: 'Form submissions' });
+    const firstRow = within(list).getAllByRole('option')[0];
     firstRow.focus();
     expect(document.activeElement).toBe(firstRow);
 
@@ -283,7 +283,7 @@ describe('FormsSubmissionsPage', () => {
     // previous node references. This guards OV2 (focus only moves on
     // Enter/click).
     await waitFor(() => {
-      const rowsAfter = within(list).getAllByRole('listitem');
+      const rowsAfter = within(list).getAllByRole('option');
       expect(document.activeElement).toBe(rowsAfter[1]);
     });
 
@@ -335,8 +335,8 @@ describe('FormsSubmissionsPage', () => {
 
     render(<FormsSubmissionsPage />, { wrapper: makeWrapper() });
 
-    const list = screen.getByRole('list', { name: 'Form submissions' });
-    const firstRow = within(list).getAllByRole('listitem')[0];
+    const list = screen.getByRole('listbox', { name: 'Form submissions' });
+    const firstRow = within(list).getAllByRole('option')[0];
     firstRow.focus();
     const user = userEvent.setup();
     await user.keyboard('{Enter}');
@@ -360,20 +360,20 @@ describe('FormsSubmissionsPage', () => {
 
     render(<FormsSubmissionsPage />, { wrapper: makeWrapper() });
 
-    const list = screen.getByRole('list', { name: 'Form submissions' });
-    const rows = within(list).getAllByRole('listitem');
+    const list = screen.getByRole('listbox', { name: 'Form submissions' });
+    const rows = within(list).getAllByRole('option');
     rows[0].focus();
     const user = userEvent.setup();
 
     await user.keyboard('{End}');
     await waitFor(() => {
-      const rowsNow = within(list).getAllByRole('listitem');
+      const rowsNow = within(list).getAllByRole('option');
       expect(document.activeElement).toBe(rowsNow[rowsNow.length - 1]);
     });
 
     await user.keyboard('{Home}');
     await waitFor(() => {
-      const rowsNow = within(list).getAllByRole('listitem');
+      const rowsNow = within(list).getAllByRole('option');
       expect(document.activeElement).toBe(rowsNow[0]);
     });
   });
@@ -397,8 +397,8 @@ describe('FormsSubmissionsPage', () => {
       wrapper: makeWrapper('/admin/forms?formType=visiting-professor'),
     });
 
-    const list = screen.getByRole('list', { name: 'Form submissions' });
-    const rows = within(list).getAllByRole('listitem');
+    const list = screen.getByRole('listbox', { name: 'Form submissions' });
+    const rows = within(list).getAllByRole('option');
     expect(rows).toHaveLength(1);
     expect(rows[0].getAttribute('data-invitation-id')).toBe('inv_other');
   });
@@ -423,8 +423,8 @@ describe('FormsSubmissionsPage', () => {
       wrapper: makeWrapper('/admin/forms?q=research'),
     });
 
-    const list = screen.getByRole('list', { name: 'Form submissions' });
-    const rows = within(list).getAllByRole('listitem');
+    const list = screen.getByRole('listbox', { name: 'Form submissions' });
+    const rows = within(list).getAllByRole('option');
     // Only the research-grant row matches; the contactName=null row is
     // reachable via formTitle. Guards the `${contactName ?? ''}` fallback.
     expect(rows).toHaveLength(1);

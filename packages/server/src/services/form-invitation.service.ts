@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { getFormDef, getFormsForAppointmentType } from '@itatti/shared';
+import { buildRetiredFormTitle, getFormDef, getFormsForAppointmentType } from '@itatti/shared';
 import { buildFormSchema } from '../lib/form-schema.js';
 import { enqueueFormNotification } from '../workers/form-notification.worker.js';
 import { logger } from '../lib/logger.js';
@@ -259,7 +259,13 @@ export async function getInvitationsForFellowship(fellowshipId: number, academic
 
 export interface InvitationListItem {
   id: string;
-  token: string;
+  // NOTE: token is deliberately NOT exposed here. Tokens are the key to the
+  // unauthenticated GET /api/forms/:token public endpoint that returns
+  // submitted response data. The submissions-archive use case for this
+  // function has no need for them, and keeping the field off the interface
+  // prevents a future in-process caller from accidentally logging or
+  // forwarding it. Callers that genuinely need the token (e.g., fellows
+  // dashboard "copy link" action) use getInvitationsForContacts instead.
   fellowshipId: number;
   contactId: number;
   contactName: string | null;
@@ -339,10 +345,22 @@ export async function listInvitations(
 
   const items: InvitationListItem[] = rows.map((inv) => {
     const formDef = getFormDef(inv.formType);
+    // Explicit field list (no `...inv` spread) so the sensitive `token`
+    // field on the Prisma row never makes it into the archive contract.
     return {
-      ...inv,
+      id: inv.id,
+      fellowshipId: inv.fellowshipId,
+      contactId: inv.contactId,
       contactName: nameLookup?.getName(inv.contactId) ?? null,
-      formTitle: formDef ? formDef.title : `(retired form: ${inv.formType})`,
+      academicYear: inv.academicYear,
+      formType: inv.formType,
+      formTitle: formDef ? formDef.title : buildRetiredFormTitle(inv.formType),
+      status: inv.status,
+      nominationSentAt: inv.nominationSentAt,
+      submittedAt: inv.submittedAt,
+      createdAt: inv.createdAt,
+      updatedAt: inv.updatedAt,
+      response: inv.response,
     };
   });
 
