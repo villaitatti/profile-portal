@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { usePublicForm, useSubmitForm } from '@/api/forms';
+import { usePublicForm, useSubmitForm, type PublicFormData } from '@/api/forms';
 import { PublicFormRenderer } from './PublicFormRenderer';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { CheckCircle2 } from 'lucide-react';
@@ -19,7 +19,11 @@ export function PublicFormPage() {
   // submitted would see "Form Already Submitted" instead. The ref
   // distinguishes "opened an already-used link" (show re-visit message)
   // from "just submitted successfully" (show the renderer's success state).
-  const initialStatusRef = useRef<string | null>(null);
+  //
+  // Typed as the domain union (not string) so a rename/removal of a
+  // status value fails typecheck here instead of quietly comparing
+  // against a stale literal in the branch below.
+  const initialStatusRef = useRef<PublicFormData['status'] | null>(null);
   if (data && initialStatusRef.current === null) {
     initialStatusRef.current = data.status;
   }

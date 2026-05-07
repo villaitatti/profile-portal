@@ -196,9 +196,14 @@ describe('PublicFormPage — submission flow', () => {
     render(<PublicFormPage />, { wrapper: makeWrapper() });
 
     const user = userEvent.setup();
-    // Label includes a required asterisk; match by textbox role + index instead.
-    const nameInput = screen.getByRole('textbox');
-    await user.type(nameInput, 'Maria Bianchi');
+    // minimalForm has exactly one text field; PublicFormRenderer's labels
+    // lack htmlFor/id association so getByLabelText doesn't work. The
+    // single-textbox assertion is intentional — if the fixture ever gains
+    // another input, this test should fail loudly rather than type into
+    // the wrong field.
+    const textboxes = screen.getAllByRole('textbox');
+    expect(textboxes).toHaveLength(1);
+    await user.type(textboxes[0], 'Maria Bianchi');
     await user.click(screen.getByRole('button', { name: /Submit/ }));
 
     expect(mockMutate).toHaveBeenCalledWith({ fullName: 'Maria Bianchi' });

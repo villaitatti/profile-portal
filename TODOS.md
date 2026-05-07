@@ -26,6 +26,14 @@
 - **Context:** Flagged by Codex during `/ship` of the submissions archive. Display-side fix landed in the same PR; submit-side validation is the remaining gap.
 - **Blocked by:** Nothing.
 
+### Worker unit-test infrastructure (pg-boss queues)
+- **Priority:** P3
+- **What:** The project has zero tests for any of the `packages/server/src/workers/*` files. That's how the pg-boss v10 `createQueue` regression (fixed in this PR) lived undetected for a full release cycle — a future refactor could silently remove the fix with no CI signal.
+- **Why:** Any code that touches the job queue has the same silent-failure shape: `boss.send()` returns null on misconfigured queues, no error is thrown, downstream side effects (emails, reports) never fire. Unit tests would have caught the original bug at PR time.
+- **How:** Either (a) add a lightweight mocking layer where tests import a `bossStub` that replaces the real `getJobQueue()` via `vi.mock`, assert `createQueue` is called before `work`, and assert `enqueueFormNotification` logs when `send` returns null — OR (b) add a docker-compose test fixture with a disposable Postgres instance and run pg-boss against it in CI. Option (a) is cheap and catches the specific regression; option (b) catches more integration issues but adds CI time. Start with (a).
+- **Context:** Flagged during `/ship` of the form-submit-fix branch. The reviewer noted the createQueue fix has no regression test.
+- **Blocked by:** Nothing.
+
 ## Forms — Bugs to investigate
 
 ### Public form submit yields "already submitted" + no notification email
