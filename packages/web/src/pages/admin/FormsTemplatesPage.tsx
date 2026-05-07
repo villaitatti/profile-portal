@@ -1,16 +1,27 @@
+import { Link } from 'react-router-dom';
+import { ChevronLeft } from 'lucide-react';
 import { useFormRegistry } from '@/api/forms';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import type { FormDef } from '@itatti/shared';
 
-export function FormsPage() {
+export function FormsTemplatesPage() {
   const { data: registry, isLoading } = useFormRegistry();
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Forms"
+        title="Form Templates"
         description="Form definitions and their appointment type mappings. Appointees receive these forms during the nomination process."
+        actions={
+          <Link
+            to="/admin/forms"
+            className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Submissions
+          </Link>
+        }
       />
 
       {isLoading ? (

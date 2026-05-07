@@ -1,5 +1,44 @@
 # TODOS
 
+## Forms — Follow-ups from ship adversarial review (2026-05-07)
+
+### Paginate /api/admin/forms/invitations when archive grows
+- **Priority:** P2
+- **What:** Add cursor-based pagination + server-side search/filter to the submissions archive endpoint. Today the endpoint returns every submitted invitation unbounded and filters client-side.
+- **Why:** Current volume (~100s of submissions/year) fits comfortably, but at 500+ submissions per cohort the full list becomes slow to render and annoying to scroll.
+- **How:** (a) Add `cursor` + `limit` query params, mirror the pattern in `emails-admin.routes.ts`. (b) Add `q` param for server-side substring match on contactName/formTitle. (c) Push the academicYear + formType filters into the query where-clause (they're already server-supported, just not used by the archive page yet).
+- **Context:** Flagged by Codex during `/ship` of the initial submissions archive. The response-JSON-loading half of this TODO was fixed in the same review round (`listInvitations` now projects only `response.id` for a boolean `hasResponse` signal). What remains is unbounded list size.
+- **Blocked by:** Nothing.
+
+### Stampede protection + timeout on CiviCRM name lookup
+- **Priority:** P3
+- **What:** The fellows cache in `forms-admin.routes.ts` (and `emails-admin.routes.ts`) has no in-flight request coalescing. On cache expiry, concurrent admin opens all call `civicrmService.getFellowsWithContacts()` in parallel. If CiviCRM hangs, every concurrent archive open hangs too.
+- **Why:** Low impact today (few concurrent admin users), but admin experience degrades hard if CiviCRM slows down.
+- **How:** Add a `pendingFellowsPromise` alongside `cachedFellows` — first caller populates, others await the same promise. Add a 5s timeout on the CiviCRM call; on timeout, fall through to graceful degrade (empty name map) just like the existing try/catch.
+- **Context:** Flagged by Codex during `/ship` of the submissions archive. The existing try/catch handles "CiviCRM throws" but not "CiviCRM hangs forever." Applies equally to `emails-admin.routes.ts` which uses the same pattern.
+- **Blocked by:** Nothing. Ideal candidate for the existing shared-cache refactor (both routes use identical code).
+
+### Strict calendar validation on submitted date fields (submit-time)
+- **Priority:** P3
+- **What:** `buildFormSchema` in `packages/server/src/lib/form-schema.ts` treats `type: 'date'` form fields as generic strings. A public form submit can therefore persist an impossible calendar date like `"2026-02-31"`. The display side is already defensive (`formatDateOnly` rejects impossible dates and returns the raw string unchanged), so the archive shows `"2026-02-31"` literally instead of a rolled-over `"3 Mar 2026"`. But the bad data still lives in the DB and the PDF, and no one gets an error at submit time.
+- **Why:** Low-impact today because appointees use HTML `<input type="date">` pickers (which validate client-side). The gap opens via a raw POST, a misbehaving client, or a form library migration.
+- **How:** In `buildFormSchema`, for `type === 'date'` fields add a `z.string().refine(...)` that splits `YYYY-MM-DD` and verifies the calendar via a Date round-trip (same pattern as `formatDateOnly` in `form-pdf.service.ts` and `form-render.ts`). Consider extracting the round-trip into a shared helper in `@itatti/shared` so submit validation and display formatting share the same predicate.
+- **Context:** Flagged by Codex during `/ship` of the submissions archive. Display-side fix landed in the same PR; submit-side validation is the remaining gap.
+- **Blocked by:** Nothing.
+
+## Forms — Bugs to investigate
+
+### Public form submit yields "already submitted" + no notification email
+- **What:** When an appointee opens a fresh nomination link, fills the form, and submits, the UI shows "Form Already Submitted" and neither the appointee nor Angela receives the notification email.
+- **Why:** The whole appointee-forms workflow is broken end-to-end. Angela relies on the notification email (with PDF attachment) as the record of submission. If emails aren't sending, the submissions archive feature (see `acaselli-main-forms-submissions-design-20260507-121453.md`) has far less value because it can't be validated against the email record, and the current status-quo archive (Angela's email inbox) doesn't exist.
+- **How:** Route to `/investigate`. Likely suspects:
+  1. `packages/server/src/services/form-invitation.service.ts#submitForm` — check if the status transition to `submitted` runs correctly and only once.
+  2. `packages/server/src/workers/form-notification.worker.ts` — check if `enqueueFormNotification` is firing and the worker is actually running in dev.
+  3. `packages/web/src/pages/forms/PublicFormPage.tsx:31` — the "already submitted" check renders when `data.status === 'submitted'`; double-check whether stale query cache or a submit-then-refetch race triggers it incorrectly.
+  4. Email transport (SMTP config, `FORM_NOTIFICATION_EMAIL` env). The v0.13 commits touched `FORM_NOTIFICATION_*` envs — regression possibility.
+- **Context:** Flagged by Andrea during the 2026-05-07 `/plan-eng-review` of the submissions archive feature. The submissions archive PR does NOT touch this code and can ship independently, but this bug should be prioritized because the workflow is currently broken.
+- **Blocked by:** Nothing — this is a standalone investigation.
+
 ## Contact Info Self-Service — Prerequisites
 
 ### Upgrade CiviCRM API key to read-write (BLOCKER)

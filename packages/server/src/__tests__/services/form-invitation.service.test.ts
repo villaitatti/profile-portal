@@ -28,8 +28,10 @@ vi.mock('../../lib/logger.js', () => ({
 
 import {
   generateInvitation,
+  listInvitations,
   markNominationSent,
   ServiceError,
+  type NameLookup,
 } from '../../services/form-invitation.service.js';
 import { prisma } from '../../lib/prisma.js';
 
@@ -207,5 +209,170 @@ describe('markNominationSent', () => {
         },
       },
     });
+  });
+});
+
+describe('listInvitations', () => {
+  const baseRow = {
+    id: 'inv_1',
+    token: 'tok_1',
+    fellowshipId: 10,
+    contactId: 100,
+    academicYear: '2026-2027',
+    formType: 'fellow-memorandum',
+    status: 'submitted',
+    nominationSentAt: null,
+    submittedAt: new Date('2026-04-24T10:00:00Z'),
+    createdAt: new Date('2026-04-20T10:00:00Z'),
+    updatedAt: new Date('2026-04-24T10:00:00Z'),
+    response: { id: 'r_1', data: {}, createdAt: new Date('2026-04-24T10:00:00Z') },
+  };
+
+  it('does not load response.data in the list query (PII stays out of the hot path)', async () => {
+    // Regression guard: the archive list only needs presence of a response
+    // (to compute hasResponse), not the full JSON. Loading response.data on
+    // every row pulls submitted PII into server memory on every admin page
+    // open. The `include: { response: { select: { id: true } } }` shape
+    // below is the contract — if a future refactor changes it back to
+    // `response: true`, this test fires.
+    mockPrisma.formInvitation.findMany
+      .mockResolvedValueOnce([baseRow] as any)
+      .mockResolvedValueOnce([] as any);
+
+    await listInvitations({ status: 'submitted' });
+
+    const itemsQueryArgs = mockPrisma.formInvitation.findMany.mock.calls[0]![0]!;
+    expect(itemsQueryArgs.include).toEqual({
+      response: { select: { id: true } },
+    });
+  });
+
+  it('exposes response as a boolean `hasResponse`, never as raw data', async () => {
+    mockPrisma.formInvitation.findMany
+      .mockResolvedValueOnce([baseRow] as any)
+      .mockResolvedValueOnce([] as any);
+
+    const result = await listInvitations({ status: 'submitted' });
+
+    expect(result.items[0]).toHaveProperty('hasResponse', true);
+    expect(result.items[0]).not.toHaveProperty('response');
+    expect(result.items[0]).not.toHaveProperty('data');
+  });
+
+  it('returns { items, facets } with contactName/formTitle joined onto each row', async () => {
+    mockPrisma.formInvitation.findMany
+      .mockResolvedValueOnce([baseRow] as any) // items
+      .mockResolvedValueOnce([
+        { academicYear: '2026-2027', formType: 'fellow-memorandum' },
+        { academicYear: '2025-2026', formType: 'fellow-memorandum' },
+      ] as any); // facet rows
+
+    const nameLookup: NameLookup = {
+      getName: (id: number) => (id === 100 ? 'Maria Bianchi' : null),
+    };
+
+    const result = await listInvitations({ status: 'submitted' }, nameLookup);
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].contactName).toBe('Maria Bianchi');
+    expect(result.items[0].formTitle).toBe('Memorandum I Tatti Fellowship');
+    expect(result.facets.academicYears).toEqual(['2026-2027', '2025-2026']); // sorted desc
+    expect(result.facets.formTypes).toEqual(['fellow-memorandum']);
+  });
+
+  it('falls back to null contactName when nameLookup returns null (CiviCRM-down graceful degrade)', async () => {
+    mockPrisma.formInvitation.findMany
+      .mockResolvedValueOnce([baseRow] as any)
+      .mockResolvedValueOnce([{ academicYear: '2026-2027', formType: 'fellow-memorandum' }] as any);
+
+    const result = await listInvitations({ status: 'submitted' }, { getName: () => null });
+
+    expect(result.items[0].contactName).toBeNull();
+    // The rest of the row still makes it through — the UI renders "Contact #<id>".
+    expect(result.items[0].contactId).toBe(100);
+    expect(result.items[0].formTitle).toBe('Memorandum I Tatti Fellowship');
+  });
+
+  it('renders a "(retired form: ...)" title when formType is not in the registry', async () => {
+    const retiredRow = { ...baseRow, formType: 'ancient-survey-2019' };
+    mockPrisma.formInvitation.findMany
+      .mockResolvedValueOnce([retiredRow] as any)
+      .mockResolvedValueOnce([{ academicYear: '2026-2027', formType: 'ancient-survey-2019' }] as any);
+
+    const result = await listInvitations({ status: 'submitted' }, { getName: () => 'x' });
+
+    expect(result.items[0].formTitle).toBe('(retired form: ancient-survey-2019)');
+  });
+
+  it('pins ORDER BY submittedAt DESC, id DESC on the items query', async () => {
+    mockPrisma.formInvitation.findMany
+      .mockResolvedValueOnce([] as any)
+      .mockResolvedValueOnce([] as any);
+
+    await listInvitations({ status: 'submitted' });
+
+    const firstCallArgs = mockPrisma.formInvitation.findMany.mock.calls[0]![0]!;
+    expect(firstCallArgs.orderBy).toEqual([{ submittedAt: 'desc' }, { id: 'desc' }]);
+  });
+
+  it('CRITICAL REGRESSION: academicYear filter still applies to the items query', async () => {
+    mockPrisma.formInvitation.findMany
+      .mockResolvedValueOnce([] as any)
+      .mockResolvedValueOnce([] as any);
+
+    await listInvitations({ academicYear: '2026-2027', status: 'submitted' });
+
+    const itemsCallArgs = mockPrisma.formInvitation.findMany.mock.calls[0]![0]!;
+    expect(itemsCallArgs.where).toMatchObject({
+      academicYear: '2026-2027',
+      status: 'submitted',
+    });
+  });
+
+  it('CRITICAL REGRESSION: status filter still applies to the items query', async () => {
+    mockPrisma.formInvitation.findMany
+      .mockResolvedValueOnce([] as any)
+      .mockResolvedValueOnce([] as any);
+
+    await listInvitations({ status: 'submitted' });
+
+    const itemsCallArgs = mockPrisma.formInvitation.findMany.mock.calls[0]![0]!;
+    expect(itemsCallArgs.where).toMatchObject({ status: 'submitted' });
+  });
+
+  it('facet query IGNORES academicYear and formType filters (dropdowns stay stable)', async () => {
+    // Design decision A3: filtering by one academic year should not shrink
+    // the Academic Year dropdown to just that year. Facets respect only the
+    // status filter.
+    mockPrisma.formInvitation.findMany
+      .mockResolvedValueOnce([] as any)
+      .mockResolvedValueOnce([] as any);
+
+    await listInvitations({
+      academicYear: '2026-2027',
+      formType: 'fellow-memorandum',
+      status: 'submitted',
+    });
+
+    const facetCallArgs = mockPrisma.formInvitation.findMany.mock.calls[1]![0]!;
+    expect(facetCallArgs.where).toEqual({ status: 'submitted' });
+    // Explicitly: not filtered by year/formType
+    expect(facetCallArgs.where).not.toHaveProperty('academicYear');
+    expect(facetCallArgs.where).not.toHaveProperty('formType');
+  });
+
+  it('dedupes academicYears and formTypes across facet rows', async () => {
+    mockPrisma.formInvitation.findMany
+      .mockResolvedValueOnce([] as any)
+      .mockResolvedValueOnce([
+        { academicYear: '2026-2027', formType: 'fellow-memorandum' },
+        { academicYear: '2026-2027', formType: 'fellow-memorandum' },
+        { academicYear: '2025-2026', formType: 'fellow-memorandum' },
+      ] as any);
+
+    const result = await listInvitations({ status: 'submitted' });
+
+    expect(result.facets.academicYears).toEqual(['2026-2027', '2025-2026']);
+    expect(result.facets.formTypes).toEqual(['fellow-memorandum']);
   });
 });

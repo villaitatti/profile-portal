@@ -52,16 +52,37 @@ export function useSubmitForm(token: string) {
 
 export interface AdminFormInvitation {
   id: string;
-  token: string;
   fellowshipId: number;
   contactId: number;
+  /**
+   * Resolved appointee name (first + last). Null when CiviCRM is unreachable
+   * or the contact is not in the fellows roster — UI should fall back to
+   * rendering `Contact #${contactId}`.
+   */
+  contactName: string | null;
   academicYear: string;
   formType: string;
+  /**
+   * Registered form title. For a retired `formType` not in FORM_REGISTRY,
+   * this is `"(retired form: <formType>)"` and the PDF download should be
+   * disabled (PDF generation requires the form definition).
+   */
+  formTitle: string;
   status: string;
   nominationSentAt: string | null;
   submittedAt: string | null;
   createdAt: string;
   hasResponse: boolean;
+}
+
+export interface AdminFormInvitationsResponse {
+  items: AdminFormInvitation[];
+  facets: {
+    /** All distinct academic years across submitted invitations, newest first. */
+    academicYears: string[];
+    /** All distinct form types across submitted invitations, alpha sorted. */
+    formTypes: string[];
+  };
 }
 
 export function useFormRegistry() {
@@ -90,7 +111,7 @@ export function useFormInvitations(filters?: { academicYear?: string; formType?:
     queryFn: async () => {
       const token = await getToken();
       const res = await apiFetch(`/api/admin/forms/invitations${qs}`, { token });
-      return res.json() as Promise<AdminFormInvitation[]>;
+      return res.json() as Promise<AdminFormInvitationsResponse>;
     },
   });
 }
@@ -177,6 +198,3 @@ export function useResetFormInvitation() {
   });
 }
 
-export function getFormPdfUrl(invitationId: string): string {
-  return `${API_BASE}/api/admin/forms/response/${invitationId}/pdf`;
-}

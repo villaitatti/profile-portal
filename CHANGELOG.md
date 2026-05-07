@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.14.0.0] - 2026-05-07
+
+### Added
+- **Submissions archive at `/admin/forms`.** Angela now has a searchable, filterable home for every submitted appointee form. The page opens on the most recent submission by default, shows appointee + form title + submission date in a master-detail layout, and renders every answered field in the detail pane. The old form-registry view moved to `/admin/forms/templates` (linked from the page header).
+- **Download PDF on every submission.** Both the list row (quick download) and the detail pane expose a PDF button. The download runs through the bearer-authenticated admin endpoint and produces the same content as the notification email attachment.
+- **Deep-linkable submissions.** Filters and selected submission live in the URL (`?year=&formType=&q=&invitation=`), so a link to a specific response opens that row with the right filters applied.
+- **Keyboard-navigable list.** Arrow keys move selection, Enter opens the detail pane, Home and End jump to the ends of the list. Focus stays in the list while scrolling with the arrows and only moves to the detail heading on Enter or click.
+
+### Changed
+- **`GET /api/admin/forms/invitations` now returns `{ items, facets }`.** Each item gains `contactName` (resolved server-side from CiviCRM with a 120s cache) and `formTitle` (from the registry, with `"(retired form: <id>)"` as the fallback when a form has been removed). Facets surface the distinct academic years and form types present in the archive so the filter dropdowns only show values with real data behind them.
+- **Date fields render timezone-independently.** A small local-date parser replaces `new Date()` on `YYYY-MM-DD` strings so "24 Apr 2026" is always "24 Apr 2026", regardless of the admin's timezone.
+- **`formatValue` rules are explicit.** `null` / `undefined` / `""` / `[]` render as "—", booleans as "Yes" / "No", zero as "0" (previously coerced to "—"), non-empty arrays as comma-joined, objects as JSON. Both the web walker and the PDF generator use the same rules, pinned by a shared fixture parity test.
+
+### Fixed
+- **Invitation tokens no longer leak through the admin archive.** `GET /api/admin/forms/invitations` used to include the public form token on every row. Tokens are the key to the unauthenticated `GET /api/forms/:token` endpoint that returns submitted response data; the admin archive has no reason to expose them. They are now omitted from the response.
+- **CiviCRM transient empty responses no longer poison the name cache.** If `getFellowsWithContacts()` returns an empty list (a known Civi 200-with-empty-values failure mode), the cache skips storing it so the next request retries instead of labeling every row "Contact #<id>" for 120 seconds.
+- **PDF download revokes the blob URL even on failure.** The `useDownloadFormPdf` hook wraps `URL.createObjectURL` / `revokeObjectURL` in try/finally so the object URL is always freed, even if the anchor click throws or the fetch rejects after the blob was created.
+- **Cyclic / weird response values no longer crash the PDF render.** `formatValue` wraps `JSON.stringify` in try/catch on both the server PDF and web walker paths; unserializable values render as `[unserializable]` instead of bringing down the entire page.
+
+### Removed
+- **Dead `getFormPdfUrl` helper.** The client-side PDF URL builder in `packages/web/src/api/forms.ts` was incompatible with bearer authentication and had no live callers. Deleted in favor of the new `useDownloadFormPdf` hook.
+
 ## [0.13.3] - 2026-05-06
 
 ### Changed
