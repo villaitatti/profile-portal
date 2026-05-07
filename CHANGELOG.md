@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.14.1.0] - 2026-05-07
+
+### Fixed
+- **Appointees now see a "Thank you!" confirmation after submitting a form.** Previously, a successful submit immediately flipped the screen to "Form Already Submitted" with a message suggesting the form had been filled before, making successful submissions look like errors. The page now distinguishes between "opened an already-used link" (keeps the re-visit message) and "just submitted successfully" (shows the renderer's success state).
+- **Form submission notification emails actually send now.** The pg-boss v10 upgrade introduced a breaking change — queues must exist before jobs can be sent to them, or the send silently returns null with no error. No queue was ever created, so every form submission since the forms feature shipped (v0.13.0) dropped its notification email. Queue creation now runs centrally for every registered queue during boot. A loud ERROR log also fires if a send ever returns null again so a future regression can't hide the same way.
+- **Boot ordering closed the last silent-drop window.** The worker registration (and its queue creation) now awaits completion before the HTTP server accepts traffic. A submission arriving in the cold-start window used to race the worker and lose. Boot now fails fast if queue setup throws.
+- **Navigating between two different form links no longer carries the first link's "Already Submitted" state into the second.** React Router reuses the same component instance across `:token` changes; the page's status snapshot is now keyed by token so opening `/forms/A` (submitted) and then `/forms/B` (pending) correctly renders the fresh form.
+
+### Changed
+- **Already-submitted and invalid-link screens now point appointees to the staff member who sent them the form,** rather than a generic "contact the I Tatti office." Keeps Angela's email private while giving appointees a concrete next step (the person already in their nomination email thread).
+
 ## [0.14.0.0] - 2026-05-07
 
 ### Added

@@ -34,18 +34,12 @@
 - **Context:** Flagged during `/ship` of the form-submit-fix branch. The reviewer noted the createQueue fix has no regression test.
 - **Blocked by:** Nothing.
 
-## Forms — Bugs to investigate
+## ~~Forms — Bugs to investigate~~ (RESOLVED)
 
-### Public form submit yields "already submitted" + no notification email
-- **What:** When an appointee opens a fresh nomination link, fills the form, and submits, the UI shows "Form Already Submitted" and neither the appointee nor Angela receives the notification email.
-- **Why:** The whole appointee-forms workflow is broken end-to-end. Angela relies on the notification email (with PDF attachment) as the record of submission. If emails aren't sending, the submissions archive feature (see `acaselli-main-forms-submissions-design-20260507-121453.md`) has far less value because it can't be validated against the email record, and the current status-quo archive (Angela's email inbox) doesn't exist.
-- **How:** Route to `/investigate`. Likely suspects:
-  1. `packages/server/src/services/form-invitation.service.ts#submitForm` — check if the status transition to `submitted` runs correctly and only once.
-  2. `packages/server/src/workers/form-notification.worker.ts` — check if `enqueueFormNotification` is firing and the worker is actually running in dev.
-  3. `packages/web/src/pages/forms/PublicFormPage.tsx:31` — the "already submitted" check renders when `data.status === 'submitted'`; double-check whether stale query cache or a submit-then-refetch race triggers it incorrectly.
-  4. Email transport (SMTP config, `FORM_NOTIFICATION_EMAIL` env). The v0.13 commits touched `FORM_NOTIFICATION_*` envs — regression possibility.
-- **Context:** Flagged by Andrea during the 2026-05-07 `/plan-eng-review` of the submissions archive feature. The submissions archive PR does NOT touch this code and can ship independently, but this bug should be prioritized because the workflow is currently broken.
-- **Blocked by:** Nothing — this is a standalone investigation.
+### ~~Public form submit yields "already submitted" + no notification email~~ (RESOLVED)
+- **Resolved:** v0.14.1.0 (2026-05-07). Two root causes:
+  1. `PublicFormPage.tsx` was short-circuiting to "Form Already Submitted" after a successful submit (race between `useSubmitForm.onSuccess`'s `invalidateQueries` refetch and `PublicFormRenderer`'s `isSuccess` screen). Fixed with a token-keyed `useRef` snapshot of initial status.
+  2. `pg-boss` v10 requires `boss.createQueue(name)` before `boss.send()` will insert anything — missing queue makes send silently return null. No queue was ever created, so every form submission since v0.13.0 dropped its notification email. Fixed by moving queue creation into `getJobQueue()` (runs for every declared queue at boot) + awaiting worker registration before `app.listen()` + loud ERROR log on any null send result.
 
 ## Contact Info Self-Service — Prerequisites
 
