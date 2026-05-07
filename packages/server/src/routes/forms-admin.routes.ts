@@ -120,7 +120,7 @@ router.get('/invitations', async (req, res) => {
       nominationSentAt: inv.nominationSentAt?.toISOString() ?? null,
       submittedAt: inv.submittedAt?.toISOString() ?? null,
       createdAt: inv.createdAt.toISOString(),
-      hasResponse: !!inv.response,
+      hasResponse: inv.hasResponse,
     })),
     facets,
   });

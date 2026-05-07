@@ -228,6 +228,37 @@ describe('listInvitations', () => {
     response: { id: 'r_1', data: {}, createdAt: new Date('2026-04-24T10:00:00Z') },
   };
 
+  it('does not load response.data in the list query (PII stays out of the hot path)', async () => {
+    // Regression guard: the archive list only needs presence of a response
+    // (to compute hasResponse), not the full JSON. Loading response.data on
+    // every row pulls submitted PII into server memory on every admin page
+    // open. The `include: { response: { select: { id: true } } }` shape
+    // below is the contract — if a future refactor changes it back to
+    // `response: true`, this test fires.
+    mockPrisma.formInvitation.findMany
+      .mockResolvedValueOnce([baseRow] as any)
+      .mockResolvedValueOnce([] as any);
+
+    await listInvitations({ status: 'submitted' });
+
+    const itemsQueryArgs = mockPrisma.formInvitation.findMany.mock.calls[0]![0]!;
+    expect(itemsQueryArgs.include).toEqual({
+      response: { select: { id: true } },
+    });
+  });
+
+  it('exposes response as a boolean `hasResponse`, never as raw data', async () => {
+    mockPrisma.formInvitation.findMany
+      .mockResolvedValueOnce([baseRow] as any)
+      .mockResolvedValueOnce([] as any);
+
+    const result = await listInvitations({ status: 'submitted' });
+
+    expect(result.items[0]).toHaveProperty('hasResponse', true);
+    expect(result.items[0]).not.toHaveProperty('response');
+    expect(result.items[0]).not.toHaveProperty('data');
+  });
+
   it('returns { items, facets } with contactName/formTitle joined onto each row', async () => {
     mockPrisma.formInvitation.findMany
       .mockResolvedValueOnce([baseRow] as any) // items

@@ -4,10 +4,10 @@
 
 ### Paginate /api/admin/forms/invitations when archive grows
 - **Priority:** P2
-- **What:** Add cursor-based pagination + server-side search/filter to the submissions archive endpoint. Today the endpoint returns every submitted invitation unbounded and includes the full response JSON (used only to compute `hasResponse`).
-- **Why:** Current volume (~100s of submissions/year) fits comfortably but we're pulling full response PII into admin page memory on every fetch. At 500+ submissions per cohort this becomes slow AND a larger surface for accidental logging / screenshot leaks.
-- **How:** (a) Change `listInvitations` to `select` only the fields the UI needs (drop `include: { response: true }`, replace with a boolean `hasResponse` computed via `_count`). (b) Add `cursor` + `limit` query params, mirror the pattern in `emails-admin.routes.ts`. (c) Add `q` param for server-side substring match on contactName/formTitle.
-- **Context:** Flagged by Codex during `/ship` of the initial submissions archive. The v1 in-memory + client-filter design was an explicit choice for minimum viable scope. Revisit when a single academic year exceeds 500 submissions, or sooner if performance complaints surface.
+- **What:** Add cursor-based pagination + server-side search/filter to the submissions archive endpoint. Today the endpoint returns every submitted invitation unbounded and filters client-side.
+- **Why:** Current volume (~100s of submissions/year) fits comfortably, but at 500+ submissions per cohort the full list becomes slow to render and annoying to scroll.
+- **How:** (a) Add `cursor` + `limit` query params, mirror the pattern in `emails-admin.routes.ts`. (b) Add `q` param for server-side substring match on contactName/formTitle. (c) Push the academicYear + formType filters into the query where-clause (they're already server-supported, just not used by the archive page yet).
+- **Context:** Flagged by Codex during `/ship` of the initial submissions archive. The response-JSON-loading half of this TODO was fixed in the same review round (`listInvitations` now projects only `response.id` for a boolean `hasResponse` signal). What remains is unbounded list size.
 - **Blocked by:** Nothing.
 
 ### Stampede protection + timeout on CiviCRM name lookup
@@ -18,12 +18,12 @@
 - **Context:** Flagged by Codex during `/ship` of the submissions archive. The existing try/catch handles "CiviCRM throws" but not "CiviCRM hangs forever." Applies equally to `emails-admin.routes.ts` which uses the same pattern.
 - **Blocked by:** Nothing. Ideal candidate for the existing shared-cache refactor (both routes use identical code).
 
-### Strict calendar validation on submitted date fields
+### Strict calendar validation on submitted date fields (submit-time)
 - **Priority:** P3
-- **What:** `buildFormSchema` treats form date fields as generic strings. `formatDateOnly` accepts "2026-02-31" and renders it as "31 Feb 2026". An appointee submitting a malformed date via the public form gets no validation error.
-- **Why:** Low-impact today because appointees use HTML date pickers (which validate). But a raw POST or a misbehaving client can poison the archive with nonsense dates that look intentional in both the UI and PDF.
-- **How:** In `packages/server/src/lib/form-schema.ts`, for `type === 'date'` fields, add a zod `.refine` that parses as a real calendar date. Mirror the same check in `formatDateOnly` — return the raw string if the date is invalid (instead of "31 Feb 2026").
-- **Context:** Flagged by Codex during `/ship` of the submissions archive.
+- **What:** `buildFormSchema` in `packages/server/src/lib/form-schema.ts` treats `type: 'date'` form fields as generic strings. A public form submit can therefore persist an impossible calendar date like `"2026-02-31"`. The display side is already defensive (`formatDateOnly` rejects impossible dates and returns the raw string unchanged), so the archive shows `"2026-02-31"` literally instead of a rolled-over `"3 Mar 2026"`. But the bad data still lives in the DB and the PDF, and no one gets an error at submit time.
+- **Why:** Low-impact today because appointees use HTML `<input type="date">` pickers (which validate client-side). The gap opens via a raw POST, a misbehaving client, or a form library migration.
+- **How:** In `buildFormSchema`, for `type === 'date'` fields add a `z.string().refine(...)` that splits `YYYY-MM-DD` and verifies the calendar via a Date round-trip (same pattern as `formatDateOnly` in `form-pdf.service.ts` and `form-render.ts`). Consider extracting the round-trip into a shared helper in `@itatti/shared` so submit validation and display formatting share the same predicate.
+- **Context:** Flagged by Codex during `/ship` of the submissions archive. Display-side fix landed in the same PR; submit-side validation is the remaining gap.
 - **Blocked by:** Nothing.
 
 ## Forms — Bugs to investigate

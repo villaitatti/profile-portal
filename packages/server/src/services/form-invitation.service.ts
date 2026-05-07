@@ -277,7 +277,12 @@ export interface InvitationListItem {
   submittedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
-  response: { id: string; data: unknown; createdAt: Date } | null;
+  // Presence-only signal — the full response data is deliberately NOT
+  // loaded by the list query. Callers that need the response data use
+  // getResponseByInvitationId. Keeping the archive list path light avoids
+  // pulling every submission's PII into server memory on every /admin/forms
+  // fetch. The route returns this as `hasResponse: boolean`.
+  hasResponse: boolean;
 }
 
 export interface InvitationListResult {
@@ -334,7 +339,12 @@ export async function listInvitations(
   const [rows, facetRows] = await Promise.all([
     prisma.formInvitation.findMany({
       where,
-      include: { response: true },
+      // Project only the presence of the response relation (id only, no
+      // data). The archive list does not need the response JSON — callers
+      // that need it go through getResponseByInvitationId. This keeps PII
+      // out of the hot list-query path and avoids pulling every submitted
+      // response into server memory on every /admin/forms fetch.
+      include: { response: { select: { id: true } } },
       orderBy: [{ submittedAt: 'desc' }, { id: 'desc' }],
     }),
     prisma.formInvitation.findMany({
@@ -360,7 +370,7 @@ export async function listInvitations(
       submittedAt: inv.submittedAt,
       createdAt: inv.createdAt,
       updatedAt: inv.updatedAt,
-      response: inv.response,
+      hasResponse: inv.response !== null,
     };
   });
 

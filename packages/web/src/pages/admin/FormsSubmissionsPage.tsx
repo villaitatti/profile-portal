@@ -336,6 +336,12 @@ function SubmissionList({ items, selectedId, onSelect }: SubmissionListProps) {
   const listRef = useRef<HTMLUListElement>(null);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLLIElement>, id: string, index: number) => {
+    // Only act on keypresses targeting the row itself. Without this guard,
+    // a keyboard user focusing the nested PDF button and pressing Enter or
+    // Space would fire both the button's native click (download) AND this
+    // handler's activation path (select row + move focus to detail), which
+    // would hijack focus mid-download.
+    if (e.target !== e.currentTarget) return;
     let targetIndex = -1;
     switch (e.key) {
       case 'ArrowDown':

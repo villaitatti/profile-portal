@@ -378,6 +378,49 @@ describe('FormsSubmissionsPage', () => {
     });
   });
 
+  it('keyboard Enter on a nested PDF button does not also trigger row activation', async () => {
+    // Without the `e.target !== e.currentTarget` guard on the list-row
+    // keydown handler, Enter on the nested PDF button would bubble up and
+    // fire BOTH the button's click (download) AND the row's activation
+    // (select + move focus to the detail heading). This test guards that
+    // focus is not hijacked away when a user Tab-focuses the PDF button.
+    const invA = { ...inv1, id: 'inv_a' };
+    const invB = { ...inv1, id: 'inv_b', submittedAt: '2026-04-20T10:00:00.000Z' };
+    mockUseFormInvitations.mockReturnValue({
+      data: payload([invA, invB]),
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+
+    render(<FormsSubmissionsPage />, { wrapper: makeWrapper() });
+
+    const list = screen.getByRole('listbox', { name: 'Form submissions' });
+    const row2 = within(list)
+      .getAllByRole('option')
+      .find((li) => li.getAttribute('data-invitation-id') === 'inv_b')!;
+    const row2Pdf = within(row2).getByRole('button', { name: /Download PDF/ });
+
+    row2Pdf.focus();
+    expect(document.activeElement).toBe(row2Pdf);
+
+    const user = userEvent.setup();
+    await user.keyboard('{Enter}');
+
+    // The download hook fires (button click path).
+    expect(mockDownload).toHaveBeenCalledWith({
+      invitationId: 'inv_b',
+      contactName: 'Maria Bianchi',
+      formTitle: 'Memorandum I Tatti Fellowship',
+    });
+
+    // Focus must NOT have jumped to the detail heading — that would mean
+    // the row-level activation fired too.
+    const heading = document.getElementById('submission-detail-heading');
+    expect(document.activeElement).not.toBe(heading);
+    expect(document.activeElement).toBe(row2Pdf);
+  });
+
   it('filters list by formType when ?formType is present in URL', () => {
     const invMemo = { ...inv1, formType: 'fellow-memorandum' };
     const invOther = {
