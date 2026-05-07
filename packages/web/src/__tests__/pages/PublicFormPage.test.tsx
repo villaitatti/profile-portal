@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 const { mockUsePublicForm, mockUseSubmitForm, mockMutate } = vi.hoisted(() => ({
   mockUsePublicForm: vi.fn(),
@@ -169,6 +169,90 @@ describe('PublicFormPage — submission flow', () => {
     await waitFor(() => {
       // MUST be the renderer's success screen, NOT the "Already Submitted" branch.
       expect(screen.getByText(/Your form has been submitted successfully/)).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/Form Already Submitted/)).not.toBeInTheDocument();
+  });
+
+  it('resets the initial-status snapshot when the token changes (SPA nav between forms)', async () => {
+    // Regression for the adversarial review finding: React Router reuses
+    // the same component instance when only the :token param changes
+    // (same route pattern). Without keying the ref by token, the snapshot
+    // from the first token carries over into the second. This test drives
+    // the actual in-place nav via a history-pushing button inside a
+    // shared MemoryRouter so the ref's reset logic is genuinely exercised.
+    let currentToken = 'tokA';
+    mockUsePublicForm.mockImplementation(() => ({
+      data:
+        currentToken === 'tokA'
+          ? {
+              id: 'inv_1',
+              formType: 'fellow-memorandum',
+              status: 'submitted',
+              submittedAt: '2026-04-24T10:00:00.000Z',
+              formDef: minimalForm,
+              response: { fullName: 'Prior' },
+            }
+          : {
+              id: 'inv_2',
+              formType: 'fellow-memorandum',
+              status: 'pending',
+              submittedAt: null,
+              formDef: minimalForm,
+              response: null,
+            },
+      isLoading: false,
+      error: null,
+    }));
+    mockUseSubmitForm.mockReturnValue({
+      mutate: mockMutate,
+      isPending: false,
+      error: null,
+      isSuccess: false,
+    });
+
+    // Mount a shared router so the same PublicFormPage instance survives
+    // the token change.
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0, staleTime: 0 } },
+    });
+    const TestHarness = () => {
+      const [token, setToken] = useState('tokA');
+      currentToken = token;
+      // Key the MemoryRouter on the external token so that setting tokB
+      // actually changes the URL the router sees. Inside the router,
+      // PublicFormPage is NOT keyed — React Router with the same route
+      // pattern will reuse the PublicFormPage instance across the token
+      // change, which is exactly what we want to stress-test: the ref's
+      // reset logic must fire when useParams() returns a new value.
+      return (
+        <QueryClientProvider client={client}>
+          <MemoryRouter initialEntries={[`/forms/${token}`]} key={token}>
+            <Routes>
+              <Route
+                path="/forms/:token"
+                element={
+                  <>
+                    <button onClick={() => setToken('tokB')}>nav</button>
+                    <PublicFormPage />
+                  </>
+                }
+              />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
+      );
+    };
+    render(<TestHarness />);
+
+    // tokA is submitted → expect the re-visit message.
+    expect(screen.getByText(/Form Already Submitted/)).toBeInTheDocument();
+
+    // Navigate to tokB (pending). The token-keyed ref MUST reset so the
+    // fresh form renders.
+    await userEvent.setup().click(screen.getByRole('button', { name: 'nav' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Submit/ })).toBeInTheDocument();
     });
     expect(screen.queryByText(/Form Already Submitted/)).not.toBeInTheDocument();
   });

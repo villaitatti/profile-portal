@@ -21,7 +21,21 @@ export async function getJobQueue(): Promise<PgBoss> {
   });
 
   await boss.start();
-  logger.info('pg-boss started');
+
+  // Create every declared queue up front, inside the single boot path every
+  // caller already awaits. This guarantees that even a send() that fires
+  // BEFORE the worker module is registered (e.g., an HTTP submit arriving
+  // in the window between app.listen and registerXWorker) finds a valid
+  // queue row and does not silently drop the job. createQueue is
+  // idempotent per pg-boss docs. Also means new queues only need to be
+  // added to QUEUE_NAMES — there is no second place where a createQueue
+  // call can be forgotten, which is exactly how the original v10 regression
+  // went unnoticed for a full release cycle.
+  for (const name of Object.values(QUEUE_NAMES)) {
+    await boss.createQueue(name);
+  }
+
+  logger.info({ queues: Object.values(QUEUE_NAMES) }, 'pg-boss started');
 
   return boss;
 }

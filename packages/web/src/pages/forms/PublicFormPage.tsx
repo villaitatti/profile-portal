@@ -20,13 +20,20 @@ export function PublicFormPage() {
   // distinguishes "opened an already-used link" (show re-visit message)
   // from "just submitted successfully" (show the renderer's success state).
   //
+  // Keyed by token so an in-place navigation between two different form
+  // URLs (/forms/A → /forms/B) doesn't carry A's snapshot into B. Without
+  // the key, a submitted link opened first and then a fresh link opened
+  // second via SPA navigation would incorrectly show "Already Submitted"
+  // on the fresh one.
+  //
   // Typed as the domain union (not string) so a rename/removal of a
   // status value fails typecheck here instead of quietly comparing
   // against a stale literal in the branch below.
-  const initialStatusRef = useRef<PublicFormData['status'] | null>(null);
-  if (data && initialStatusRef.current === null) {
-    initialStatusRef.current = data.status;
+  const initialStatusRef = useRef<{ token: string; status: PublicFormData['status'] } | null>(null);
+  if (data && token && initialStatusRef.current?.token !== token) {
+    initialStatusRef.current = { token, status: data.status };
   }
+  const initialStatus = initialStatusRef.current?.status ?? null;
 
   if (isLoading) {
     return (
@@ -51,7 +58,7 @@ export function PublicFormPage() {
   // BEFORE this page session started. Do NOT render this after a
   // just-completed submit — that path is owned by PublicFormRenderer's
   // isSuccess branch (the "Thank you!" screen).
-  if (initialStatusRef.current === 'submitted') {
+  if (initialStatus === 'submitted') {
     return (
       <div className="text-center py-20 max-w-md mx-auto">
         <CheckCircle2 className="h-16 w-16 text-green-600 mx-auto mb-4" />

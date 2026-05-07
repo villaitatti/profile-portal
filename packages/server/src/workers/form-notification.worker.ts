@@ -31,14 +31,9 @@ export async function enqueueFormNotification(
 export async function registerFormNotificationWorker(): Promise<void> {
   const boss = await getJobQueue();
 
-  // pg-boss v10 requires queues to exist BEFORE jobs can be sent to them.
-  // The insertJob SQL does `INNER JOIN queue ON j.name = q.name`, so a
-  // missing queue row makes send() silently return null (no job created,
-  // no error thrown, no email ever sent). `createQueue` is idempotent —
-  // safe to call on every boot. This is the v9 → v10 breaking change that
-  // quietly broke the form notification pipeline.
-  await boss.createQueue(QUEUE_NAMES.FORM_SUBMISSION_NOTIFICATION);
-
+  // Queue creation is handled centrally by getJobQueue() for EVERY
+  // QUEUE_NAMES.* value, so a send() that races worker registration still
+  // finds a valid queue row. See packages/server/src/lib/job-queue.ts.
   await boss.work<FormSubmissionNotificationPayload>(
     QUEUE_NAMES.FORM_SUBMISSION_NOTIFICATION,
     { batchSize: 1 },
