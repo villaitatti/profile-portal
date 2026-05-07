@@ -37,7 +37,7 @@ export function PublicFormPage() {
       <div className="text-center py-20">
         <h1 className="text-2xl font-bold mb-2">Form Not Found</h1>
         <p className="text-muted-foreground">
-          This link may be invalid or expired. Please contact the I Tatti office if you need assistance.
+          This link may be invalid or expired. Please contact the I Tatti staff member who sent you this form.
         </p>
       </div>
     );
@@ -54,7 +54,7 @@ export function PublicFormPage() {
         <h1 className="text-2xl font-bold mb-2">Form Already Submitted</h1>
         <p className="text-muted-foreground">
           This form was submitted on {new Date(data.submittedAt!).toLocaleDateString()}.
-          If you need to make changes, please contact the I Tatti office.
+          If you need to make changes, please contact the I Tatti staff member who sent you this form.
         </p>
       </div>
     );
