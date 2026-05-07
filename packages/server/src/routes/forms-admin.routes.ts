@@ -9,6 +9,58 @@ import { generateFormPdf } from '../services/form-pdf.service.js';
 import { isDevMode } from '../env.js';
 import { logger } from '../lib/logger.js';
 
+// Mirrors the fellows cache pattern in emails-admin.routes.ts (120s TTL).
+// Reused here so /invitations can join CiviCRM contact names onto each row
+// without a per-request roundtrip. Graceful-degrade: if the CiviCRM fetch
+// fails, the lookup returns a map with no names, and the endpoint still
+// returns rows (the UI shows "Contact #<id>" as a fallback).
+let cachedFellows: { contactId: number; firstName: string; lastName: string }[] | null = null;
+let cachedFellowsExpires = 0;
+const FELLOWS_CACHE_TTL_MS = 120_000;
+
+async function getFellowsCached(): Promise<typeof cachedFellows> {
+  const now = Date.now();
+  if (cachedFellows && now < cachedFellowsExpires) return cachedFellows;
+  const fellows = await civicrmService.getFellowsWithContacts();
+  // Cache-poisoning guard: a transient CiviCRM hiccup can return a 200 with
+  // { values: [] } (which the service maps to []). Caching an empty list
+  // for 120s would silently label every submission "Contact #<id>" until
+  // the TTL expires, with no way for an operator to notice. Treat empty
+  // results as a non-cacheable response — every subsequent request retries
+  // until Civi returns real data.
+  if (fellows.length === 0) {
+    logger.warn('forms_admin_fellows_empty_response — not caching');
+    return fellows;
+  }
+  cachedFellows = fellows;
+  cachedFellowsExpires = now + FELLOWS_CACHE_TTL_MS;
+  return fellows;
+}
+
+/**
+ * Build a NameLookup backed by the fellows cache. On CiviCRM failure, returns
+ * a lookup whose getName() always returns null — the caller's items still
+ * include contactId so the UI can render a "Contact #<id>" fallback.
+ */
+async function buildNameLookup(): Promise<formService.NameLookup> {
+  try {
+    const fellows = await getFellowsCached();
+    const byId = new Map<number, string>();
+    for (const f of fellows ?? []) {
+      const name = `${f.firstName} ${f.lastName}`.trim();
+      if (name) byId.set(f.contactId, name);
+    }
+    return {
+      getName(contactId: number) {
+        return byId.get(contactId) ?? null;
+      },
+    };
+  } catch (err) {
+    logger.warn({ err }, 'forms_admin_name_lookup_civicrm_failed');
+    return { getName: () => null };
+  }
+}
+
 const generateSchema = z.object({
   fellowshipId: z.number().int().positive(),
   contactId: z.number().int().positive(),
@@ -39,23 +91,37 @@ router.get('/registry', (_req, res) => {
 
 router.get('/invitations', async (req, res) => {
   const { academicYear, formType, status } = req.query as Record<string, string | undefined>;
-  const invitations = await formService.listInvitations({ academicYear, formType, status });
 
-  res.json(
-    invitations.map((inv) => ({
+  const nameLookup = await buildNameLookup();
+  const { items, facets } = await formService.listInvitations(
+    { academicYear, formType, status },
+    nameLookup
+  );
+
+  // Deliberately OMIT `token` from this response. Form tokens are the key
+  // to the unauthenticated GET /api/forms/:token endpoint that returns the
+  // submitted response data. The admin submissions archive has no reason
+  // to expose tokens — admin actions (reset, download PDF, etc.) use the
+  // invitation id, not the token. Keeping tokens out of this response
+  // reduces blast radius if an admin page is compromised, screenshotted,
+  // or leaks through a browser extension.
+  res.json({
+    items: items.map((inv) => ({
       id: inv.id,
-      token: inv.token,
       fellowshipId: inv.fellowshipId,
       contactId: inv.contactId,
+      contactName: inv.contactName,
       academicYear: inv.academicYear,
       formType: inv.formType,
+      formTitle: inv.formTitle,
       status: inv.status,
       nominationSentAt: inv.nominationSentAt?.toISOString() ?? null,
       submittedAt: inv.submittedAt?.toISOString() ?? null,
       createdAt: inv.createdAt.toISOString(),
       hasResponse: !!inv.response,
-    }))
-  );
+    })),
+    facets,
+  });
 });
 
 router.post('/generate', validate(generateSchema), async (req, res) => {

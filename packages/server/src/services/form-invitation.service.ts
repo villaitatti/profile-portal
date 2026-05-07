@@ -257,33 +257,102 @@ export async function getInvitationsForFellowship(fellowshipId: number, academic
   });
 }
 
-export async function listInvitations(filters: {
-  academicYear?: string;
-  formType?: string;
-  status?: string;
-}): Promise<Array<{
+export interface InvitationListItem {
   id: string;
   token: string;
   fellowshipId: number;
   contactId: number;
+  contactName: string | null;
   academicYear: string;
   formType: string;
+  formTitle: string;
   status: string;
   nominationSentAt: Date | null;
   submittedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   response: { id: string; data: unknown; createdAt: Date } | null;
-}>> {
-  return prisma.formInvitation.findMany({
-    where: {
-      ...(filters.academicYear && { academicYear: filters.academicYear }),
-      ...(filters.formType && { formType: filters.formType }),
-      ...(filters.status && { status: filters.status }),
-    },
-    include: { response: true },
-    orderBy: { createdAt: 'desc' },
+}
+
+export interface InvitationListResult {
+  items: InvitationListItem[];
+  facets: {
+    academicYears: string[];
+    formTypes: string[];
+  };
+}
+
+export interface NameLookup {
+  getName(contactId: number): string | null;
+}
+
+/**
+ * List invitations with joined appointee name + form title, plus facet values.
+ *
+ * Data flow (items and facets queries run CONCURRENTLY via Promise.all):
+ *
+ *   filters ──┬─▶ Prisma.findMany (items, sorted submittedAt DESC, id DESC)
+ *             │
+ *             └─▶ Prisma.findMany (facet rows, IGNORES academicYear/formType
+ *                                  so the dropdowns stay stable as filters
+ *                                  change — only the status filter applies)
+ *        ┃
+ *        ▼
+ *   both resolve ──▶ nameLookup.getName(contactId) per item (null on miss)
+ *               ──▶ getFormDef(formType).title per item
+ *                   ("(retired form: ...)" on miss)
+ *
+ * Name resolution is injected so the caller owns caching. Callers that do not
+ * want name resolution (or want to degrade gracefully on a CiviCRM failure)
+ * pass a lookup whose getName returns null — items still carry contactId so
+ * the UI can render a fallback.
+ */
+export async function listInvitations(
+  filters: {
+    academicYear?: string;
+    formType?: string;
+    status?: string;
+  },
+  nameLookup?: NameLookup
+): Promise<InvitationListResult> {
+  const where = {
+    ...(filters.academicYear && { academicYear: filters.academicYear }),
+    ...(filters.formType && { formType: filters.formType }),
+    ...(filters.status && { status: filters.status }),
+  };
+
+  const facetWhere = {
+    ...(filters.status && { status: filters.status }),
+  };
+
+  const [rows, facetRows] = await Promise.all([
+    prisma.formInvitation.findMany({
+      where,
+      include: { response: true },
+      orderBy: [{ submittedAt: 'desc' }, { id: 'desc' }],
+    }),
+    prisma.formInvitation.findMany({
+      where: facetWhere,
+      select: { academicYear: true, formType: true },
+    }),
+  ]);
+
+  const items: InvitationListItem[] = rows.map((inv) => {
+    const formDef = getFormDef(inv.formType);
+    return {
+      ...inv,
+      contactName: nameLookup?.getName(inv.contactId) ?? null,
+      formTitle: formDef ? formDef.title : `(retired form: ${inv.formType})`,
+    };
   });
+
+  // Lexicographic desc is correct for fixed-width "YYYY-YYYY" academic-year
+  // strings ("2026-2027" > "2025-2026"). If the year format ever changes
+  // (e.g. "FY27" or a fiscal prefix), swap this for a numeric-prefix sort.
+  const academicYears = Array.from(new Set(facetRows.map((r) => r.academicYear))).sort().reverse();
+  const formTypes = Array.from(new Set(facetRows.map((r) => r.formType))).sort();
+
+  return { items, facets: { academicYears, formTypes } };
 }
 
 export function getAvailableFormsForAppointmentType(appointmentType: string) {
