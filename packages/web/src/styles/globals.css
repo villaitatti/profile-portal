@@ -20,6 +20,9 @@
   --color-accent-foreground: #1d252c;
   --color-destructive: #b83a47;
   --color-destructive-foreground: #fafbfc;
+  --color-warning: #f5efd9;
+  --color-warning-foreground: #6b4f1d;
+  --color-warning-border: #e4d7a6;
   --color-border: #cfd5db;
   --color-input: #bcc4cc;
   --color-ring: #ab192d;
