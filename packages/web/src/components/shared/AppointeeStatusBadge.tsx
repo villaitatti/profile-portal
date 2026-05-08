@@ -83,9 +83,13 @@ export function AppointeeStatusBadge({
               */}
               {(() => {
                 const currentIndex = LIFECYCLE_STEPS.findIndex((s) => s.key === status);
+                // Enrolled is the terminal success state — there are no more
+                // actions. Render it as a completed step (green + check) rather
+                // than as the "current" step so it doesn't look like work-in-progress.
+                const isTerminal = status === 'enrolled';
                 return LIFECYCLE_STEPS.map((step, i) => {
-                  const isCurrent = step.key === status;
-                  const isComplete = i < currentIndex;
+                  const isCurrent = step.key === status && !isTerminal;
+                  const isComplete = isTerminal ? i <= currentIndex : i < currentIndex;
                   return (
                     <div key={step.key} className="flex items-start gap-2">
                       <div className="flex flex-col items-center">

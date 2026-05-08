@@ -311,7 +311,7 @@ function FellowsManagementSkeleton() {
             {Array.from({ length: 5 }).map((_, index) => (
               <div key={index} className="grid grid-cols-9 items-center gap-4 px-4 py-4">
                 <div className="flex items-center gap-3">
-                  <SkeletonBlock className="h-8 w-8 rounded-full bg-muted/80" />
+                  <SkeletonBlock className="h-10 w-10 rounded-full bg-muted/80" />
                   <div className="space-y-2">
                     <SkeletonBlock className="h-4 w-28 rounded-full" />
                     <SkeletonBlock className="h-3.5 w-24 rounded-full" />
@@ -1351,12 +1351,12 @@ function FellowRow({
     <tr className="hover:bg-muted/30">
       <td className="px-4 py-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10">
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10">
             {fellow.imageUrl ? (
               <img
                 src={fellow.imageUrl}
                 alt=""
-                className="h-8 w-8 rounded-full object-cover"
+                className="h-10 w-10 rounded-full object-cover"
               />
             ) : (
               <span className="text-xs font-medium text-primary">
