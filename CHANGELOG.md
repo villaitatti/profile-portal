@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.14.1.1] - 2026-05-08
+
+### Fixed
+- **Server boots again.** v0.14.1.0's await+process.exit around `registerFormNotificationWorker` surfaced a pre-existing pg-boss v10 assertion failure: the constructor rejects `expireInSeconds` values at or above 86400 (24h) with "expiration cannot exceed 24 hours". Our config set it to exactly 86400. Previously the error was swallowed by a fire-and-forget `.catch()` so pg-boss just quietly never started. The stricter boot now crashed instead. Dropped `expireInSeconds` to 23 hours — within the valid range, functionally equivalent for a job-staleness cutoff.
+
 ## [0.14.1.0] - 2026-05-07
 
 ### Fixed
