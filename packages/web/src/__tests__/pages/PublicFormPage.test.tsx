@@ -171,6 +171,17 @@ describe('PublicFormPage — submission flow', () => {
       expect(screen.getByText(/Your form has been submitted successfully/)).toBeInTheDocument();
     });
     expect(screen.queryByText(/Form Already Submitted/)).not.toBeInTheDocument();
+
+    // Chrome-hiding: the form's title block (an h1 with the form title and,
+    // if present, the privacy-policy description) must NOT render above the
+    // success screen. Otherwise appointees see "Fellow Memorandum" + full
+    // privacy paragraph + "Thank you" — half-form, half-confirmation UI.
+    expect(screen.queryByRole('heading', { level: 1, name: 'Fellow Memorandum' })).not.toBeInTheDocument();
+    // The renderer's own heading is an <h2>, not an <h1>, so this assertion
+    // only catches the page-level title block.
+    expect(screen.getByRole('heading', { level: 2, name: 'Thank you!' })).toBeInTheDocument();
+    // New closing copy from the design: appointee can close the window.
+    expect(screen.getByText(/You may now close this window/)).toBeInTheDocument();
   });
 
   it('resets the initial-status snapshot when the token changes (SPA nav between forms)', async () => {
