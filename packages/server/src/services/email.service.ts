@@ -467,7 +467,17 @@ function sanitizeHeaderValue(v: string): string {
 function encodeMimeWord(v: string): string {
   // eslint-disable-next-line no-control-regex
   if (/^[\x20-\x7e]*$/.test(v)) return v;
-  return `=?UTF-8?B?${Buffer.from(v, 'utf8').toString('base64')}?=`;
+  // RFC 2047 caps each encoded-word at 75 octets total, INCLUDING the
+  // "=?UTF-8?B?...?=" wrapper (12 chars). So the base64 payload per token
+  // is at most 63 chars, and must be a multiple of 4 to stay a valid
+  // base64 quantum → 60. 60 base64 chars decode to 45 UTF-8 bytes.
+  const base64 = Buffer.from(v, 'utf8').toString('base64');
+  const chunks: string[] = [];
+  for (let i = 0; i < base64.length; i += 60) {
+    chunks.push(`=?UTF-8?B?${base64.slice(i, i + 60)}?=`);
+  }
+  // Join with CRLF + SP so the long header folds per RFC 5322 §2.2.3.
+  return chunks.join('\r\n ');
 }
 
 /**
@@ -487,7 +497,15 @@ function buildFilenameParams(stem: string, formTitle: string): {
   const asciiTitle = formTitle.replace(/[^a-zA-Z0-9]/g, '_').replace(/^_+|_+$/g, '') || 'form';
   const asciiFilename = `${asciiTitle}_${asciiStem}.pdf`;
   const utf8Filename = `${formTitle}_${stem}.pdf`;
-  const utf8FilenameParam = `filename*=UTF-8''${encodeURIComponent(utf8Filename)}`;
+  // encodeURIComponent leaves !'()* unescaped, but RFC 5987 uses the
+  // single-quote as the ext-value delimiter — so a name like "O'Brien.pdf"
+  // would produce a malformed filename*=UTF-8''O'Brien.pdf. Percent-encode
+  // those five characters explicitly on top of encodeURIComponent.
+  const utf8Encoded = encodeURIComponent(utf8Filename).replace(
+    /[!'()*]/g,
+    (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase()
+  );
+  const utf8FilenameParam = `filename*=UTF-8''${utf8Encoded}`;
   return { asciiFilename, utf8FilenameParam };
 }
 
@@ -568,7 +586,10 @@ export async function sendFormNotificationEmail(input: FormNotificationEmailInpu
   // hops along the way might do to 8bit bytes. Base64-in-body also sidesteps
   // the "7bit" assertion we used to make; that was always wrong for any
   // body that could carry UTF-8.
-  const bodyBase64 = Buffer.from(body, 'utf8').toString('base64').replace(/(.{76})/g, '$1\r\n');
+  // Chunk to 76-char base64 lines per RFC 2045, but only INSERT CRLF
+  // between chunks — a trailing CRLF when length is a multiple of 76
+  // would produce an empty final line before the MIME boundary.
+  const bodyBase64 = Buffer.from(body, 'utf8').toString('base64').replace(/.{76}(?=.)/g, '$&\r\n');
   const rawMessage = [
     `From: ${buildSesSource()}`,
     `To: ${recipient}`,
@@ -591,7 +612,7 @@ export async function sendFormNotificationEmail(input: FormNotificationEmailInpu
     `Content-Disposition: attachment; filename="${asciiFilename}"; ${utf8FilenameParam}`,
     `Content-Transfer-Encoding: base64`,
     ``,
-    input.pdfBuffer.toString('base64').replace(/(.{76})/g, '$1\r\n'),
+    input.pdfBuffer.toString('base64').replace(/.{76}(?=.)/g, '$&\r\n'),
     ``,
     `--${boundary}--`,
   ].join('\r\n');
