@@ -14,12 +14,26 @@ export async function enqueueFormNotification(
   payload: FormSubmissionNotificationPayload
 ): Promise<string | null> {
   const boss = await getJobQueue();
-  return boss.send(QUEUE_NAMES.FORM_SUBMISSION_NOTIFICATION, payload);
+  const jobId = await boss.send(QUEUE_NAMES.FORM_SUBMISSION_NOTIFICATION, payload);
+  if (!jobId) {
+    // pg-boss.send() returns null (no throw) when the queue doesn't exist
+    // or when a dedup/throttle rule suppresses the insert. For our
+    // form-submission flow neither of those is expected — log loudly so a
+    // future regression surfaces instead of silently dropping emails.
+    logger.error(
+      { payload, queue: QUEUE_NAMES.FORM_SUBMISSION_NOTIFICATION },
+      'form notification: boss.send returned null — job not enqueued, no email will be sent'
+    );
+  }
+  return jobId;
 }
 
 export async function registerFormNotificationWorker(): Promise<void> {
   const boss = await getJobQueue();
 
+  // Queue creation is handled centrally by getJobQueue() for EVERY
+  // QUEUE_NAMES.* value, so a send() that races worker registration still
+  // finds a valid queue row. See packages/server/src/lib/job-queue.ts.
   await boss.work<FormSubmissionNotificationPayload>(
     QUEUE_NAMES.FORM_SUBMISSION_NOTIFICATION,
     { batchSize: 1 },
