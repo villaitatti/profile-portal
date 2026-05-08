@@ -1,6 +1,7 @@
 import { getJobQueue, QUEUE_NAMES } from '../lib/job-queue.js';
 import { generateFormPdf } from '../services/form-pdf.service.js';
 import { sendFormNotificationEmail } from '../services/email.service.js';
+import { getFellowWithContact } from '../services/civicrm.service.js';
 import { prisma } from '../lib/prisma.js';
 import { getFormDef } from '@itatti/shared';
 import { logger } from '../lib/logger.js';
@@ -60,6 +61,34 @@ export async function registerFormNotificationWorker(): Promise<void> {
 
         const pdfBuffer = await generateFormPdf(formDef, invitation.response.data as Record<string, unknown>);
 
+        // Resolve the appointee's human-readable name from CiviCRM so the
+        // notification email can read as "submitted by Andrea Caselli"
+        // instead of leaking internal fellowshipId/contactId. On any
+        // CiviCRM failure, fall back to null — sendFormNotificationEmail
+        // renders degraded subject/body variants in that case (no
+        // "Appointee:" line) so the email still ships.
+        let appointeeName: string | null = null;
+        try {
+          const fellow = await getFellowWithContact(
+            invitation.fellowshipId,
+            invitation.contactId
+          );
+          if (fellow && fellow.firstName && fellow.lastName) {
+            const name = `${fellow.firstName} ${fellow.lastName}`.trim();
+            if (name) appointeeName = name;
+          }
+          // Note: the email service (sendFormNotificationEmail) is the
+          // authoritative sanitiser for strings that reach SMTP headers —
+          // it strips CR/LF/control chars and RFC 2047-encodes non-ASCII.
+          // We pass the raw name through so that layer sees the value it
+          // actually needs to sanitise.
+        } catch (err) {
+          logger.warn(
+            { err, invitationId, fellowshipId: invitation.fellowshipId },
+            'form notification: appointee name lookup failed — sending with degraded subject'
+          );
+        }
+
         await sendFormNotificationEmail({
           formTitle: formDef.title,
           fellowshipId: invitation.fellowshipId,
@@ -67,6 +96,7 @@ export async function registerFormNotificationWorker(): Promise<void> {
           academicYear: invitation.academicYear,
           pdfBuffer,
           responseData: invitation.response.data as Record<string, unknown>,
+          appointeeName,
         });
 
         logger.info({ invitationId, jobId: job.id }, 'form notification sent');
