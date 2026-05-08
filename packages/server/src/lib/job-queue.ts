@@ -43,9 +43,12 @@ export async function getJobQueue(): Promise<PgBoss> {
     // added to QUEUE_NAMES — there is no second place where a createQueue
     // call can be forgotten, which is exactly how the original v10 regression
     // went unnoticed for a full release cycle.
-    for (const name of Object.values(QUEUE_NAMES)) {
-      await b.createQueue(name);
-    }
+    // Parallel: createQueue calls are independent, so awaiting them in
+    // sequence would round-trip to Postgres once per queue. Promise.all
+    // collapses boot-time latency to a single roundtrip window.
+    await Promise.all(
+      Object.values(QUEUE_NAMES).map((name) => b.createQueue(name))
+    );
 
     logger.info({ queues: Object.values(QUEUE_NAMES) }, 'pg-boss started');
 
