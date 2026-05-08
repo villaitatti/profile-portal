@@ -422,12 +422,91 @@ export async function sendAutomationReport(input: AutomationReportInput): Promis
 }
 
 export interface FormNotificationEmailInput {
+  /** Also used as the "Fellowship" label in the subject and body. */
   formTitle: string;
+  /** Kept for diagnostic logging only — never rendered into the email. */
   fellowshipId: number;
+  /** Kept for diagnostic logging only — never rendered into the email. */
   contactId: number;
   academicYear: string;
   pdfBuffer: Buffer;
+  /**
+   * Retained in the interface for potential future consumers; intentionally
+   * NOT rendered into the email body anymore. The PDF attachment carries
+   * every field; duplicating it into plaintext leaked submitted data into
+   * inbox previews and server logs.
+   */
   responseData: Record<string, unknown>;
+  /**
+   * Resolved by the worker from CiviCRM. Null when the lookup fails — in
+   * that case the email still ships with degraded subject + body (no
+   * "Appointee:" line).
+   */
+  appointeeName: string | null;
+}
+
+/**
+ * Strip every character that can end an SMTP/MIME header line. Covers
+ * ASCII CR/LF/HT/NUL/C0 plus Unicode "line separator" flavours that some
+ * MIME parsers and mail clients treat as newlines when folding or
+ * re-encoding: U+0085 (NEL), U+2028 (LINE SEP), U+2029 (PARA SEP).
+ * Defense lives here (at the SMTP boundary) — any untrusted string that
+ * reaches sendFormNotificationEmail is scrubbed, so the function is safe
+ * even if a future caller forgets to sanitise upstream.
+ */
+function sanitizeHeaderValue(v: string): string {
+  return v.replace(/[\r\n\t\x00-\x1f\x7f\u0085\u2028\u2029]/g, ' ').trim();
+}
+
+/**
+ * RFC 2047 encoded-word wrap for non-ASCII subject lines. If the value is
+ * pure ASCII, return it unchanged. Otherwise UTF-8 + base64 + wrap per the
+ * spec so real names like "François Élise" or "王小明" render correctly in
+ * every mail client instead of arriving as mojibake.
+ */
+function encodeMimeWord(v: string): string {
+  // eslint-disable-next-line no-control-regex
+  if (/^[\x20-\x7e]*$/.test(v)) return v;
+  // RFC 2047 caps each encoded-word at 75 octets total, INCLUDING the
+  // "=?UTF-8?B?...?=" wrapper (12 chars). So the base64 payload per token
+  // is at most 63 chars, and must be a multiple of 4 to stay a valid
+  // base64 quantum → 60. 60 base64 chars decode to 45 UTF-8 bytes.
+  const base64 = Buffer.from(v, 'utf8').toString('base64');
+  const chunks: string[] = [];
+  for (let i = 0; i < base64.length; i += 60) {
+    chunks.push(`=?UTF-8?B?${base64.slice(i, i + 60)}?=`);
+  }
+  // Join with CRLF + SP so the long header folds per RFC 5322 §2.2.3.
+  return chunks.join('\r\n ');
+}
+
+/**
+ * RFC 2231 filename parameter for non-ASCII attachment filenames. Returns
+ * a pair of Content-Disposition params: a plain ASCII-sanitised `filename=`
+ * for legacy clients, plus `filename*=UTF-8''<percent-encoded>` for
+ * anything modern. The ASCII fallback also uses the existing
+ * alphanumeric-only sanitiser so older mail clients get a safe 8.3-style
+ * name rather than the mojibake Mail.app shows when the UTF-8 version is
+ * misparsed.
+ */
+function buildFilenameParams(stem: string, formTitle: string): {
+  asciiFilename: string;
+  utf8FilenameParam: string;
+} {
+  const asciiStem = stem.replace(/[^a-zA-Z0-9]/g, '_').replace(/^_+|_+$/g, '') || 'form-response';
+  const asciiTitle = formTitle.replace(/[^a-zA-Z0-9]/g, '_').replace(/^_+|_+$/g, '') || 'form';
+  const asciiFilename = `${asciiTitle}_${asciiStem}.pdf`;
+  const utf8Filename = `${formTitle}_${stem}.pdf`;
+  // encodeURIComponent leaves !'()* unescaped, but RFC 5987 uses the
+  // single-quote as the ext-value delimiter — so a name like "O'Brien.pdf"
+  // would produce a malformed filename*=UTF-8''O'Brien.pdf. Percent-encode
+  // those five characters explicitly on top of encodeURIComponent.
+  const utf8Encoded = encodeURIComponent(utf8Filename).replace(
+    /[!'()*]/g,
+    (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase()
+  );
+  const utf8FilenameParam = `filename*=UTF-8''${utf8Encoded}`;
+  return { asciiFilename, utf8FilenameParam };
 }
 
 export async function sendFormNotificationEmail(input: FormNotificationEmailInput): Promise<void> {
@@ -441,30 +520,48 @@ export async function sendFormNotificationEmail(input: FormNotificationEmailInpu
 
   const recipient = overrideTo || formRecipient!;
 
-  const subject = `Form Submitted: ${input.formTitle} — Fellowship ${input.fellowshipId} (${input.academicYear})`;
+  // Scrub every untrusted string at the email-service boundary. Upstream
+  // callers (worker) may also scrub, but the defense belongs here so this
+  // exported function is safe regardless of who calls it.
+  const safeName = input.appointeeName ? sanitizeHeaderValue(input.appointeeName) : null;
+  const safeFormTitle = sanitizeHeaderValue(input.formTitle);
+  const safeAcademicYear = sanitizeHeaderValue(input.academicYear);
 
-  const fieldSummary = Object.entries(input.responseData)
-    .filter(([, v]) => v !== null && v !== undefined && v !== '')
-    .map(([k, v]) => `  ${k}: ${v}`)
-    .join('\n');
+  // Subject puts the distinguishing info (appointee name) first so it
+  // survives inbox-column truncation. Non-ASCII names are RFC 2047
+  // encoded-word wrapped so Italian/French/Chinese fellowship names
+  // render correctly in every client (without this, SES either rejects
+  // or the client shows mojibake).
+  const subjectPlain = safeName
+    ? `Form submitted by ${safeName} — ${safeFormTitle} (${safeAcademicYear})`
+    : `Form submitted — ${safeFormTitle} (${safeAcademicYear})`;
+  const subject = encodeMimeWord(subjectPlain);
 
-  const body = [
+  // Body is deliberately minimal: human-readable fields only, no DB IDs,
+  // no plaintext response dump. The PDF attachment carries the full
+  // response data for admins who need to see it.
+  const bodyLines = [
     `A new form submission has been received.`,
     ``,
-    `Form: ${input.formTitle}`,
-    `Fellowship ID: ${input.fellowshipId}`,
-    `Contact ID: ${input.contactId}`,
-    `Academic Year: ${input.academicYear}`,
+    `Fellowship: ${safeFormTitle}`,
+  ];
+  if (safeName) {
+    bodyLines.push(`Appointee: ${safeName}`);
+  }
+  bodyLines.push(
+    `Academic Year: ${safeAcademicYear}`,
     ``,
-    `Response summary:`,
-    fieldSummary,
-    ``,
-    `A PDF copy is attached. You can also view and download the response from the Profile Portal.`,
-  ].join('\n');
+    `A PDF copy is attached. You can also view and download the response from the Profile Portal.`
+  );
+  const body = bodyLines.join('\n');
 
   if (isDevMode && !overrideTo) {
+    // Do NOT log the subject — it may now contain the appointee's full
+    // name, which is PII the log aggregator has no business seeing. The
+    // fellowshipId + pdfSize are enough to correlate with the worker's
+    // 'form notification sent' line.
     logger.info(
-      { subject, fellowshipId: input.fellowshipId, pdfSize: input.pdfBuffer.length },
+      { fellowshipId: input.fellowshipId, pdfSize: input.pdfBuffer.length },
       'Form notification email (dev mode): would send with PDF attachment'
     );
     return;
@@ -478,8 +575,21 @@ export async function sendFormNotificationEmail(input: FormNotificationEmailInpu
   const { SendRawEmailCommand } = await import('@aws-sdk/client-ses');
 
   const boundary = `----=_Part_${Date.now()}`;
-  const pdfFilename = `${input.formTitle.replace(/[^a-zA-Z0-9]/g, '_')}_${input.contactId}.pdf`;
+  // Prefer appointee name in the filename (easier for Angela to find in her
+  // inbox/attachments). Fall back to contactId when CiviCRM failed so we
+  // never produce an ambiguous name.
+  const filenameStem = safeName ?? String(input.contactId);
+  const { asciiFilename, utf8FilenameParam } = buildFilenameParams(filenameStem, safeFormTitle);
 
+  // Body is base64-encoded so non-ASCII content (e.g. a form title with
+  // Italian diacritics) is transported safely regardless of what the SMTP
+  // hops along the way might do to 8bit bytes. Base64-in-body also sidesteps
+  // the "7bit" assertion we used to make; that was always wrong for any
+  // body that could carry UTF-8.
+  // Chunk to 76-char base64 lines per RFC 2045, but only INSERT CRLF
+  // between chunks — a trailing CRLF when length is a multiple of 76
+  // would produce an empty final line before the MIME boundary.
+  const bodyBase64 = Buffer.from(body, 'utf8').toString('base64').replace(/.{76}(?=.)/g, '$&\r\n');
   const rawMessage = [
     `From: ${buildSesSource()}`,
     `To: ${recipient}`,
@@ -489,16 +599,20 @@ export async function sendFormNotificationEmail(input: FormNotificationEmailInpu
     ``,
     `--${boundary}`,
     `Content-Type: text/plain; charset=UTF-8`,
-    `Content-Transfer-Encoding: 7bit`,
-    ``,
-    body,
-    ``,
-    `--${boundary}`,
-    `Content-Type: application/pdf; name="${pdfFilename}"`,
-    `Content-Disposition: attachment; filename="${pdfFilename}"`,
     `Content-Transfer-Encoding: base64`,
     ``,
-    input.pdfBuffer.toString('base64').replace(/(.{76})/g, '$1\n'),
+    bodyBase64,
+    ``,
+    `--${boundary}`,
+    // Keep the ASCII filename= for legacy clients; add filename*= (RFC 2231)
+    // for anything modern so "François_Élise.pdf" displays correctly instead
+    // of collapsing to underscores. The `name=` param on Content-Type is
+    // kept alongside for maximum compatibility.
+    `Content-Type: application/pdf; name="${asciiFilename}"`,
+    `Content-Disposition: attachment; filename="${asciiFilename}"; ${utf8FilenameParam}`,
+    `Content-Transfer-Encoding: base64`,
+    ``,
+    input.pdfBuffer.toString('base64').replace(/.{76}(?=.)/g, '$&\r\n'),
     ``,
     `--${boundary}--`,
   ].join('\r\n');
@@ -508,8 +622,12 @@ export async function sendFormNotificationEmail(input: FormNotificationEmailInpu
   });
 
   await client.send(command);
+  // Deliberately NOT logging `subject` here — the post-v0.14.2 subject
+  // contains the appointee's full name, which is PII that doesn't belong
+  // in log aggregators. fellowshipId + recipient are enough to correlate
+  // with upstream worker logs.
   logger.info(
-    { subject, fellowshipId: input.fellowshipId, to: recipient, overrideActive: !!overrideTo },
+    { fellowshipId: input.fellowshipId, to: recipient, overrideActive: !!overrideTo },
     'Form notification email sent'
   );
 }

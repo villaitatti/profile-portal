@@ -26,7 +26,7 @@ export function PublicFormRenderer({
         <CheckCircle2 className="h-16 w-16 text-green-600 mx-auto mb-4" />
         <h2 className="text-xl font-semibold mb-2">Thank you!</h2>
         <p className="text-muted-foreground">
-          Your form has been submitted successfully. The I Tatti office will review your information.
+          Your form has been submitted successfully. The I Tatti office will review your information. You may now close this window.
         </p>
       </div>
     );

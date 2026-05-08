@@ -71,6 +71,24 @@ export function PublicFormPage() {
     );
   }
 
+  // Post-submit: the renderer owns the full-page success screen. Hide the
+  // form's title + privacy-policy block above it so the appointee sees one
+  // clean "Thank you" panel instead of a half-form, half-confirmation view.
+  // Only props relevant to the success screen are passed — the rest (onSubmit,
+  // isSubmitting, submitError) are only read when the renderer draws the form.
+  if (submitMutation.isSuccess) {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <PublicFormRenderer
+          formDef={data.formDef}
+          onSubmit={() => undefined}
+          isSubmitting={false}
+          isSuccess={true}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-8">
