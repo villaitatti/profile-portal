@@ -24,7 +24,11 @@ export async function getJobQueue(): Promise<PgBoss> {
       schema: 'pgboss',
       retryLimit: 3,
       retryDelay: 60,
-      expireInSeconds: 24 * 60 * 60,
+      // pg-boss v10 asserts strictly `< 24 hours` for this value (see
+      // attorney.js#applyExpirationConfig). Exactly 24h throws at
+      // constructor time. 23 hours is the practical equivalent — a job
+      // that's been sitting unclaimed for a full day is stale anyway.
+      expireInSeconds: 23 * 60 * 60,
       archiveCompletedAfterSeconds: 7 * 24 * 60 * 60,
     });
 
