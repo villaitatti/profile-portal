@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.14.2.0] - 2026-05-08
+
+### Changed
+- **Post-submit screen is now a clean "Thank you!" panel.** Previously the form title and privacy description still rendered above the success message, leaving appointees with a half-form, half-confirmation view. The page now hides the title block after a successful submit and closes with "You may now close this window."
+- **Form notification email subject leads with the appointee name.** Replaced `Form Submitted: <form> — Fellowship <id> (<year>)` with `Form submitted by <Appointee Name> — <form> (<year>)`. Distinguishing info (the person) comes before program noise, and the internal CiviCRM fellowship id no longer appears in the subject line.
+- **Form notification email body shows human-readable labels.** `Fellowship ID: <id>` and `Contact ID: <id>` now render as `Fellowship: <program name>` and `Appointee: <Full Name>`, resolved from CiviCRM at send time. When the CiviCRM lookup fails the email still ships with a degraded but usable body — no "Appointee:" line rather than a crash.
+
+### Security
+- **SMTP header injection is blocked at the email-service boundary.** Any untrusted string that reaches `sendFormNotificationEmail` is scrubbed of CR/LF, tab, C0 controls, DEL, and the Unicode line separators (U+0085, U+2028, U+2029) that some mail parsers treat as newlines. Non-ASCII subject lines are RFC 2047 encoded-word wrapped (UTF-8 + base64) so names like "François Élise" render correctly instead of as mojibake or truncated at the first 8-bit byte. Attachment filenames use RFC 2231 `filename*=UTF-8''` with an ASCII-sanitised fallback for legacy clients. Email body parts now ship as base64-UTF-8 instead of 7bit ASCII.
+- **Notification email subject no longer logs as PII.** Server logs previously included the full subject (now containing the appointee name) on every send. Replaced with a constant identifier so appointee names don't leak into log aggregation.
+
 ## [0.14.1.1] - 2026-05-08
 
 ### Fixed
