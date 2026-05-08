@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { useState, type ReactNode } from 'react';
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
+import type { ReactNode } from 'react';
 
 const { mockUsePublicForm, mockUseSubmitForm, mockMutate } = vi.hoisted(() => ({
   mockUsePublicForm: vi.fn(),
@@ -178,31 +178,43 @@ describe('PublicFormPage — submission flow', () => {
     // the same component instance when only the :token param changes
     // (same route pattern). Without keying the ref by token, the snapshot
     // from the first token carries over into the second. This test drives
-    // the actual in-place nav via a history-pushing button inside a
-    // shared MemoryRouter so the ref's reset logic is genuinely exercised.
-    let currentToken = 'tokA';
-    mockUsePublicForm.mockImplementation(() => ({
-      data:
-        currentToken === 'tokA'
-          ? {
-              id: 'inv_1',
-              formType: 'fellow-memorandum',
-              status: 'submitted',
-              submittedAt: '2026-04-24T10:00:00.000Z',
-              formDef: minimalForm,
-              response: { fullName: 'Prior' },
-            }
-          : {
-              id: 'inv_2',
-              formType: 'fellow-memorandum',
-              status: 'pending',
-              submittedAt: null,
-              formDef: minimalForm,
-              response: null,
-            },
-      isLoading: false,
-      error: null,
-    }));
+    // an in-router navigate() so the MemoryRouter stays mounted and only
+    // useParams() changes — genuinely exercising the ref-reset logic.
+    // Keying the router on the token (as a prior version of this test
+    // did) would force a full remount and bypass the logic entirely,
+    // which is exactly what we want to avoid here.
+    // The hook is called from PublicFormPage with the token it got from
+    // useParams. We mock the hook to branch on its argument so the mock
+    // follows the URL the router sees, not a side-channel like window
+    // location (which MemoryRouter doesn't touch).
+    mockUsePublicForm.mockImplementation((token: string) => {
+      if (token === 'tokA') {
+        return {
+          data: {
+            id: 'inv_1',
+            formType: 'fellow-memorandum',
+            status: 'submitted',
+            submittedAt: '2026-04-24T10:00:00.000Z',
+            formDef: minimalForm,
+            response: { fullName: 'Prior' },
+          },
+          isLoading: false,
+          error: null,
+        };
+      }
+      return {
+        data: {
+          id: 'inv_2',
+          formType: 'fellow-memorandum',
+          status: 'pending',
+          submittedAt: null,
+          formDef: minimalForm,
+          response: null,
+        },
+        isLoading: false,
+        error: null,
+      };
+    });
     mockUseSubmitForm.mockReturnValue({
       mutate: mockMutate,
       isPending: false,
@@ -210,45 +222,40 @@ describe('PublicFormPage — submission flow', () => {
       isSuccess: false,
     });
 
-    // Mount a shared router so the same PublicFormPage instance survives
-    // the token change.
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false, gcTime: 0, staleTime: 0 } },
     });
-    const TestHarness = () => {
-      const [token, setToken] = useState('tokA');
-      currentToken = token;
-      // Key the MemoryRouter on the external token so that setting tokB
-      // actually changes the URL the router sees. Inside the router,
-      // PublicFormPage is NOT keyed — React Router with the same route
-      // pattern will reuse the PublicFormPage instance across the token
-      // change, which is exactly what we want to stress-test: the ref's
-      // reset logic must fire when useParams() returns a new value.
-      return (
-        <QueryClientProvider client={client}>
-          <MemoryRouter initialEntries={[`/forms/${token}`]} key={token}>
-            <Routes>
-              <Route
-                path="/forms/:token"
-                element={
-                  <>
-                    <button onClick={() => setToken('tokB')}>nav</button>
-                    <PublicFormPage />
-                  </>
-                }
-              />
-            </Routes>
-          </MemoryRouter>
-        </QueryClientProvider>
-      );
+    // Inside the route element: a button that calls useNavigate() to push
+    // /forms/tokB. No unmount, no router remount — React Router keeps the
+    // same PublicFormPage instance alive and only useParams() changes.
+    const NavButton = () => {
+      const navigate = useNavigate();
+      return <button onClick={() => navigate('/forms/tokB')}>nav</button>;
     };
-    render(<TestHarness />);
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/forms/tokA']}>
+          <Routes>
+            <Route
+              path="/forms/:token"
+              element={
+                <>
+                  <NavButton />
+                  <PublicFormPage />
+                </>
+              }
+            />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
 
     // tokA is submitted → expect the re-visit message.
     expect(screen.getByText(/Form Already Submitted/)).toBeInTheDocument();
 
-    // Navigate to tokB (pending). The token-keyed ref MUST reset so the
-    // fresh form renders.
+    // Navigate to tokB (pending) via useNavigate — the router instance
+    // stays, only the :token param changes. The token-keyed ref MUST
+    // reset so the fresh form renders.
     await userEvent.setup().click(screen.getByRole('button', { name: 'nav' }));
 
     await waitFor(() => {
