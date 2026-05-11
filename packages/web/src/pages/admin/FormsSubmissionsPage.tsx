@@ -605,10 +605,10 @@ function PdfButton({
         aria-label={label}
         title={retired ? 'PDF unavailable for retired forms' : 'Download PDF'}
         className={cn(
-          // p-2 gives 32px on fine pointers; pointer-coarse bumps to 44px so
-          // touch users clear WCAG 2.5.5 Target Size (AAA) without affecting
-          // desktop density.
-          'shrink-0 rounded p-2 pointer-coarse:p-3 text-muted-foreground hover:bg-accent-foreground/10 hover:text-foreground',
+          // p-2 gives 32px on fine pointers; pointer-coarse:p-4 bumps to 48px
+          // so touch users clear WCAG 2.5.5 Target Size (AAA) without
+          // affecting desktop density. Icon itself is 16px.
+          'shrink-0 rounded p-2 pointer-coarse:p-4 text-muted-foreground hover:bg-accent-foreground/10 hover:text-foreground',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
           retired && 'cursor-not-allowed opacity-40'
         )}
