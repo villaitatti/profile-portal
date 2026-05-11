@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.14.2.1] - 2026-05-08
+
+### Changed
+- **Submissions archive typography and hierarchy tightened.** Detail-pane section headings now sit on a subtle divider with wider letter-spacing; field values stepped up to the base 18px body size so the heading-to-value contrast is readable at a glance. The page's filter strip no longer sits inside its own card — the filters rest on the page surface so the list and detail panes read as the real content.
+- **`/admin/forms` description no longer mentions internal PDF plumbing.** The header subtitle is now "All submitted appointee forms. Select a row to view the full response or download a PDF." — the "same generator as the notification email" implementation detail is gone.
+- **List-row metadata no longer renders "— · 2025-2026" when a submission date is missing.** When `submittedAt` is null the row shows just the academic year. The detail pane drops the "Submitted —" line entirely in the same case.
+
+### Fixed
+- **Screen readers now announce `/admin/forms` state changes.** The error banner is a live `role="alert"`, the "no submissions match these filters" message is a `role="status"`, and a polite live region announces "Showing N of M submissions" as filters change. Filter bar selects gained explicit `id`/`htmlFor` pairs so the label association survives future layout refactors.
+- **PDF icon button in list rows is now a real touch target.** Grew from 28×28 to 32×32 on fine pointers and 48×48 on coarse pointers (WCAG 2.5.5).
+- **Retired-form banner and "Pending" bio-email pill no longer use hard-coded Tailwind yellow.** Both now draw from a new `--color-warning` / `--color-warning-foreground` / `--color-warning-border` token family, so future theme tweaks don't leave them stranded.
+
 ## [0.14.2.0] - 2026-05-08
 
 ### Changed

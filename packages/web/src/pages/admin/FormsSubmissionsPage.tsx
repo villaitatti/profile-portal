@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronRight, Download, FileText, Inbox } from 'lucide-react';
 import { useFormInvitations, useFormResponse, useFormRegistry } from '@/api/forms';
@@ -188,7 +188,7 @@ export function FormsSubmissionsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Submissions"
-        description="All submitted appointee forms. Click a row to view the response. Download PDF uses the same generator as the submission notification email."
+        description="All submitted appointee forms. Select a row to view the full response or download a PDF."
         actions={
           <Link
             to="/admin/forms/templates"
@@ -223,14 +223,21 @@ export function FormsSubmissionsPage() {
           description="Once appointees start submitting nomination forms, they will appear here."
         />
       ) : (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr,3fr]">
-          <SubmissionList
-            items={filteredItems}
-            selectedId={selectedId}
-            onSelect={selectInvitation}
-          />
-          <DetailPane invitation={selected} />
-        </div>
+        <>
+          {/* Announce filter-result count changes to assistive tech (WCAG 4.1.3).
+              Keeping this visually hidden avoids visual duplication of the list. */}
+          <div role="status" aria-live="polite" className="sr-only">
+            {filterSummary(filteredItems.length, items.length)}
+          </div>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr,3fr]">
+            <SubmissionList
+              items={filteredItems}
+              selectedId={selectedId}
+              onSelect={selectInvitation}
+            />
+            <DetailPane invitation={selected} />
+          </div>
+        </>
       )}
     </div>
   );
@@ -270,15 +277,24 @@ function FilterBar({
   onSearchChange,
 }: FilterBarProps) {
   const formTitleFor = (id: string): string => formTitlesByType.get(id) ?? id;
+  // Explicit id/htmlFor pairs so the labels remain associated with the inputs
+  // even if the JSX structure later changes and the implicit wrap is lost.
+  const uid = useId();
+  const yearId = `${uid}-year`;
+  const formTypeId = `${uid}-formtype`;
+  const searchId = `${uid}-search`;
 
   return (
-    <div className="flex flex-wrap items-end gap-4 rounded-lg border bg-card p-4">
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-muted-foreground">Academic year</span>
+    <div className="flex flex-wrap items-end gap-4">
+      <div className="flex flex-col gap-1 text-sm">
+        <label htmlFor={yearId} className="text-muted-foreground">
+          Academic year
+        </label>
         <select
+          id={yearId}
           value={year}
           onChange={(e) => onYearChange(e.target.value)}
-          className="h-9 rounded border bg-background px-2 text-sm"
+          className="h-10 rounded border bg-background px-2 text-sm"
         >
           <option value="">All years</option>
           {yearOptions.map((y) => (
@@ -287,14 +303,17 @@ function FilterBar({
             </option>
           ))}
         </select>
-      </label>
+      </div>
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-muted-foreground">Form</span>
+      <div className="flex flex-col gap-1 text-sm">
+        <label htmlFor={formTypeId} className="text-muted-foreground">
+          Form
+        </label>
         <select
+          id={formTypeId}
           value={formType}
           onChange={(e) => onFormTypeChange(e.target.value)}
-          className="h-9 rounded border bg-background px-2 text-sm"
+          className="h-10 rounded border bg-background px-2 text-sm"
         >
           <option value="">All forms</option>
           {formTypeOptions.map((t) => (
@@ -303,18 +322,21 @@ function FilterBar({
             </option>
           ))}
         </select>
-      </label>
+      </div>
 
-      <label className="flex flex-col gap-1 text-sm flex-1 min-w-[200px]">
-        <span className="text-muted-foreground">Search</span>
+      <div className="flex flex-col gap-1 text-sm flex-1 min-w-[200px]">
+        <label htmlFor={searchId} className="text-muted-foreground">
+          Search
+        </label>
         <input
+          id={searchId}
           type="search"
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Name or form title"
-          className="h-9 rounded border bg-background px-2 text-sm"
+          className="h-10 rounded border bg-background px-2 text-sm"
         />
-      </label>
+      </div>
     </div>
   );
 }
@@ -381,7 +403,10 @@ function SubmissionList({ items, selectedId, onSelect }: SubmissionListProps) {
 
   if (items.length === 0) {
     return (
-      <div className="rounded-lg border bg-card p-8 text-center text-sm text-muted-foreground">
+      <div
+        role="status"
+        className="rounded-lg border bg-card p-8 text-center text-sm text-muted-foreground"
+      >
         No submissions match these filters.
       </div>
     );
@@ -426,7 +451,9 @@ function SubmissionList({ items, selectedId, onSelect }: SubmissionListProps) {
                 {inv.formTitle}
               </div>
               <div className="text-xs text-muted-foreground mt-1">
-                {inv.submittedAt ? formatSubmittedDate(inv.submittedAt) : '—'} · {inv.academicYear}
+                {inv.submittedAt
+                  ? `${formatSubmittedDate(inv.submittedAt)} · ${inv.academicYear}`
+                  : inv.academicYear}
               </div>
             </div>
             <PdfButton invitation={inv} variant="icon" />
@@ -470,15 +497,20 @@ function DetailPane({ invitation }: { invitation: AdminFormInvitation | null }) 
           <div className="text-sm text-muted-foreground mt-1">
             {displayName(invitation)} · {invitation.academicYear}
           </div>
-          <div className="text-xs text-muted-foreground mt-1">
-            Submitted {invitation.submittedAt ? formatSubmittedDate(invitation.submittedAt) : '—'}
-          </div>
+          {invitation.submittedAt && (
+            <div className="text-xs text-muted-foreground mt-1">
+              Submitted {formatSubmittedDate(invitation.submittedAt)}
+            </div>
+          )}
         </div>
         <PdfButton invitation={invitation} variant="button" />
       </div>
 
       {retired ? (
-        <div className="rounded-md border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-900">
+        <div
+          role="status"
+          className="rounded-md border border-warning-border bg-warning p-4 text-sm text-warning-foreground"
+        >
           This form is no longer in the registry. The PDF cannot be regenerated.
         </div>
       ) : isLoading ? (
@@ -522,14 +554,14 @@ function DetailFields({
     <div className="space-y-6">
       {sections.map((section) => (
         <section key={section.title}>
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+          <h3 className="text-[0.8125rem] font-semibold uppercase tracking-[0.08em] text-foreground mb-4 pb-2 border-b border-border/60">
             {section.title}
           </h3>
-          <dl className="space-y-3">
+          <dl className="space-y-4">
             {section.fields.map((f) => (
               <div key={f.name}>
-                <dt className="text-xs text-muted-foreground">{f.label}</dt>
-                <dd className="text-sm whitespace-pre-wrap">{f.value}</dd>
+                <dt className="text-xs text-muted-foreground mb-0.5">{f.label}</dt>
+                <dd className="text-base leading-6 whitespace-pre-wrap">{f.value}</dd>
               </div>
             ))}
           </dl>
@@ -573,7 +605,10 @@ function PdfButton({
         aria-label={label}
         title={retired ? 'PDF unavailable for retired forms' : 'Download PDF'}
         className={cn(
-          'shrink-0 rounded p-1.5 text-muted-foreground hover:bg-accent-foreground/10 hover:text-foreground',
+          // p-2 gives 32px on fine pointers; pointer-coarse:p-4 bumps to 48px
+          // so touch users clear WCAG 2.5.5 Target Size (AAA) without
+          // affecting desktop density. Icon itself is 16px.
+          'shrink-0 rounded p-2 pointer-coarse:p-4 text-muted-foreground hover:bg-accent-foreground/10 hover:text-foreground',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
           retired && 'cursor-not-allowed opacity-40'
         )}
@@ -661,7 +696,10 @@ function ListSkeleton() {
 
 function ErrorBanner({ onRetry }: { onRetry: () => void }) {
   return (
-    <div className="rounded-md border border-destructive/50 bg-destructive/10 p-4 text-sm">
+    <div
+      role="alert"
+      className="rounded-md border border-destructive/50 bg-destructive/10 p-4 text-sm"
+    >
       <div className="font-medium text-destructive mb-1">Could not load submissions.</div>
       <button
         type="button"
@@ -672,4 +710,16 @@ function ErrorBanner({ onRetry }: { onRetry: () => void }) {
       </button>
     </div>
   );
+}
+
+/**
+ * Build a screen-reader-friendly string describing the current filter result.
+ * Kept terse so it doesn't overwhelm assistive tech during rapid filter
+ * changes (e.g., as the user types in the search box).
+ */
+function filterSummary(filtered: number, total: number): string {
+  if (filtered === total) {
+    return `Showing all ${total} submission${total === 1 ? '' : 's'}.`;
+  }
+  return `Showing ${filtered} of ${total} submission${total === 1 ? '' : 's'}.`;
 }

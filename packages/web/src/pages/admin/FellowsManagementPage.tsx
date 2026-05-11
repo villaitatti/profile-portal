@@ -382,7 +382,7 @@ function BioEmailPill({
   if (status === 'pending') {
     return (
       <span
-        className="inline-flex items-center rounded-full bg-yellow-50 px-2.5 py-0.5 text-xs font-medium text-yellow-700"
+        className="inline-flex items-center rounded-full bg-warning px-2.5 py-0.5 text-xs font-medium text-warning-foreground"
         title={
           targetAcademicYear
             ? `Bio email queued for ${targetAcademicYear} — will be sent by the daily cron`
