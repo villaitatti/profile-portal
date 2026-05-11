@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.14.2.1] - 2026-05-08
+## [0.14.3] - 08 May 2026 - `/admin/forms` audit polish: a11y announcements, warning tokens, touch targets
 
 ### Changed
 - **Submissions archive typography and hierarchy tightened.** Detail-pane section headings now sit on a subtle divider with wider letter-spacing; field values stepped up to the base 18px body size so the heading-to-value contrast is readable at a glance. The page's filter strip no longer sits inside its own card — the filters rest on the page surface so the list and detail panes read as the real content.
@@ -12,7 +12,7 @@
 - **PDF icon button in list rows is now a real touch target.** Grew from 28×28 to 32×32 on fine pointers and 48×48 on coarse pointers (WCAG 2.5.5).
 - **Retired-form banner and "Pending" bio-email pill no longer use hard-coded Tailwind yellow.** Both now draw from a new `--color-warning` / `--color-warning-foreground` / `--color-warning-border` token family, so future theme tweaks don't leave them stranded.
 
-## [0.14.2.0] - 2026-05-08
+## [0.14.2] - 08 May 2026 - Form notification email lands the appointee name + SMTP header-injection defense
 
 ### Changed
 - **Post-submit screen is now a clean "Thank you!" panel.** Previously the form title and privacy description still rendered above the success message, leaving appointees with a half-form, half-confirmation view. The page now hides the title block after a successful submit and closes with "You may now close this window."
@@ -23,23 +23,19 @@
 - **SMTP header injection is blocked at the email-service boundary.** Any untrusted string that reaches `sendFormNotificationEmail` is scrubbed of CR/LF, tab, C0 controls, DEL, and the Unicode line separators (U+0085, U+2028, U+2029) that some mail parsers treat as newlines. Non-ASCII subject lines are RFC 2047 encoded-word wrapped (UTF-8 + base64) so names like "François Élise" render correctly instead of as mojibake or truncated at the first 8-bit byte. Attachment filenames use RFC 2231 `filename*=UTF-8''` with an ASCII-sanitised fallback for legacy clients. Email body parts now ship as base64-UTF-8 instead of 7bit ASCII.
 - **Notification email subject no longer logs as PII.** Server logs previously included the full subject (now containing the appointee name) on every send. Replaced with a constant identifier so appointee names don't leak into log aggregation.
 
-## [0.14.1.1] - 2026-05-08
-
-### Fixed
-- **Server boots again.** v0.14.1.0's await+process.exit around `registerFormNotificationWorker` surfaced a pre-existing pg-boss v10 assertion failure: the constructor rejects `expireInSeconds` values at or above 86400 (24h) with "expiration cannot exceed 24 hours". Our config set it to exactly 86400. Previously the error was swallowed by a fire-and-forget `.catch()` so pg-boss just quietly never started. The stricter boot now crashed instead. Dropped `expireInSeconds` to 23 hours — within the valid range, functionally equivalent for a job-staleness cutoff.
-
-## [0.14.1.0] - 2026-05-07
+## [0.14.1] - 08 May 2026 - Forms actually send again (pg-boss queue + post-submit UX fixes)
 
 ### Fixed
 - **Appointees now see a "Thank you!" confirmation after submitting a form.** Previously, a successful submit immediately flipped the screen to "Form Already Submitted" with a message suggesting the form had been filled before, making successful submissions look like errors. The page now distinguishes between "opened an already-used link" (keeps the re-visit message) and "just submitted successfully" (shows the renderer's success state).
 - **Form submission notification emails actually send now.** The pg-boss v10 upgrade introduced a breaking change — queues must exist before jobs can be sent to them, or the send silently returns null with no error. No queue was ever created, so every form submission since the forms feature shipped (v0.13.0) dropped its notification email. Queue creation now runs centrally for every registered queue during boot. A loud ERROR log also fires if a send ever returns null again so a future regression can't hide the same way.
 - **Boot ordering closed the last silent-drop window.** The worker registration (and its queue creation) now awaits completion before the HTTP server accepts traffic. A submission arriving in the cold-start window used to race the worker and lose. Boot now fails fast if queue setup throws.
+- **Server boots again.** The stricter await+process.exit around `registerFormNotificationWorker` surfaced a pre-existing pg-boss v10 assertion failure: the constructor rejects `expireInSeconds` values at or above 86400 (24h) with "expiration cannot exceed 24 hours". Our config set it to exactly 86400. Previously the error was swallowed by a fire-and-forget `.catch()` so pg-boss just quietly never started. Dropped `expireInSeconds` to 23 hours — within the valid range, functionally equivalent for a job-staleness cutoff.
 - **Navigating between two different form links no longer carries the first link's "Already Submitted" state into the second.** React Router reuses the same component instance across `:token` changes; the page's status snapshot is now keyed by token so opening `/forms/A` (submitted) and then `/forms/B` (pending) correctly renders the fresh form.
 
 ### Changed
 - **Already-submitted and invalid-link screens now point appointees to the staff member who sent them the form,** rather than a generic "contact the I Tatti office." Keeps Angela's email private while giving appointees a concrete next step (the person already in their nomination email thread).
 
-## [0.14.0.0] - 2026-05-07
+## [0.14.0] - 07 May 2026 - Submissions archive at `/admin/forms`
 
 ### Added
 - **Submissions archive at `/admin/forms`.** Angela now has a searchable, filterable home for every submitted appointee form. The page opens on the most recent submission by default, shows appointee + form title + submission date in a master-detail layout, and renders every answered field in the detail pane. The old form-registry view moved to `/admin/forms/templates` (linked from the page header).
@@ -61,13 +57,13 @@
 ### Removed
 - **Dead `getFormPdfUrl` helper.** The client-side PDF URL builder in `packages/web/src/api/forms.ts` was incompatible with bearer authentication and had no live callers. Deleted in favor of the new `useDownloadFormPdf` hook.
 
-## [0.13.3] - 2026-05-06
+## [0.13.3] - 06 May 2026 - Readable dates on Manage Appointees
 
 ### Changed
 - **Dates in the Manage Appointees page now display as "24 Apr 2026"** in the Appointee Status and Form columns, replacing the locale-dependent numeric format that could be misread as month/day vs day/month.
 - **The "Nomination sent" date picker uses the European day/month order** via `lang="en-GB"` so the native popup shows DD/MM instead of MM/DD.
 
-## [0.13.2] - 2026-05-06
+## [0.13.2] - 06 May 2026 - Editing an address to "Temporary" no longer fails validation
 
 ### Fixed
 - **Editing an address to "Temporary" no longer fails validation.** The update route still allowed the old "Billing" id (5) and rejected the new "Temporary" id (6), so switching an existing non-primary address to Temporary returned a validation error.
@@ -75,7 +71,7 @@
 ### Changed
 - **Contact validation error messages no longer show internal numeric IDs.** Address and phone error messages now list the type names users actually see in the form ("Home, Work, Other, or Temporary" / "Phone or Mobile") instead of parenthesised database IDs.
 
-## [0.13.1] - 2026-05-06
+## [0.13.1] - 06 May 2026 - Fix swapped "Temporary" / "Other" address location types
 
 ### Fixed
 - **Address location types now match CiviCRM.** "Temporary" and "Other" were swapped — profiles showed "Temporary" for what CiviCRM stored as "Other" (and vice versa). Location type IDs now correctly map to CiviCRM's configuration (Home=1, Work=2, Main=3, Other=4, Temporary=6). Billing (id 5) is excluded from the selectable options.
@@ -83,7 +79,7 @@
 ### Changed
 - **New phone numbers always use the Main location type.** Previously, phone creation cycled through location types to avoid duplicates; it now hardcodes Main so every phone lives in the same location category.
 
-## [0.13.0] - 2026-05-04
+## [0.13.0] - 04 May 2026 - Form workflow: link generation, copy, nomination-sent actions
 
 ### Added
 - **Form status column on Manage Appointees.** Angela can now see whether an appointee is ready for a form link, has no configured form, has a generated link, is waiting for submission, or has submitted the form.
@@ -98,7 +94,7 @@
 ### Fixed
 - Invalid nomination sent dates are rejected before database writes instead of allowing impossible calendar dates through the form workflow.
 
-## [0.12.2] - 2026-04-30
+## [0.12.2] - 30 April 2026 - Generate Form Link button + lifecycle info popup
 
 ### Added
 - **Generate Form Link button** on the Manage Appointees page. Angela can generate invitation links for appointees and copy them to clipboard in one click. Previously this required an API call.
@@ -109,7 +105,7 @@
 - Pagination disabled when viewing a specific academic year (all fellows shown in one table). Pagination remains for the "All years" view with page size increased to 50.
 - `FellowDashboardEntry` type now includes `fellowshipId` for form generation API calls.
 
-## [0.12.1] - 2026-04-30
+## [0.12.1] - 30 April 2026 - Reject duplicate address location types with a clear error
 
 ### Fixed
 - Server now rejects duplicate address location types (Home, Work, Temporary, Other) with a clear error message, matching CiviCRM's own constraint.
@@ -121,7 +117,7 @@
 - Reclassify dialog after primary change now only shows available (unused) types.
 - Primary indicator copy replaced with star icon + explanatory text for both addresses and phone numbers.
 
-## [0.12.0] - 2026-04-30
+## [0.12.0] - 30 April 2026 - Location type system for addresses
 
 ### Added
 - **Location type system.** Users select Home, Work, Temporary, or Other when adding an address. The primary address is automatically labeled "Main" in CiviCRM. When switching primary, a reclassify dialog prompts the user to re-label the old primary.
@@ -139,7 +135,7 @@
 ### Fixed
 - Unhandled promise rejections in address/phone action handlers.
 
-## [0.11.1] - 2026-04-29
+## [0.11.1] - 29 April 2026 - Profile page layout tightening
 
 ### Changed
 - Profile page layout: cards now display in a two-column grid (Name + Email top row, Addresses + Phone bottom row).
@@ -147,7 +143,7 @@
 - Removed "Source: I Tatti Records (CiviCRM)" footer from profile page.
 - IT contact email updated to it-help@itatti.harvard.edu.
 
-## [0.11.0] - 2026-04-29
+## [0.11.0] - 29 April 2026 - Contact info self-service (address + phone CRUD on Profile)
 
 ### Added
 - **Contact info self-service.** Fellows and staff can now manage their own addresses and phone numbers from the Profile page. Full CRUD with inline editing, preferred (primary) selection, and real-time validation.
@@ -162,7 +158,7 @@
 - CiviCRM client error messages now include entity and action for easier debugging (e.g. `Address.get returned 500`).
 - Mutation error responses use 503/CIVICRM_UNAVAILABLE instead of generic 500 to distinguish upstream failures from application bugs.
 
-## [0.10.0] - 2026-04-29
+## [0.10.0] - 29 April 2026 - Appointee Forms system replaces Google Forms
 
 ### Added
 - **Appointee Forms system.** Replaces Google Forms with an in-app token-based form workflow. Angela generates a unique link per appointee from the portal; the appointee fills the form without logging in; Angela receives an email notification with the responses as a PDF attachment. Full workflow: generate invitation → appointee submits → async PDF generation → email notification → admin can view/download responses.
@@ -199,14 +195,14 @@
 - Forms for non-Fellow appointment types blocked on Angela providing templates. Tracked in TODOS.md.
 - Fellows Management page UI integration (per-row generate link button, copy-to-clipboard) not in this release.
 
-## [0.9.0] - 2026-04-28
+## [0.9.0] - 28 April 2026 - `/admin/emails` audit trail
 
 ### Added
 - **Admin Emails page** (`/admin/emails`). Audit trail of all appointee emails with three tabs: a filterable table of sent/pending/failed events with row-click drill-in drawer showing status, timestamps, failure reasons, SES message ID, and a re-rendered email preview; a templates reference tab with live iframe previews of both VIT ID Invitation and Bio & Project Description emails; and a "How emails work" reference tab documenting trigger logic for each email type.
 - Email event drill-in shows recipient status warnings when the original contact was deleted from CiviCRM or has no first name on file, with placeholder-name rendering and amber info banners.
 - React Query hooks for the three email admin endpoints with appropriate stale times (60s for event list, 5min for event previews, 10min for template previews) to reduce CiviCRM load.
 
-## [0.8.0] - 2026-04-23
+## [0.8.0] - 23 April 2026 - Five-state appointee lifecycle + branded HTML emails
 
 ### Added
 - **Five-state appointee lifecycle on Manage Appointees.** A new "Appointee Status" column tells Angela at a glance what step each appointee is on: *Nominated* (waiting on her external nomination-letter flow), *Accepted* (ready for the VIT ID invitation), *VIT ID Sent* (waiting on the appointee to claim), *VIT ID Claimed* (ready for the bio email), *Enrolled* (done). State is derived purely from `(fellowshipAccepted, VIT ID match tier, invitation event, bio email event)`. No manual transitions; Angela just acts on the chip she sees. Returning fellows (who already have a VIT ID) skip straight from Nominated → VIT ID Claimed the moment their fellowship is accepted.
@@ -242,7 +238,7 @@
 - Manual-send retry paths have a tiny delete+create race window (worker could insert a row between the delete and the re-enqueue). No data-integrity impact; close via transaction or upsert later. Tracked in TODOS.md.
 - Claim-page visual review — the appointee's first interactive portal impression after clicking the CTA is the claim page; worth aligning it with the email's institutional design. Tracked in TODOS.md.
 
-## [0.7.0] - 2026-04-22
+## [0.7.0] - 22 April 2026 - VIT ID match ladder (returning appointees with changed emails)
 
 ### Added
 - **VIT ID match ladder** — a new 4-tier matching system catches returning appointees whose email changed. The Manage Appointees dashboard and Has VIT ID? page now recognize a fellow's existing VIT ID even when their current CiviCRM email doesn't match the one on their Auth0 account. Tiers run in order: primary email → Auth0 `civicrm_id` metadata → CiviCRM secondary emails → normalized name match (case- and accent-insensitive).
@@ -271,7 +267,7 @@
 ### Removed
 - Client-side Auth0 user list download on the Has VIT ID? page (superseded by server-side search). The `/api/admin/users` endpoint, `listAllUsers` service function, and `Auth0UserListItem` shared type are all retired.
 
-## [0.6.0] - 2026-04-17
+## [0.6.0] - 17 April 2026 - Automated Bio & Project Description email
 
 ### Added
 - **Automated Bio & Project Description email.** After an Appointee successfully claims their VIT ID, a tracked email event is enqueued and dispatched 24h later by a daily cron (09:00 Europe/Rome). The email asks for a short biography and project description via the existing Jira JSM form. Tracking is per `(contactId, academicYear)` so returning Appointees with a new fellowship correctly receive a fresh email.
@@ -289,7 +285,7 @@
 - `claim.service.ts` now enqueues the bio email (24h delay) after a successful self-service VIT ID claim, gated on a valid current/upcoming target year.
 - `fellows.service.ts` dashboard payload includes a batched `bioEmail` summary per Appointee (no N+1); the frontend uses it for the new pill + button.
 
-## [0.5.0] - 2026-04-14
+## [0.5.0] - 14 April 2026 - VIT ID claim audit log + JSM organization management
 
 ### Added
 - **VIT ID claim audit log.** Every successful claim is recorded with fellowship status, roles assigned, and timestamp. New admin page at `/admin/claims` with sortable, searchable table and detailed instructions for IT staff.
@@ -304,7 +300,7 @@
 ### Changed
 - VIT ID claim flow now assigns `fellows-current` role for current-year fellows and fires JSM organization membership + email notification asynchronously (fire-and-forget) after the claim record is persisted.
 
-## [0.4.4] - 2026-04-13
+## [0.4.4] - 13 April 2026 - UX polish (sync destructive-action color, tooltips, copy)
 
 ### Fixed
 - Execute Sync button no longer uses green ("safe") color for a destructive action. Restyled to primary crimson with a confirmation dialog summarizing pending changes before execution. Dry Run is now a secondary outline button.
@@ -323,7 +319,7 @@
 - EmptyState component fixed double bottom margin on icon wrapper.
 - Dashboard app card image hover scale reduced from 1.05 to 1.02.
 
-## [0.4.3] - 2026-04-10
+## [0.4.3] - 10 April 2026 - Readability refresh (warmer surfaces, bigger type, skeleton loaders)
 
 ### Changed
 - Authenticated dashboard, profile, and admin screens now use warmer neutral surfaces, darker secondary text, and larger body typography for better readability.
@@ -337,7 +333,7 @@
 ### Fixed
 - Root `pnpm build` no longer fails by invoking a nonexistent `@itatti/shared` build script.
 
-## [0.4.2] - 2026-04-10
+## [0.4.2] - 10 April 2026 - Dashboard welcome banner + brand-tinted surfaces
 
 ### Changed
 - Dashboard profile card replaced with a compact welcome banner so the application grid is the visual anchor of the page.
@@ -357,7 +353,7 @@
 - Global `:focus-visible` outline style using the primary crimson color for keyboard navigation.
 - `.impeccable.md` design context file for future design skill runs.
 
-## [0.4.1] - 2026-04-09
+## [0.4.1] - 09 April 2026 - "Added By" audit trail + horizontal mapping form
 
 ### Added
 - Instructions panel on the Manage Group Mapping page with guidance on how to create and sync groups, including a link to the Atlassian Cloud admin console.
@@ -374,7 +370,7 @@
 - **Combobox empty after "Create new".** The SearchableCombobox now shows the new group name via the `displayValue` prop instead of resetting to placeholder.
 - **Spaces allowed in group names.** The Atlassian group dropdown now blocks space characters via `disallowChars=" "`.
 
-## [0.4.0] - 2026-04-09
+## [0.4.0] - 09 April 2026 - Searchable combobox + mapping page redesign
 
 ### Added
 - **Searchable combobox component.** Modern dropdown with type-to-search, keyboard navigation, and "create new" option. Used for both Auth0 roles and Atlassian groups on the mapping page.
@@ -392,7 +388,7 @@
 ### Fixed
 - **Bug: "new (will be created)" on existing groups.** Previously, typing an existing group name (e.g., "staff-it") always showed "new (will be created)" because the frontend never looked up existing SCIM groups. Now the dropdown fetches and resolves group IDs on selection.
 
-## [0.3.0] - 2026-04-09
+## [0.3.0] - 09 April 2026 - Sidebar redesign + Has VIT ID? page
 
 ### Added
 - **Sidebar redesign.** Restructured navigation into 4 clear sections: main nav, VIT ID Administration, Portal Settings, and Atlassian Cloud. All admin pages now accessible directly from the sidebar.
@@ -412,7 +408,7 @@
 - `AdminPage.tsx` (card-based admin hub, replaced by direct sidebar navigation).
 - `SyncDashboardPage.tsx` (split into AtlassianMappingsPage and AtlassianSyncPage).
 
-## [0.2.0] - 2026-04-08
+## [0.2.0] - 08 April 2026 - Atlassian SCIM sync (Auth0 → Atlassian Cloud)
 
 ### Added
 - **Atlassian SCIM sync.** Sync users and groups from Auth0 to Atlassian Cloud via the SCIM API. Three-phase reconciliation engine: fetch Auth0 state, fetch Atlassian SCIM state, compute diff. Dry-run preview before every execution. Real-time SSE progress bar. Full audit log with search, filter, and JSON export.
@@ -428,7 +424,7 @@
 - Auth0 domain added to CSP `frame-src` for silent token renewal (was blocking `getAccessTokenSilently()` iframe).
 - Removed incorrect `/scim/v2/` prefix from Atlassian SCIM API paths.
 
-## [0.1.0] - 2026-04-01
+## [0.1.0] - 01 April 2026 - Initial release
 
 ### Added
 - Initial release: Auth0 login, role-based dashboard, profile page, applications catalog, fellows management, claim VIT ID flow, Jira SM help tickets.
