@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.0] - 15 May 2026 - Form notification email gets branded MJML styling
+
+### Changed
+- **Form notification email now uses the branded template.** Admins receiving form submission emails now see the same I Tatti logo, layout, and institutional footer as VIT-ID and bio-project emails. Dark-mode support included.
+- **Email MIME structure upgraded to multipart/alternative.** The notification now sends both a styled HTML body and a plaintext fallback alongside the PDF attachment, so every mail client renders something reasonable.
+- **Plaintext body sourced from template.** The text/plain MIME part now comes from the `form-notification.txt` template (with token substitution) instead of inline string construction, ensuring HTML and plaintext stay in sync as the template evolves.
+
 ## [0.14.3] - 08 May 2026 - `/admin/forms` audit polish: a11y announcements, warning tokens, touch targets
 
 ### Changed

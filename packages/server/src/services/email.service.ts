@@ -3,6 +3,7 @@ import { logger } from '../lib/logger.js';
 import {
   renderVitIdInvitation,
   renderBioProjectDescription,
+  renderFormNotification,
 } from '../templates/render.js';
 
 interface ClaimNotificationInput {
@@ -537,24 +538,6 @@ export async function sendFormNotificationEmail(input: FormNotificationEmailInpu
     : `Form submitted — ${safeFormTitle} (${safeAcademicYear})`;
   const subject = encodeMimeWord(subjectPlain);
 
-  // Body is deliberately minimal: human-readable fields only, no DB IDs,
-  // no plaintext response dump. The PDF attachment carries the full
-  // response data for admins who need to see it.
-  const bodyLines = [
-    `A new form submission has been received.`,
-    ``,
-    `Fellowship: ${safeFormTitle}`,
-  ];
-  if (safeName) {
-    bodyLines.push(`Appointee: ${safeName}`);
-  }
-  bodyLines.push(
-    `Academic Year: ${safeAcademicYear}`,
-    ``,
-    `A PDF copy is attached. You can also view and download the response from the Profile Portal.`
-  );
-  const body = bodyLines.join('\n');
-
   if (isDevMode && !overrideTo) {
     // Do NOT log the subject — it may now contain the appointee's full
     // name, which is PII the log aggregator has no business seeing. The
@@ -574,36 +557,50 @@ export async function sendFormNotificationEmail(input: FormNotificationEmailInpu
   const client = await getSesClient();
   const { SendRawEmailCommand } = await import('@aws-sdk/client-ses');
 
-  const boundary = `----=_Part_${Date.now()}`;
+  const rendered = renderFormNotification({
+    formTitle: safeFormTitle,
+    academicYear: safeAcademicYear,
+    appointeeName: safeName,
+  });
+
+  const mixedBoundary = `----=_Mixed_${Date.now()}`;
+  const altBoundary = `----=_Alt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   // Prefer appointee name in the filename (easier for Angela to find in her
   // inbox/attachments). Fall back to contactId when CiviCRM failed so we
   // never produce an ambiguous name.
   const filenameStem = safeName ?? String(input.contactId);
   const { asciiFilename, utf8FilenameParam } = buildFilenameParams(filenameStem, safeFormTitle);
 
-  // Body is base64-encoded so non-ASCII content (e.g. a form title with
-  // Italian diacritics) is transported safely regardless of what the SMTP
-  // hops along the way might do to 8bit bytes. Base64-in-body also sidesteps
-  // the "7bit" assertion we used to make; that was always wrong for any
-  // body that could carry UTF-8.
-  // Chunk to 76-char base64 lines per RFC 2045, but only INSERT CRLF
-  // between chunks — a trailing CRLF when length is a multiple of 76
-  // would produce an empty final line before the MIME boundary.
-  const bodyBase64 = Buffer.from(body, 'utf8').toString('base64').replace(/.{76}(?=.)/g, '$&\r\n');
+  // Base64-encode both text and HTML bodies so non-ASCII content (e.g. a
+  // form title with Italian diacritics) is transported safely.
+  // Chunk to 76-char lines per RFC 2045.
+  const bodyBase64 = Buffer.from(rendered.text, 'utf8').toString('base64').replace(/.{76}(?=.)/g, '$&\r\n');
+  const htmlBase64 = Buffer.from(rendered.html, 'utf8').toString('base64').replace(/.{76}(?=.)/g, '$&\r\n');
   const rawMessage = [
     `From: ${buildSesSource()}`,
     `To: ${recipient}`,
     `Subject: ${subject}`,
     `MIME-Version: 1.0`,
-    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    `Content-Type: multipart/mixed; boundary="${mixedBoundary}"`,
     ``,
-    `--${boundary}`,
+    `--${mixedBoundary}`,
+    `Content-Type: multipart/alternative; boundary="${altBoundary}"`,
+    ``,
+    `--${altBoundary}`,
     `Content-Type: text/plain; charset=UTF-8`,
     `Content-Transfer-Encoding: base64`,
     ``,
     bodyBase64,
     ``,
-    `--${boundary}`,
+    `--${altBoundary}`,
+    `Content-Type: text/html; charset=UTF-8`,
+    `Content-Transfer-Encoding: base64`,
+    ``,
+    htmlBase64,
+    ``,
+    `--${altBoundary}--`,
+    ``,
+    `--${mixedBoundary}`,
     // Keep the ASCII filename= for legacy clients; add filename*= (RFC 2231)
     // for anything modern so "François_Élise.pdf" displays correctly instead
     // of collapsing to underscores. The `name=` param on Content-Type is
@@ -614,7 +611,7 @@ export async function sendFormNotificationEmail(input: FormNotificationEmailInpu
     ``,
     input.pdfBuffer.toString('base64').replace(/.{76}(?=.)/g, '$&\r\n'),
     ``,
-    `--${boundary}--`,
+    `--${mixedBoundary}--`,
   ].join('\r\n');
 
   const command = new SendRawEmailCommand({

@@ -1,0 +1,41 @@
+<!--
+  Form notification email — sent to admins when an appointee submits a form.
+
+  Runtime-substituted tokens:
+    {{formTitle}}      fellowship/form title
+    {{appointeeName}}  appointee full name (conditionally removed when null)
+    {{academicYear}}   academic year label
+    {{logoUrl}}        env.APPOINTEE_EMAIL_LOGO_URL or env.PORTAL_PUBLIC_URL + '/itatti-logo-email.png'
+-->
+<mjml>
+  <mj-include path="./_head.mjml" />
+  <mj-body background-color="#eef1f3" css-class="it-frame" width="640px">
+    <mj-include path="./_header.mjml" />
+
+    <mj-section background-color="#ffffff" padding="0" css-class="it-card">
+      <mj-column>
+        <mj-text css-class="it-text">
+          A new form submission has been received.
+        </mj-text>
+
+        <mj-text css-class="it-text" padding-top="16px">
+          <strong>Fellowship:</strong> {{formTitle}}
+        </mj-text>
+
+        <mj-text css-class="it-text it-appointee-line" padding-top="8px">
+          <strong>Appointee:</strong> {{appointeeName}}
+        </mj-text>
+
+        <mj-text css-class="it-text" padding-top="8px">
+          <strong>Academic Year:</strong> {{academicYear}}
+        </mj-text>
+
+        <mj-text css-class="it-text" padding-top="24px">
+          A PDF copy is attached. You can also view and download the response from the Profile Portal.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-include path="./_footer.mjml" />
+  </mj-body>
+</mjml>
