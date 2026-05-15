@@ -48,7 +48,7 @@ export function VitIdStatusBadge({
     <div className="inline-flex items-center gap-1.5">
       <span
         className={cn(
-          'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium',
+          'inline-flex items-center rounded-full px-2.5 py-0.5 text-[0.8rem] font-medium',
           tone
         )}
       >
@@ -68,7 +68,7 @@ export function VitIdStatusBadge({
         <Popover.Portal>
           <Popover.Content
             sideOffset={6}
-            className="z-50 max-w-sm rounded-lg border bg-card p-3 text-[0.85rem] leading-5 text-foreground shadow-lg data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 duration-150"
+            className="z-50 max-w-sm rounded-lg border bg-card p-3 text-[0.9rem] leading-5 text-foreground shadow-lg data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 duration-150"
           >
             <div className="mb-1.5 font-semibold">{tooltipCopy.title}</div>
             <p className="mb-2 text-muted-foreground">

@@ -203,7 +203,7 @@ export function FellowsManagementPage() {
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`rounded-t-lg border-b-2 px-4 py-2.5 text-[0.95rem] font-medium transition-colors ${
+            className={`rounded-t-lg border-b-2 px-4 py-2.5 text-[1rem] font-medium transition-colors ${
               activeTab === tab.key
                 ? 'border-primary text-primary'
                 : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -211,7 +211,7 @@ export function FellowsManagementPage() {
           >
             {tab.label}
             <span
-              className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs ${
+              className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-[0.8rem] ${
                 activeTab === tab.key
                   ? 'bg-primary/10 text-primary'
                   : 'bg-muted text-muted-foreground'
@@ -311,7 +311,7 @@ function FellowsManagementSkeleton() {
             {Array.from({ length: 5 }).map((_, index) => (
               <div key={index} className="grid grid-cols-9 items-center gap-4 px-4 py-4">
                 <div className="flex items-center gap-3">
-                  <SkeletonBlock className="h-10 w-10 rounded-full bg-muted/80" />
+                  <SkeletonBlock className="h-16 w-16 rounded-full bg-muted/80" />
                   <div className="space-y-2">
                     <SkeletonBlock className="h-4 w-28 rounded-full" />
                     <SkeletonBlock className="h-3.5 w-24 rounded-full" />
@@ -347,10 +347,10 @@ function SummaryCard({
   return (
     <div className="rounded-xl border bg-card p-5">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-[0.8rem] uppercase tracking-[0.14em] text-muted-foreground">{label}</span>
+        <span className="text-[0.85rem] uppercase tracking-[0.14em] text-muted-foreground">{label}</span>
         {icon}
       </div>
-      <div className={`mt-3 text-[1.9rem] font-semibold tracking-tight ${valueClassName || ''}`}>{value}</div>
+      <div className={`mt-3 text-[2.1rem] font-semibold tracking-tight ${valueClassName || ''}`}>{value}</div>
     </div>
   );
 }
@@ -372,7 +372,7 @@ function BioEmailPill({
   if (status === 'none') {
     return (
       <span
-        className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground"
+        className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-[0.8rem] font-medium text-muted-foreground"
         title="No bio & project description email on record for this fellowship year"
       >
         —
@@ -382,7 +382,7 @@ function BioEmailPill({
   if (status === 'pending') {
     return (
       <span
-        className="inline-flex items-center rounded-full bg-warning px-2.5 py-0.5 text-xs font-medium text-warning-foreground"
+        className="inline-flex items-center rounded-full bg-warning px-2.5 py-0.5 text-[0.8rem] font-medium text-warning-foreground"
         title={
           targetAcademicYear
             ? `Bio email queued for ${targetAcademicYear} — will be sent by the daily cron`
@@ -404,7 +404,7 @@ function BioEmailPill({
       : verb;
     return (
       <span
-        className="inline-flex items-center rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700"
+        className="inline-flex items-center rounded-full bg-green-50 px-2.5 py-0.5 text-[0.8rem] font-medium text-green-700"
         title={
           targetAcademicYear
             ? `Bio email ${sendCount > 1 ? 're-sent' : 'sent'} for ${targetAcademicYear}${sentAt ? ` on ${new Date(sentAt).toLocaleString()}` : ''}`
@@ -419,7 +419,7 @@ function BioEmailPill({
   }
   return (
     <span
-      className="inline-flex items-center rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700"
+      className="inline-flex items-center rounded-full bg-red-50 px-2.5 py-0.5 text-[0.8rem] font-medium text-red-700"
       title="Last bio email attempt failed — use the send button to retry"
     >
       Failed
@@ -748,7 +748,7 @@ function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEntry[]; 
   return (
     <>
       <div className="overflow-hidden rounded-xl border bg-card">
-        <table className="w-full text-[0.95rem]">
+        <table className="w-full text-[1rem]">
           <thead>
             <tr className="border-b bg-muted/50">
               <SortHeader field="name" label="Name" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
@@ -759,7 +759,7 @@ function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEntry[]; 
               <SortHeader field="form" label="Form" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
               <SortHeader field="status" label="VIT ID Status" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
               <SortHeader field="bioEmail" label="Bio Email" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
-              <th className="px-4 py-3 text-center text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+              <th className="px-4 py-3 text-center text-[0.75rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">
                 Actions
               </th>
             </tr>
@@ -915,7 +915,7 @@ function SortHeader({
       <button
         type="button"
         onClick={() => toggleSort(field)}
-        className="inline-flex select-none items-center text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground"
+        className="inline-flex select-none items-center text-[0.75rem] font-medium uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground"
       >
         {label}
         {sortField === field && (
@@ -1044,7 +1044,7 @@ function FormStatusCell({ fellow }: { fellow: FellowDashboardEntry }) {
     <div className="inline-flex items-start gap-1.5">
       <div className="flex flex-col items-start gap-1">
         <div className="inline-flex items-center gap-1.5">
-          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${tone}`}>
+          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[0.8rem] font-medium ${tone}`}>
             {label}
           </span>
           {canCopy && invitation && (
@@ -1052,7 +1052,7 @@ function FormStatusCell({ fellow }: { fellow: FellowDashboardEntry }) {
           )}
         </div>
         {subLabel && (
-          <span className="text-[0.75rem] leading-4 text-muted-foreground">
+          <span className="text-[0.82rem] leading-4 text-muted-foreground">
             {subLabel}
           </span>
         )}
@@ -1070,12 +1070,12 @@ function FormStatusCell({ fellow }: { fellow: FellowDashboardEntry }) {
         <Popover.Portal>
           <Popover.Content
             sideOffset={6}
-            className="z-50 w-72 rounded-lg border bg-card p-4 text-[0.82rem] leading-5 text-foreground shadow-lg data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 duration-150"
+            className="z-50 w-72 rounded-lg border bg-card p-4 text-[0.88rem] leading-5 text-foreground shadow-lg data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 duration-150"
           >
             <div className="mb-1 font-semibold text-sm">Form Status</div>
             <p className="text-muted-foreground">{description}</p>
             {configuredForm && (
-              <p className="mt-3 text-[0.75rem] text-muted-foreground">
+              <p className="mt-3 text-[0.82rem] text-muted-foreground">
                 Configured form: {configuredForm.title}
               </p>
             )}
@@ -1351,25 +1351,25 @@ function FellowRow({
     <tr className="hover:bg-muted/30">
       <td className="px-4 py-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10">
+          <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10">
             {fellow.imageUrl ? (
               <img
                 src={fellow.imageUrl}
                 alt=""
-                className="h-10 w-10 rounded-full object-cover"
+                className="h-16 w-16 rounded-full object-cover"
               />
             ) : (
-              <span className="text-xs font-medium text-primary">
+              <span className="text-base font-medium text-primary">
                 {fellow.firstName?.[0]}
                 {fellow.lastName?.[0]}
               </span>
             )}
           </div>
           <div>
-            <div className="text-[0.98rem] font-semibold">
+            <div className="text-[1.08rem] font-semibold">
               {fellow.firstName} {fellow.lastName}
             </div>
-            <div className="text-[0.82rem] leading-5 text-muted-foreground md:hidden">
+            <div className="text-[0.88rem] leading-5 text-muted-foreground md:hidden">
               {fellow.email || 'No email'}
             </div>
           </div>
