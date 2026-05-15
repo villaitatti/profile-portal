@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.15.1] - 15 May 2026 - Larger fonts and profile images for better readability
+
+### Changed
+- **Root font size set to 18px.** All rem-based text across the site is now ~12% larger, improving readability on high-density displays.
+- **Manage Appointees profile photos bumped to 64px.** Faces are now large enough to recognize at a glance in the table.
+- **Manage Appointees table typography scaled up.** Column headers, fellow names, emails, badges, and sub-labels all increased 1–2px for comfortable scanning.
+- **Shared badge components (AppointeeStatusBadge, VitIdStatusBadge) text bumped.** Pill labels and popover help text are slightly larger for legibility.
+
 ## [0.15.0] - 15 May 2026 - Form notification email gets branded MJML styling
 
 ### Changed

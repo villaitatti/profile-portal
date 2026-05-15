@@ -46,12 +46,15 @@
   * {
     @apply border-border;
   }
+  html {
+    font-size: 18px;
+  }
   body {
     @apply bg-background text-foreground;
     font-family: "brandon-grotesque", sans-serif;
     font-weight: 400;
     font-style: normal;
-    font-size: 18px;
+    font-size: 1.06rem;
     line-height: 1.6;
     font-kerning: normal;
     -webkit-font-smoothing: antialiased;
