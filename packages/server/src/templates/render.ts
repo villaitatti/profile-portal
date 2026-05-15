@@ -55,6 +55,8 @@ let cache: {
   vitIdText: string;
   bioHtml: string;
   bioText: string;
+  formNotifHtml: string;
+  formNotifText: string;
 } | null = null;
 
 function loadTemplates(): NonNullable<typeof cache> {
@@ -74,6 +76,14 @@ function loadTemplates(): NonNullable<typeof cache> {
     ),
     bioText: readFileSync(
       join(EMAILS_DIR, 'bio-project-description.txt'),
+      'utf8'
+    ),
+    formNotifHtml: readFileSync(
+      join(EMAILS_DIR, 'form-notification.compiled.html'),
+      'utf8'
+    ),
+    formNotifText: readFileSync(
+      join(EMAILS_DIR, 'form-notification.txt'),
       'utf8'
     ),
   };
@@ -198,4 +208,43 @@ export function renderBioProjectDescription(args: {
     html: substitute(bioHtml, tokens, 'html'),
     text: substitute(bioText, tokens, 'text'),
   };
+}
+
+export interface RenderedFormNotification {
+  html: string;
+  text: string;
+}
+
+const APPOINTEE_LINE_RE =
+  /\s*<tr>\s*<td[^>]*class="[^"]*it-appointee-line[^"]*"[^>]*>[\s\S]*?<\/td>\s*<\/tr>/;
+
+export function renderFormNotification(args: {
+  formTitle: string;
+  academicYear: string;
+  appointeeName: string | null;
+}): RenderedFormNotification {
+  const { formNotifHtml, formNotifText } = loadTemplates();
+
+  const tokens: Record<string, string> = {
+    formTitle: args.formTitle,
+    academicYear: args.academicYear,
+    appointeeName: args.appointeeName ?? '',
+    logoUrl: buildLogoUrl(),
+  };
+
+  let html = substitute(formNotifHtml, tokens, 'html');
+  let text: string;
+
+  if (!args.appointeeName) {
+    html = html.replace(APPOINTEE_LINE_RE, '');
+    text = substitute(formNotifText, { ...tokens, appointeeLine: '' }, 'text');
+  } else {
+    text = substitute(
+      formNotifText,
+      { ...tokens, appointeeLine: `Appointee: ${args.appointeeName}\n` },
+      'text'
+    );
+  }
+
+  return { html, text };
 }

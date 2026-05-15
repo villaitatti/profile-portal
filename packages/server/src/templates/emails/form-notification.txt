@@ -1,0 +1,10 @@
+A new form submission has been received.
+
+Fellowship: {{formTitle}}
+{{appointeeLine}}Academic Year: {{academicYear}}
+
+A PDF copy is attached. You can also view and download the response from the Profile Portal.
+
+--
+I Tatti, The Harvard University Center for Italian Renaissance Studies
+Via di Vincigliata 26, 50135 Florence Italy
