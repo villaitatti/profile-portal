@@ -258,6 +258,10 @@ describe('DELETE /api/admin/uploads/images/:filename', () => {
 
 describe('Authorization', () => {
   it('returns 403 when user lacks staff-it role', async () => {
+    // Import the real requireRole to test actual access control
+    vi.doUnmock('../../middleware/rbac.js');
+    const { requireRole: realRequireRole } = await import('../../middleware/rbac.js');
+
     const app = express();
     app.use(express.json());
     app.use((req, _res, next) => {
@@ -266,20 +270,17 @@ describe('Authorization', () => {
       next();
     });
 
-    // Use real requireRole middleware for this test
-    const { requireRole: realRequireRole } = await import('../../middleware/rbac.js');
-
-    const routerApp = express();
-    routerApp.use(express.json());
-    routerApp.use((req, _res, next) => {
-      (req as any).userId = 'test-user';
-      (req as any).userRoles = ['fellow'];
-      next();
+    const { Router } = await import('express');
+    const testRouter = Router();
+    testRouter.post('/', realRequireRole('staff-it'), (_req, res) => {
+      res.status(201).json({ ok: true });
     });
+    app.use('/api/admin/uploads/images', testRouter);
 
-    // Since we mocked requireRole globally, this test validates the route
-    // structure expects the role. In production the middleware rejects.
-    // We trust the middleware unit tests cover rbac logic.
-    expect(true).toBe(true);
+    const res = await request(app)
+      .post('/api/admin/uploads/images')
+      .send();
+
+    expect(res.status).toBe(403);
   });
 });

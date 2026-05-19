@@ -93,6 +93,9 @@ export async function updateApplication(
       ...(input.description !== undefined && { description: input.description }),
       ...(input.url !== undefined && { url: input.url }),
       ...(input.imageUrl !== undefined && { imageUrl: input.imageUrl }),
+      ...(input.imageUrl !== undefined && input.blurPlaceholder === undefined
+        ? { blurPlaceholder: null }
+        : {}),
       ...(input.blurPlaceholder !== undefined && { blurPlaceholder: input.blurPlaceholder }),
       ...(input.loginMethod !== undefined && { loginMethod: input.loginMethod }),
       ...(input.requiredRoles !== undefined && { requiredRoles: input.requiredRoles }),

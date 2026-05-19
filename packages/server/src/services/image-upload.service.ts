@@ -1,7 +1,7 @@
 import sharp from 'sharp';
 import { randomUUID } from 'crypto';
 import { writeFile, unlink, mkdir } from 'fs/promises';
-import { join } from 'path';
+import { join, resolve, basename } from 'path';
 
 const UPLOADS_DIR = join(process.cwd(), 'uploads', 'images');
 const MAX_PIXELS = 25_000_000;
@@ -42,7 +42,10 @@ export async function saveImage(webpBuffer: Buffer): Promise<string> {
 }
 
 export async function deleteImage(filename: string): Promise<void> {
-  const filepath = join(UPLOADS_DIR, filename);
+  const filepath = resolve(UPLOADS_DIR, filename);
+  if (!filepath.startsWith(resolve(UPLOADS_DIR)) || basename(filepath) !== filename) {
+    throw new Error('Invalid filename');
+  }
   try {
     await unlink(filepath);
   } catch (err: unknown) {

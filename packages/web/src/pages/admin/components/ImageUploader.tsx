@@ -88,6 +88,10 @@ export function ImageUploader({ value, blurPlaceholder, onChange, onClear }: Ima
       setZoom(1);
       setCropModalOpen(true);
     };
+    reader.onerror = () => {
+      setError('Failed to read file');
+      setImageSrc(null);
+    };
     reader.readAsDataURL(file);
   };
 
@@ -164,7 +168,16 @@ export function ImageUploader({ value, blurPlaceholder, onChange, onClear }: Ima
         </div>
       ) : (
         <div
+          role="button"
+          tabIndex={0}
+          aria-label="Upload image — drag and drop or click to browse"
           onClick={() => fileInputRef.current?.click()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              fileInputRef.current?.click();
+            }
+          }}
           onDrop={handleDrop}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}

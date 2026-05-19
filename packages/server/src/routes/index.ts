@@ -1,11 +1,10 @@
 import type { Express } from 'express';
 import express from 'express';
-import { join } from 'path';
 import { KnownRoles } from '@itatti/shared';
 import { healthRoutes } from './health.routes.js';
 import { applicationsRoutes } from './applications.routes.js';
 import { uploadsRoutes, uploadsErrorHandler } from './uploads.routes.js';
-import { ensureUploadsDir } from '../services/image-upload.service.js';
+import { ensureUploadsDir, getUploadsDir } from '../services/image-upload.service.js';
 import { profileRoutes } from './profile.routes.js';
 import { profileContactRoutes } from './profile-contact.routes.js';
 import { rolesRoutes } from './roles.routes.js';
@@ -28,10 +27,9 @@ export async function registerRoutes(app: Express) {
   await ensureUploadsDir();
 
   // Static file serving for uploaded images
-  const uploadsDir = join(process.cwd(), 'uploads', 'images');
   app.use(
     '/uploads/images',
-    express.static(uploadsDir, {
+    express.static(getUploadsDir(), {
       setHeaders: (res) => {
         res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
         res.setHeader('X-Content-Type-Options', 'nosniff');
