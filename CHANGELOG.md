@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.15.3] - 19 May 2026 - Security hardening
+
+### Changed
+- **Docker container runs as non-root user.** Production container now uses `USER node` to reduce blast radius if a dependency vulnerability is exploited.
+- **CI GitHub Action pinned by commit SHA.** `pnpm/action-setup` is now SHA-pinned to prevent supply chain tag-hijack attacks.
+
 ## [0.15.2] - 19 May 2026 - Application catalog supports "no authentication" option
 
 ### Added
