@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.16.1] - 19 May 2026 - Dashboard card alignment + login method badges
+
+### Changed
+- **Application cards vertically aligned.** The login method indicator now anchors to the bottom of each card regardless of description length, so cards in the same row stay visually consistent.
+- **Colored login method badges.** Plain text login indicators replaced with distinctive pill badges: VIT ID (crimson with I Tatti marchio), Harvard Key (Harvard crimson with shield), and Public (neutral with globe icon). The same badges appear in the explanatory section above the cards.
+
+### Added
+- **LoginMethodBadge component.** Reusable badge with exhaustive type checking for all login methods, following the existing VitIdStatusBadge pattern.
+- **Harvard shield asset.** SVG of the Harvard Veritas shield for the Harvard Key badge.
+
 ## [0.16.0] - 19 May 2026 - Image upload with crop + searchable role tags
 
 ### Added
