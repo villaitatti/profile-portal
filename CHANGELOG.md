@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.16.0] - 19 May 2026 - Image upload with crop + searchable role tags
+
+### Added
+- **Image upload with 16:9 crop in the application catalog.** Admins drag-and-drop or browse for a screenshot, crop it to the exact card ratio using an interactive cropper, and the server optimizes it to 800x450 WebP with a blur placeholder for instant dashboard loading. Images are stored locally with a persistent Docker volume.
+- **Image gallery.** When adding or editing an app, admins can browse screenshots already uploaded to other applications and reuse them (creates an independent copy).
+- **Searchable role tags.** The role selector is now a type-to-search multi-select with tag pills, replacing the scrollable checkbox list. Matches the existing SearchableCombobox pattern.
+- **Blur placeholder on dashboard cards.** App cards show a blurry instant preview while the full image loads, eliminating the gray-box flash.
+- **15 integration tests** for the upload endpoint covering happy paths, error codes (413/400/422/507/503), path traversal protection, and authorization.
+
+### Changed
+- Application catalog form redesigned: image URL text input replaced with drag-drop uploader + gallery, checkbox role list replaced with tag-based combobox.
+- Docker Compose adds a `uploads_data` named volume so uploaded images persist across container rebuilds.
+- Orphan image cleanup: replacing or deleting an app's image removes the old file from disk (DB-first ordering prevents data loss on failure).
+
+### Security
+- Upload filenames are random UUIDs (never user-supplied). MIME validation checks magic bytes. Images capped at 25 megapixels to prevent decompression bombs. Path traversal hardened with resolve + basename check in deleteImage. Static serving uses `X-Content-Type-Options: nosniff` and immutable cache headers.
+
 ## [0.15.3] - 19 May 2026 - Security hardening
 
 ### Changed
