@@ -93,11 +93,21 @@ export function DashboardPage() {
               className="group overflow-hidden rounded-xl border bg-card transition-[border-color,box-shadow,transform] duration-200 ease-out hover:border-primary/20 hover:shadow-md hover:-translate-y-0.5"
             >
               {/* Preview image */}
-              <div className="aspect-[16/9] bg-muted overflow-hidden">
+              <div
+                className="aspect-[16/9] bg-muted overflow-hidden"
+                style={
+                  app.blurPlaceholder
+                    ? {
+                        backgroundImage: `url(${app.blurPlaceholder})`,
+                        backgroundSize: 'cover',
+                      }
+                    : undefined
+                }
+              >
                 {app.imageUrl ? (
                   <img
                     src={app.imageUrl}
-                    alt={`${app.name} preview`}
+                    alt=""
                     className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
                   />
                 ) : (

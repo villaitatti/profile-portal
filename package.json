@@ -1,6 +1,6 @@
 {
   "name": "itatti-profile-portal",
-  "version": "0.15.3",
+  "version": "0.16.0",
   "private": true,
   "scripts": {
     "dev": "pnpm --filter @itatti/server dev & pnpm --filter @itatti/web dev",
@@ -26,7 +26,8 @@
       "@prisma/client",
       "@prisma/engines",
       "prisma",
-      "browser-tabs-lock"
+      "browser-tabs-lock",
+      "sharp"
     ]
   }
 }

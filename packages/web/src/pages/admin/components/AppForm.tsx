@@ -1,14 +1,16 @@
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { RoleMultiSelect } from './RoleMultiSelect';
+import { RoleTagSelect } from './RoleTagSelect';
+import { ImageUploader } from './ImageUploader';
 import { Loader2 } from 'lucide-react';
 
 const appFormSchema = z.object({
   name: z.string().min(1, 'Name is required').max(200),
   description: z.string().max(1000).optional(),
   url: z.string().url('Please enter a valid URL'),
-  imageUrl: z.string().url('Please enter a valid URL').optional().or(z.literal('')),
+  imageUrl: z.string().optional().or(z.literal('')),
+  blurPlaceholder: z.string().optional(),
   loginMethod: z.enum(['vit-id', 'harvard-key', 'none']),
   requiredRoles: z.array(z.string()).min(1, 'Select at least one role'),
   sortOrder: z.coerce.number().int().optional(),
@@ -33,6 +35,8 @@ export function AppForm({
     register,
     handleSubmit,
     control,
+    setValue,
+    watch,
     formState: { errors },
   } = useForm<AppFormData>({
     resolver: zodResolver(appFormSchema),
@@ -41,12 +45,16 @@ export function AppForm({
       description: '',
       url: '',
       imageUrl: '',
+      blurPlaceholder: '',
       loginMethod: 'vit-id' as const,
       requiredRoles: [],
       sortOrder: 0,
       ...defaultValues,
     },
   });
+
+  const imageUrl = watch('imageUrl');
+  const blurPlaceholder = watch('blurPlaceholder');
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
@@ -94,15 +102,20 @@ export function AppForm({
       </div>
 
       <div>
-        <label htmlFor="imageUrl" className="mb-1.5 block text-[0.95rem] font-medium">
-          Preview image URL <span className="text-muted-foreground">(optional — screenshot or homepage image)</span>
+        <label className="mb-1.5 block text-[0.95rem] font-medium">
+          Preview image <span className="text-muted-foreground">(optional — screenshot or homepage image)</span>
         </label>
-        <input
-          {...register('imageUrl')}
-          type="url"
-          id="imageUrl"
-          placeholder="https://..."
-          className="w-full rounded-md border border-input bg-background px-3.5 py-2.5 text-base shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+        <ImageUploader
+          value={imageUrl || undefined}
+          blurPlaceholder={blurPlaceholder || undefined}
+          onChange={(url, blur) => {
+            setValue('imageUrl', url, { shouldDirty: true });
+            setValue('blurPlaceholder', blur, { shouldDirty: true });
+          }}
+          onClear={() => {
+            setValue('imageUrl', '', { shouldDirty: true });
+            setValue('blurPlaceholder', '', { shouldDirty: true });
+          }}
         />
         {errors.imageUrl && (
           <p className="text-sm text-destructive mt-1">{errors.imageUrl.message}</p>
@@ -164,7 +177,7 @@ export function AppForm({
           name="requiredRoles"
           control={control}
           render={({ field }) => (
-            <RoleMultiSelect value={field.value} onChange={field.onChange} />
+            <RoleTagSelect value={field.value} onChange={field.onChange} />
           )}
         />
         {errors.requiredRoles && (

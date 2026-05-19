@@ -20,6 +20,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      - uploads_data:/app/uploads
     networks:
       - internal
       - itatti-tunnel
@@ -57,3 +59,4 @@ networks:
 
 volumes:
   pgdata:
+  uploads_data:

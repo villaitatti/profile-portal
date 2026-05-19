@@ -51,6 +51,7 @@ COPY packages/web/package.json packages/web/
 COPY docker-entrypoint.sh ./
 
 RUN chmod +x docker-entrypoint.sh
+RUN mkdir -p /app/uploads/images && chown -R node:node /app/uploads
 
 ENV NODE_ENV=production
 EXPOSE 3000
