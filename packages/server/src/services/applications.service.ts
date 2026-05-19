@@ -1,6 +1,12 @@
 import { prisma } from '../lib/prisma.js';
 import type { Application, CreateApplicationInput, UpdateApplicationInput, LoginMethod } from '@itatti/shared';
 import { hasAnyRole } from '@itatti/shared';
+import { deleteImage } from './image-upload.service.js';
+
+function extractFilename(imageUrl: string | null): string | null {
+  if (!imageUrl || !imageUrl.startsWith('/uploads/images/')) return null;
+  return imageUrl.split('/').pop() ?? null;
+}
 
 function toApp(row: {
   id: number;
@@ -8,6 +14,7 @@ function toApp(row: {
   description: string | null;
   url: string;
   imageUrl: string | null;
+  blurPlaceholder: string | null;
   loginMethod: string;
   requiredRoles: string[];
   sortOrder: number;
@@ -21,6 +28,7 @@ function toApp(row: {
     description: row.description ?? undefined,
     url: row.url,
     imageUrl: row.imageUrl ?? undefined,
+    blurPlaceholder: row.blurPlaceholder ?? undefined,
     loginMethod: row.loginMethod as LoginMethod,
     requiredRoles: row.requiredRoles,
     sortOrder: row.sortOrder,
@@ -58,6 +66,7 @@ export async function createApplication(input: CreateApplicationInput): Promise<
       description: input.description,
       url: input.url,
       imageUrl: input.imageUrl,
+      blurPlaceholder: input.blurPlaceholder,
       loginMethod: input.loginMethod,
       requiredRoles: input.requiredRoles,
       sortOrder: input.sortOrder ?? 0,
@@ -73,6 +82,10 @@ export async function updateApplication(
   const existing = await prisma.application.findUnique({ where: { id } });
   if (!existing) return null;
 
+  const oldImageFilename = extractFilename(existing.imageUrl);
+  const isReplacingImage =
+    input.imageUrl !== undefined && input.imageUrl !== existing.imageUrl;
+
   const row = await prisma.application.update({
     where: { id },
     data: {
@@ -80,20 +93,31 @@ export async function updateApplication(
       ...(input.description !== undefined && { description: input.description }),
       ...(input.url !== undefined && { url: input.url }),
       ...(input.imageUrl !== undefined && { imageUrl: input.imageUrl }),
+      ...(input.blurPlaceholder !== undefined && { blurPlaceholder: input.blurPlaceholder }),
       ...(input.loginMethod !== undefined && { loginMethod: input.loginMethod }),
       ...(input.requiredRoles !== undefined && { requiredRoles: input.requiredRoles }),
       ...(input.sortOrder !== undefined && { sortOrder: input.sortOrder }),
       ...(input.isActive !== undefined && { isActive: input.isActive }),
     },
   });
+
+  if (isReplacingImage && oldImageFilename) {
+    deleteImage(oldImageFilename).catch(() => {});
+  }
+
   return toApp(row);
 }
 
 export async function deleteApplication(id: number): Promise<boolean> {
-  try {
-    await prisma.application.delete({ where: { id } });
-    return true;
-  } catch {
-    return false;
+  const existing = await prisma.application.findUnique({ where: { id } });
+  if (!existing) return false;
+
+  await prisma.application.delete({ where: { id } });
+
+  const imageFilename = extractFilename(existing.imageUrl);
+  if (imageFilename) {
+    deleteImage(imageFilename).catch(() => {});
   }
+
+  return true;
 }

@@ -6,6 +6,7 @@ export interface Application {
   description?: string;
   url: string;
   imageUrl?: string;
+  blurPlaceholder?: string;
   loginMethod: LoginMethod;
   requiredRoles: string[];
   sortOrder: number;
@@ -19,6 +20,7 @@ export interface CreateApplicationInput {
   description?: string;
   url: string;
   imageUrl?: string;
+  blurPlaceholder?: string;
   loginMethod: LoginMethod;
   requiredRoles: string[];
   sortOrder?: number;
@@ -29,6 +31,7 @@ export interface UpdateApplicationInput {
   description?: string;
   url?: string;
   imageUrl?: string;
+  blurPlaceholder?: string;
   loginMethod?: LoginMethod;
   requiredRoles?: string[];
   sortOrder?: number;

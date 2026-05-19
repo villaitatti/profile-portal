@@ -38,7 +38,7 @@ app.use(
 app.use(express.json());
 
 // Register API routes
-registerRoutes(app);
+await registerRoutes(app);
 
 // In production, serve the built frontend
 if (process.env.NODE_ENV === 'production') {

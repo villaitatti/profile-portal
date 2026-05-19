@@ -1,7 +1,11 @@
 import type { Express } from 'express';
+import express from 'express';
+import { join } from 'path';
 import { KnownRoles } from '@itatti/shared';
 import { healthRoutes } from './health.routes.js';
 import { applicationsRoutes } from './applications.routes.js';
+import { uploadsRoutes, uploadsErrorHandler } from './uploads.routes.js';
+import { ensureUploadsDir } from '../services/image-upload.service.js';
 import { profileRoutes } from './profile.routes.js';
 import { profileContactRoutes } from './profile-contact.routes.js';
 import { rolesRoutes } from './roles.routes.js';
@@ -19,7 +23,22 @@ import { authMiddleware, extractUser } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
 import { env } from '../env.js';
 
-export function registerRoutes(app: Express) {
+export async function registerRoutes(app: Express) {
+  // Ensure uploads directory exists
+  await ensureUploadsDir();
+
+  // Static file serving for uploaded images
+  const uploadsDir = join(process.cwd(), 'uploads', 'images');
+  app.use(
+    '/uploads/images',
+    express.static(uploadsDir, {
+      setHeaders: (res) => {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+      },
+    })
+  );
+
   // Public routes (no auth required)
   app.use('/api/health', healthRoutes);
   app.use('/api/claim', claimRoutes);
@@ -95,6 +114,15 @@ export function registerRoutes(app: Express) {
     extractUser,
     requireRole(KnownRoles.FELLOWS_ADMIN, KnownRoles.STAFF_IT),
     formsAdminRoutes
+  );
+
+  // Admin routes: Image uploads (staff-it only)
+  app.use(
+    '/api/admin/uploads/images',
+    authMiddleware,
+    extractUser,
+    uploadsRoutes,
+    uploadsErrorHandler
   );
 
   // SSE stream — mounted BEFORE the JWT chain so EventSource requests (which can't
