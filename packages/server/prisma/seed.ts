@@ -30,6 +30,14 @@ async function main() {
         sortOrder: 2,
       },
       {
+        name: 'I Tatti Website',
+        description: 'The public website of Villa I Tatti — The Harvard University Center for Italian Renaissance Studies.',
+        url: 'https://itatti.harvard.edu',
+        loginMethod: 'none',
+        requiredRoles: ['fellows', 'fellows-current', 'staff-it'],
+        sortOrder: 3,
+      },
+      {
         name: 'IT Admin Console',
         description: 'IT administration tools',
         url: 'https://admin.itatti.harvard.edu',

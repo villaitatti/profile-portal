@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.15.2] - 19 May 2026 - Application catalog supports "no authentication" option
+
+### Added
+- **"None (public)" authentication option in the application catalog.** Applications that don't require a login (like the I Tatti website) can now be marked as public. The dashboard displays "No login required" on these cards.
+- **I Tatti Website added to the seed data.** Fresh database installs now include the public I Tatti website as a default application.
+
+### Changed
+- **Dashboard text restructured for clarity.** The web applications section now explains that some apps are available without credentials, with authentication methods described on a separate line.
+- **PageHeader description simplified.** Removed credential-specific language from the dashboard header.
+
 ## [0.15.1] - 15 May 2026 - Larger fonts and profile images for better readability
 
 ### Changed

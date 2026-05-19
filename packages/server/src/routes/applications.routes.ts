@@ -10,7 +10,7 @@ const createSchema = z.object({
   description: z.string().max(1000).optional(),
   url: z.string().url(),
   imageUrl: z.string().url().optional(),
-  loginMethod: z.enum(['vit-id', 'harvard-key']),
+  loginMethod: z.enum(['vit-id', 'harvard-key', 'none']),
   requiredRoles: z.array(z.string()).min(1),
   sortOrder: z.number().int().optional(),
 });
