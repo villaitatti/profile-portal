@@ -20,7 +20,7 @@ export function DashboardPage() {
     <div className="mx-auto max-w-6xl space-y-12">
       <PageHeader
         title="Dashboard"
-        description="Access your profile and the internal services available to you through VIT ID and Harvard Key."
+        description="Access your profile and the services available to you."
       />
 
       {/* Profile card */}
@@ -59,13 +59,18 @@ export function DashboardPage() {
         <h2 className="text-[1.65rem] font-semibold tracking-tight text-foreground">Web Applications</h2>
         <div className="mt-3 mb-5 h-px w-12 bg-primary/35" />
         <p className="max-w-3xl text-[1.05rem] leading-7 text-muted-foreground">
-          These are the web applications and services you can access with your VIT ID or Harvard Key credentials.
+          These are some of the web applications and services available to you.
+        </p>
+        <p className="mt-2 max-w-3xl text-[1.05rem] leading-7 text-muted-foreground">
+          Depending on the application, you may need to sign in with your VIT ID or Harvard Key credentials.
         </p>
         <div className="mt-6 grid max-w-4xl grid-cols-1 gap-x-10 gap-y-4 text-[1.02rem] leading-7 md:grid-cols-[auto_1fr]">
           <span className="font-semibold text-foreground">VIT ID</span>
           <span className="text-muted-foreground">Your I Tatti identity, used for internal tools and services managed by I Tatti.</span>
           <span className="font-semibold text-foreground">Harvard Key</span>
           <span className="text-muted-foreground">Your Harvard University credential, providing access to university-wide resources and platforms.</span>
+          <span className="font-semibold text-foreground">Public</span>
+          <span className="text-muted-foreground">Some applications are publicly accessible and do not require any login.</span>
         </div>
       </div>
 
@@ -116,7 +121,11 @@ export function DashboardPage() {
                 <div className="mt-4 flex items-center gap-2">
                   <KeyRound className="h-4 w-4 text-muted-foreground" />
                   <span className="text-[0.95rem] text-muted-foreground">
-                    {app.loginMethod === 'harvard-key' ? 'Harvard Key' : 'VIT ID'}
+                    {app.loginMethod === 'none'
+                      ? 'No login required'
+                      : app.loginMethod === 'harvard-key'
+                        ? 'Harvard Key'
+                        : 'VIT ID'}
                   </span>
                 </div>
               </div>

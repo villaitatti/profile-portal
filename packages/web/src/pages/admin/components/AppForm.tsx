@@ -9,7 +9,7 @@ const appFormSchema = z.object({
   description: z.string().max(1000).optional(),
   url: z.string().url('Please enter a valid URL'),
   imageUrl: z.string().url('Please enter a valid URL').optional().or(z.literal('')),
-  loginMethod: z.enum(['vit-id', 'harvard-key']),
+  loginMethod: z.enum(['vit-id', 'harvard-key', 'none']),
   requiredRoles: z.array(z.string()).min(1, 'Select at least one role'),
   sortOrder: z.coerce.number().int().optional(),
 });
@@ -131,6 +131,15 @@ export function AppForm({
               className="accent-primary"
             />
             <span className="text-[0.95rem]">Harvard Key</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              {...register('loginMethod')}
+              type="radio"
+              value="none"
+              className="accent-primary"
+            />
+            <span className="text-[0.95rem]">None (public)</span>
           </label>
         </div>
       </div>

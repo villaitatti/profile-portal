@@ -1,4 +1,4 @@
-export type LoginMethod = 'vit-id' | 'harvard-key';
+export type LoginMethod = 'vit-id' | 'harvard-key' | 'none';
 
 export interface Application {
   id: number;
