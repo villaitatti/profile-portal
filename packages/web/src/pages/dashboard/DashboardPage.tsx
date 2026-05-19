@@ -4,7 +4,8 @@ import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useApplications } from '@/api/applications';
 import { useProfile } from '@/api/profile';
-import { User, ExternalLink, Grid3X3, KeyRound, ArrowRight } from 'lucide-react';
+import { User, ExternalLink, Grid3X3, ArrowRight } from 'lucide-react';
+import { LoginMethodBadge } from '@/components/shared/LoginMethodBadge';
 import { Link } from 'react-router-dom';
 
 export function DashboardPage() {
@@ -64,12 +65,12 @@ export function DashboardPage() {
         <p className="mt-2 max-w-3xl text-[1.05rem] leading-7 text-muted-foreground">
           Depending on the application, you may need to sign in with your VIT ID or Harvard Key credentials.
         </p>
-        <div className="mt-6 grid max-w-4xl grid-cols-1 gap-x-10 gap-y-4 text-[1.02rem] leading-7 md:grid-cols-[auto_1fr]">
-          <span className="font-semibold text-foreground">VIT ID</span>
+        <div className="mt-6 grid max-w-4xl grid-cols-1 gap-x-10 gap-y-4 text-[1.02rem] leading-7 md:grid-cols-[auto_1fr] md:items-center">
+          <LoginMethodBadge method="vit-id" />
           <span className="text-muted-foreground">Your I Tatti identity, used for internal tools and services managed by I Tatti.</span>
-          <span className="font-semibold text-foreground">Harvard Key</span>
+          <LoginMethodBadge method="harvard-key" />
           <span className="text-muted-foreground">Your Harvard University credential, providing access to university-wide resources and platforms.</span>
-          <span className="font-semibold text-foreground">Public</span>
+          <LoginMethodBadge method="none" />
           <span className="text-muted-foreground">Some applications are publicly accessible and do not require any login.</span>
         </div>
       </div>
@@ -90,7 +91,7 @@ export function DashboardPage() {
               href={app.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="group overflow-hidden rounded-xl border bg-card transition-[border-color,box-shadow,transform] duration-200 ease-out hover:border-primary/20 hover:shadow-md hover:-translate-y-0.5"
+              className="group flex flex-col overflow-hidden rounded-xl border bg-card transition-[border-color,box-shadow,transform] duration-200 ease-out hover:border-primary/20 hover:shadow-md hover:-translate-y-0.5"
             >
               {/* Preview image */}
               <div
@@ -118,7 +119,7 @@ export function DashboardPage() {
               </div>
 
               {/* Info */}
-              <div className="p-6">
+              <div className="flex flex-1 flex-col p-6">
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <h3 className="text-lg font-semibold tracking-tight">{app.name}</h3>
                   <ExternalLink className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
@@ -128,15 +129,8 @@ export function DashboardPage() {
                     {app.description}
                   </p>
                 )}
-                <div className="mt-4 flex items-center gap-2">
-                  <KeyRound className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-[0.95rem] text-muted-foreground">
-                    {app.loginMethod === 'none'
-                      ? 'No login required'
-                      : app.loginMethod === 'harvard-key'
-                        ? 'Harvard Key'
-                        : 'VIT ID'}
-                  </span>
+                <div className="mt-auto pt-4">
+                  <LoginMethodBadge method={app.loginMethod} />
                 </div>
               </div>
             </a>
