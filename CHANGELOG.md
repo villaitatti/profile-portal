@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.1.1] - 2026-05-20 - Dashboard card animation rework
+
+### Changed
+- **Smooth staggered entry animation.** Dashboard app cards now fade in with a subtle slide-up, staggered at 75ms intervals for a polished page load.
+- **Unified hover effect.** Replaced the mismatched card lift + image zoom with a coordinated 250ms shadow transition and gradient overlay revealing a "Visit" pill button.
+- **Removed jarring motion.** Card translate-y lift and image scale-on-hover removed; all hover transitions now share the same timing and easing curve.
+
 ## [0.16.1] - 19 May 2026 - Dashboard card alignment + login method badges
 
 ### Changed
