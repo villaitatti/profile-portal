@@ -24,7 +24,7 @@ export function AppCatalogPage() {
   if (isLoading) return <AppCatalogPageSkeleton />;
 
   return (
-    <div>
+    <div className="mx-auto max-w-6xl space-y-10">
       <PageHeader
         title="Application Catalog"
         description="Manage internal applications shown to portal users"
@@ -67,7 +67,7 @@ export function AppCatalogPage() {
 
 function AppCatalogPageSkeleton() {
   return (
-    <div className="space-y-10 motion-safe:animate-pulse">
+    <div className="mx-auto max-w-6xl space-y-10 motion-safe:animate-pulse">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div className="space-y-3">
           <SkeletonBlock className="h-10 w-64 rounded-full" />

@@ -472,7 +472,7 @@ export function AtlassianSyncPage() {
   const canExecute = lastDryRunId && dryRunDetail?.status === 'completed' && (ttlRemaining === null || ttlRemaining > 0);
 
   return (
-    <div>
+    <div className="mx-auto max-w-6xl space-y-6">
       <PageHeader
         title="Sync Users to Atlassian Cloud"
         description="Sync users and groups from Auth0 to Atlassian Cloud"
@@ -581,7 +581,7 @@ export function AtlassianSyncPage() {
 
 function AtlassianSyncPageSkeleton() {
   return (
-    <div className="space-y-6 motion-safe:animate-pulse">
+    <div className="mx-auto max-w-6xl space-y-6 motion-safe:animate-pulse">
       <div className="space-y-3">
         <SkeletonBlock className="h-10 w-80 rounded-full" />
         <SkeletonBlock className="h-5 w-[32rem] max-w-full rounded-full" />

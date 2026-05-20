@@ -24,13 +24,13 @@ export function HasVitIdPage() {
   const dataIsFresh = lookup.debouncedQuery === trimmed;
 
   return (
-    <div>
+    <div className="mx-auto max-w-6xl space-y-6">
       <PageHeader
         title="Has VIT ID?"
         description="Check whether someone has a VIT ID account"
       />
 
-      <div className="mb-6 rounded-xl border bg-card p-6">
+      <div className="rounded-xl border bg-card p-6">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input

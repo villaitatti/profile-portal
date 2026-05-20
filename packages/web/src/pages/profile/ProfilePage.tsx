@@ -15,7 +15,7 @@ export function ProfilePage() {
 
   if (error) {
     return (
-      <div>
+      <div className="mx-auto max-w-6xl space-y-6">
         <PageHeader title="My Profile" />
         <div className="rounded-xl border bg-card p-8 text-center text-[0.98rem] leading-7 text-muted-foreground">
           <p>Unable to load profile information. Please try again later.</p>
@@ -25,7 +25,7 @@ export function ProfilePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6">
       <PageHeader title="My Profile" />
 
       <div className="grid max-w-5xl grid-cols-1 gap-6 md:grid-cols-2">
@@ -58,7 +58,7 @@ export function ProfilePage() {
 
 function ProfilePageSkeleton() {
   return (
-    <div className="space-y-6 motion-safe:animate-pulse">
+    <div className="mx-auto max-w-6xl space-y-6 motion-safe:animate-pulse">
       <div className="space-y-3">
         <SkeletonBlock className="h-10 w-48 rounded-full" />
       </div>
