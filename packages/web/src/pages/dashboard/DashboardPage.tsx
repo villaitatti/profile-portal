@@ -85,17 +85,18 @@ export function DashboardPage() {
         />
       ) : (
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
-          {apps.map((app) => (
+          {apps.map((app, index) => (
             <a
               key={app.id}
               href={app.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="group flex flex-col overflow-hidden rounded-xl border bg-card transition-[border-color,box-shadow,transform] duration-200 ease-out hover:border-primary/20 hover:shadow-md hover:-translate-y-0.5"
+              className="group flex flex-col overflow-hidden rounded-xl border bg-card transition-[border-color,box-shadow] duration-250 [transition-timing-function:var(--ease-out-quart)] hover:border-primary/20 hover:shadow-lg motion-safe:animate-card-enter"
+              style={{ animationDelay: `${Math.min(index, 5) * 75}ms` }}
             >
-              {/* Preview image */}
+              {/* Preview image with hover overlay */}
               <div
-                className="aspect-[16/9] bg-muted overflow-hidden"
+                className="relative aspect-[16/9] overflow-hidden bg-muted"
                 style={
                   app.blurPlaceholder
                     ? {
@@ -109,23 +110,27 @@ export function DashboardPage() {
                   <img
                     src={app.imageUrl}
                     alt=""
-                    className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
+                    className="h-full w-full object-cover"
                   />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center">
+                  <div className="flex h-full w-full items-center justify-center">
                     <Grid3X3 className="h-10 w-10 text-muted-foreground/35" />
                   </div>
                 )}
+
+                <div className="absolute inset-0 flex items-end justify-center bg-gradient-to-t from-black/50 via-black/20 to-transparent opacity-0 transition-opacity duration-250 [transition-timing-function:var(--ease-out-quart)] group-hover:opacity-100">
+                  <span className="mb-4 inline-flex translate-y-2 items-center gap-1.5 rounded-full bg-white/95 px-4 py-1.5 text-sm font-semibold text-foreground shadow-sm backdrop-blur-sm transition-transform duration-250 [transition-timing-function:var(--ease-out-quart)] group-hover:translate-y-0">
+                    Visit
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </span>
+                </div>
               </div>
 
               {/* Info */}
               <div className="flex flex-1 flex-col p-6">
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <h3 className="text-lg font-semibold tracking-tight">{app.name}</h3>
-                  <ExternalLink className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
-                </div>
+                <h3 className="text-lg font-semibold tracking-tight">{app.name}</h3>
                 {app.description && (
-                  <p className="line-clamp-3 text-[0.95rem] leading-6 text-muted-foreground">
+                  <p className="mt-2 line-clamp-3 text-[0.95rem] leading-6 text-muted-foreground">
                     {app.description}
                   </p>
                 )}
