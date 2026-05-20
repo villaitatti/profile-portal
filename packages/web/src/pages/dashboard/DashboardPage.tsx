@@ -67,11 +67,11 @@ export function DashboardPage() {
         </p>
         <div className="mt-6 grid max-w-4xl grid-cols-1 gap-x-10 gap-y-4 text-[1.02rem] leading-7 md:grid-cols-[auto_1fr] md:items-center">
           <LoginMethodBadge method="vit-id" />
-          <span className="text-muted-foreground">Your I Tatti identity, used for internal tools and services managed by I Tatti.</span>
+          <span className="text-muted-foreground">Your VIT ID is used to access services specific to I Tatti and it is active indefinitely.</span>
           <LoginMethodBadge method="harvard-key" />
-          <span className="text-muted-foreground">Your Harvard University credential, providing access to university-wide resources and platforms.</span>
+          <span className="text-muted-foreground">Harvard Key is your login to access all Harvard online services and it is only active during your Harvard appointment.</span>
           <LoginMethodBadge method="none" />
-          <span className="text-muted-foreground">Some applications are publicly accessible and do not require any login.</span>
+          <span className="text-muted-foreground">Publicly accessible and do not require any login.</span>
         </div>
       </div>
 

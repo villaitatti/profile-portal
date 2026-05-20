@@ -27,8 +27,8 @@ export function LoginMethodBadge({ method, className }: LoginMethodBadgeProps) {
       );
     case 'none':
       return (
-        <span className={cn('inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-[0.8rem] font-medium text-muted-foreground', className)}>
-          <Globe className="mr-1.5 h-3 w-3" aria-hidden="true" />
+        <span className={cn('inline-flex items-center rounded-full bg-sky-100 px-2.5 py-1 text-[0.8rem] font-medium text-sky-700', className)}>
+          <Globe className="mr-1.5 h-3 w-3 text-sky-500" aria-hidden="true" />
           Public
         </span>
       );
