@@ -1,6 +1,6 @@
 import { prisma } from '../lib/prisma.js';
 import type { Application, CreateApplicationInput, UpdateApplicationInput, LoginMethod } from '@itatti/shared';
-import { hasAnyRole } from '@itatti/shared';
+import { hasAnyRole, KnownRoles } from '@itatti/shared';
 import { deleteImage } from './image-upload.service.js';
 
 function extractFilename(imageUrl: string | null): string | null {
@@ -46,8 +46,7 @@ export async function listApplications(userRoles?: string[]): Promise<Applicatio
 
   const apps = rows.map(toApp);
 
-  // If roles provided, filter to visible apps (unless user is staff-it)
-  if (userRoles && !hasAnyRole(userRoles, ['staff-it'])) {
+  if (userRoles && !hasAnyRole(userRoles, [KnownRoles.STAFF_IT])) {
     return apps.filter((app) => hasAnyRole(userRoles, app.requiredRoles));
   }
 

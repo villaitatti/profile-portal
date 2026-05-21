@@ -8,7 +8,7 @@ import { logger } from '../lib/logger.js';
 const mockRoles = [
   { id: 'rol_1', name: 'fellows', description: 'All appointees (former + current)' },
   { id: 'rol_2', name: 'fellows-current', description: 'Current academic year appointees' },
-  { id: 'rol_3', name: 'staff-it', description: 'IT staff with admin access' },
+  { id: 'rol_3', name: KnownRoles.STAFF_IT, description: 'IT staff with admin access' },
 ];
 
 const router = Router();

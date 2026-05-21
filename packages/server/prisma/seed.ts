@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { KnownRoles } from '@itatti/shared';
 
 const prisma = new PrismaClient();
 
@@ -18,7 +19,7 @@ async function main() {
         description: 'Search the I Tatti library collection',
         url: 'https://library.itatti.harvard.edu',
         loginMethod: 'vit-id',
-        requiredRoles: ['fellows', 'fellows-current', 'staff-it'],
+        requiredRoles: ['fellows', 'fellows-current', KnownRoles.STAFF_IT],
         sortOrder: 1,
       },
       {
@@ -26,7 +27,7 @@ async function main() {
         description: 'Access digitized materials and archives',
         url: 'https://digital.itatti.harvard.edu',
         loginMethod: 'harvard-key',
-        requiredRoles: ['fellows', 'fellows-current', 'staff-it'],
+        requiredRoles: ['fellows', 'fellows-current', KnownRoles.STAFF_IT],
         sortOrder: 2,
       },
       {
@@ -34,7 +35,7 @@ async function main() {
         description: 'The public website of Villa I Tatti — The Harvard University Center for Italian Renaissance Studies.',
         url: 'https://itatti.harvard.edu',
         loginMethod: 'none',
-        requiredRoles: ['fellows', 'fellows-current', 'staff-it'],
+        requiredRoles: ['fellows', 'fellows-current', KnownRoles.STAFF_IT],
         sortOrder: 3,
       },
       {
@@ -42,7 +43,7 @@ async function main() {
         description: 'IT administration tools',
         url: 'https://admin.itatti.harvard.edu',
         loginMethod: 'vit-id',
-        requiredRoles: ['staff-it'],
+        requiredRoles: [KnownRoles.STAFF_IT],
         sortOrder: 10,
       },
     ],

@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.16.2] - 2026-05-21 - Fix staff-IT role string mismatch
+
+### Fixed
+- **Admin app-list bypass for staff-IT users.** `listApplications` checked the role with the lowercase literal `'staff-it'`, but Auth0 emits `'staff-IT'` (case-sensitive `Array.includes`), so the bypass branch never fired and staff-IT users had their dashboard filtered through `requiredRoles` like everyone else. Now uses the shared `KnownRoles.STAFF_IT` constant.
+- **Seeded application gates.** `prisma/seed.ts` set `requiredRoles: ['staff-it']` on the IT Admin Console and as part of the role lists for three other apps; no real Auth0 token would match. Existing DB rows are unaffected (seed only runs on empty tables); fresh installs now seed correctly.
+- **Dev-mode roles fixture.** `routes/roles.routes.ts` listed the role as `staff-it`; aligned with the Auth0 spelling.
+- **Test fixture parity.** `uploads.routes.test.ts` injected `userRoles: ['staff-it']` into mocked requests, diverging from production. Switched to `'staff-IT'` so the test exercises the real guard.
+
+### Changed
+- **Switched to 3-digit semver.** Dropped the 4th version segment (e.g. `0.16.1.1` → `0.16.2`); patch-level changes now bump the third digit directly.
+
 ## [0.16.1.1] - 2026-05-20 - Dashboard card animation rework
 
 ### Changed

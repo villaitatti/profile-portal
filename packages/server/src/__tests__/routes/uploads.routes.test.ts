@@ -29,7 +29,7 @@ function makeApp() {
   app.use(express.json());
   app.use((req, _res, next) => {
     (req as any).userId = 'test-user';
-    (req as any).userRoles = ['staff-it'];
+    (req as any).userRoles = ['staff-IT'];
     next();
   });
   app.use('/api/admin/uploads/images', uploadsRoutes, uploadsErrorHandler);
@@ -257,7 +257,7 @@ describe('DELETE /api/admin/uploads/images/:filename', () => {
 });
 
 describe('Authorization', () => {
-  it('returns 403 when user lacks staff-it role', async () => {
+  it('returns 403 when user lacks staff-IT role', async () => {
     // Import the real requireRole to test actual access control
     vi.doUnmock('../../middleware/rbac.js');
     const { requireRole: realRequireRole } = await import('../../middleware/rbac.js');
@@ -266,13 +266,13 @@ describe('Authorization', () => {
     app.use(express.json());
     app.use((req, _res, next) => {
       (req as any).userId = 'test-user';
-      (req as any).userRoles = ['fellow']; // not staff-it
+      (req as any).userRoles = ['fellow']; // not staff-IT
       next();
     });
 
     const { Router } = await import('express');
     const testRouter = Router();
-    testRouter.post('/', realRequireRole('staff-it'), (_req, res) => {
+    testRouter.post('/', realRequireRole('staff-IT'), (_req, res) => {
       res.status(201).json({ ok: true });
     });
     app.use('/api/admin/uploads/images', testRouter);
