@@ -19,3 +19,5 @@
     </mj-text>
   </mj-column>
 </mj-section>
+
+<mj-section padding="0 0 24px 0"></mj-section>

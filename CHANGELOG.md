@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.16.3] - 2026-05-21 - Public badge contrast + email card framing
+
+### Fixed
+- **Public badge figure-ground separation.** Darkened badge background from `sky-100` to `sky-200` so the pill shape remains distinct on the grey page background (legend area), not just on white card surfaces.
+- **Email desktop card framing.** Added 24px grey spacing above and below the white content area in the form-notification email so the card is visually enclosed on all four sides at desktop width.
+
 ## [0.16.2] - 2026-05-21 - Fix staff-IT role string mismatch
 
 ### Fixed
