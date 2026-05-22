@@ -207,6 +207,7 @@ export function FellowsManagementPage() {
           {APPOINTMENT_TABS.map((tab) => (
             <button
               key={tab.key}
+              aria-pressed={activeTab === tab.key}
               onClick={() => {
                 setActiveTab(tab.key);
                 setSelectedStatuses([]);
@@ -239,6 +240,7 @@ export function FellowsManagementPage() {
           return (
             <button
               key={pill.key}
+              aria-pressed={isActive}
               onClick={() => toggleStatus(pill.key)}
               className={`inline-flex items-center rounded-full px-2.5 py-1 text-[0.8rem] font-medium transition-colors ${
                 isActive ? pill.tone : 'bg-muted/60 text-muted-foreground hover:bg-muted'
@@ -270,11 +272,13 @@ export function FellowsManagementPage() {
           icon={<Users className="h-12 w-12 mb-4" />}
           title="No appointees found"
           description={
-            searchQuery
-              ? 'Try adjusting your search query.'
-              : selectedStatuses.length > 0 || activeTab !== 'all'
-                ? 'No appointees match the current filters.'
-                : `No appointees on file for ${selectedYear}.`
+            searchQuery && (selectedStatuses.length > 0 || activeTab !== 'all')
+              ? 'Try adjusting your search or filters.'
+              : searchQuery
+                ? 'Try adjusting your search query.'
+                : selectedStatuses.length > 0 || activeTab !== 'all'
+                  ? 'No appointees match the current filters.'
+                  : `No appointees on file for ${selectedYear}.`
           }
         />
       ) : (
@@ -728,7 +732,7 @@ function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEntry[]; 
 
   return (
     <>
-      <div className="overflow-x-auto rounded-xl border bg-card">
+      <div className="overflow-x-auto rounded-xl border bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30" tabIndex={0} role="region" aria-label="Appointees table">
         <table className="w-full text-[0.95rem]">
           <thead>
             <tr className="border-b bg-muted/50">
