@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.17.1] - 2026-05-22 - Appointees page fixes: tab filtering, capitalization, VIT ID pills
+
+### Fixed
+- **Term Fellows and Artist in Residence tabs now show their fellows.** CiviCRM returns machine values (`visiting_fellow`, `artist_in_residence`) which weren't matching the label-based checks. Normalizes underscores and dashes before comparison.
+- **"Director's Appointment" no longer shows as "Director'S Appointment."** The `formatLabel` title-case regex treated apostrophe as a word boundary.
+- **"Nominated" pill selected state is now visually distinct.** Changed from near-invisible `bg-muted` to darker `bg-slate-200 text-slate-800`.
+
+### Added
+- **VIT ID status filter pills.** A second row of filter chips (Active, Different Email, Needs Review, No Account) lets Angela filter by VIT ID match status alongside the appointee lifecycle pills. Counts update per tab; filters reset on tab/year change.
+
 ## [0.17.0] - 2026-05-22 - Manage Appointees redesign: appointment-type tabs + status pills
 
 ### Changed

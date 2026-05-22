@@ -46,6 +46,7 @@ import type {
   AppointmentCategory,
   AppointeeStatus,
   BioEmailStatus,
+  VitIdStatus,
   FormDef,
   FormInvitationSummaryEntry,
 } from '@itatti/shared';
@@ -67,7 +68,7 @@ const APPOINTMENT_TABS: { key: FilterTab; label: string }[] = [
 ];
 
 const STATUS_PILLS: { key: AppointeeStatus; label: string; tone: string }[] = [
-  { key: 'nominated', label: 'Nominated', tone: 'bg-muted text-muted-foreground' },
+  { key: 'nominated', label: 'Nominated', tone: 'bg-slate-200 text-slate-800' },
   { key: 'nomination-sent', label: 'Nomination Sent', tone: 'bg-slate-100 text-slate-700' },
   { key: 'form-submitted', label: 'Form Submitted', tone: 'bg-indigo-50 text-indigo-700' },
   { key: 'accepted', label: 'Accepted', tone: 'bg-blue-50 text-blue-700' },
@@ -76,11 +77,19 @@ const STATUS_PILLS: { key: AppointeeStatus; label: string; tone: string }[] = [
   { key: 'enrolled', label: 'Enrolled', tone: 'bg-green-50 text-green-700' },
 ];
 
+const VIT_ID_PILLS: { key: VitIdStatus; label: string; tone: string }[] = [
+  { key: 'active', label: 'Active', tone: 'bg-green-50 text-green-700' },
+  { key: 'active-different-email', label: 'Different Email', tone: 'bg-amber-50 text-amber-700' },
+  { key: 'needs-review', label: 'Needs Review', tone: 'bg-amber-50 text-amber-800' },
+  { key: 'no-account', label: 'No Account', tone: 'bg-red-50 text-red-700' },
+];
+
 export function FellowsManagementPage() {
   const currentYear = getCurrentAcademicYear();
   const [selectedYear, setSelectedYear] = useState<string>(currentYear);
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [selectedStatuses, setSelectedStatuses] = useState<AppointeeStatus[]>([]);
+  const [selectedVitIdStatuses, setSelectedVitIdStatuses] = useState<VitIdStatus[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
   const { data, isLoading, error } = useFellowsDashboard(selectedYear || undefined);
@@ -99,6 +108,11 @@ export function FellowsManagementPage() {
       fellows = fellows.filter((f) => selectedStatuses.includes(f.appointeeStatus));
     }
 
+    // Filter by selected VIT ID status pills
+    if (selectedVitIdStatuses.length > 0) {
+      fellows = fellows.filter((f) => selectedVitIdStatuses.includes(f.status));
+    }
+
     // Filter by search query
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -111,7 +125,7 @@ export function FellowsManagementPage() {
     }
 
     return fellows;
-  }, [fellowsByTab, selectedStatuses, searchQuery]);
+  }, [fellowsByTab, selectedStatuses, selectedVitIdStatuses, searchQuery]);
 
   const statusCounts = useMemo(() => {
     const counts: Record<AppointeeStatus, number> = {
@@ -129,6 +143,19 @@ export function FellowsManagementPage() {
     return counts;
   }, [fellowsByTab]);
 
+  const vitIdStatusCounts = useMemo(() => {
+    const counts: Record<VitIdStatus, number> = {
+      active: 0,
+      'active-different-email': 0,
+      'needs-review': 0,
+      'no-account': 0,
+    };
+    for (const f of fellowsByTab) {
+      counts[f.status]++;
+    }
+    return counts;
+  }, [fellowsByTab]);
+
   const tabCounts = useMemo(() => {
     if (!data) return {} as Record<FilterTab, number>;
     const counts: Record<string, number> = { all: data.fellows.length };
@@ -142,6 +169,12 @@ export function FellowsManagementPage() {
 
   function toggleStatus(status: AppointeeStatus) {
     setSelectedStatuses((prev) =>
+      prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]
+    );
+  }
+
+  function toggleVitIdStatus(status: VitIdStatus) {
+    setSelectedVitIdStatuses((prev) =>
       prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]
     );
   }
@@ -185,6 +218,7 @@ export function FellowsManagementPage() {
             setSelectedYear(e.target.value);
             setActiveTab('all');
             setSelectedStatuses([]);
+            setSelectedVitIdStatuses([]);
             setSearchQuery('');
           }}
           className="min-w-[150px] rounded-md border bg-background px-3.5 py-2.5 text-[0.95rem] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
@@ -211,6 +245,7 @@ export function FellowsManagementPage() {
               onClick={() => {
                 setActiveTab(tab.key);
                 setSelectedStatuses([]);
+                setSelectedVitIdStatuses([]);
               }}
               className={`whitespace-nowrap rounded-t-lg border-b-2 px-3 py-2.5 text-[0.9rem] font-medium transition-colors ${
                 activeTab === tab.key
@@ -252,6 +287,28 @@ export function FellowsManagementPage() {
         })}
       </div>
 
+      {/* VIT ID Status Pill Chips */}
+      <div className="mb-4 flex flex-wrap gap-2">
+        <span className="inline-flex items-center text-[0.8rem] font-medium text-muted-foreground mr-1">
+          VIT ID:
+        </span>
+        {VIT_ID_PILLS.map((pill) => {
+          const isActive = selectedVitIdStatuses.includes(pill.key);
+          return (
+            <button
+              key={pill.key}
+              aria-pressed={isActive}
+              onClick={() => toggleVitIdStatus(pill.key)}
+              className={`inline-flex items-center rounded-full px-2.5 py-1 text-[0.8rem] font-medium transition-colors ${
+                isActive ? pill.tone : 'bg-muted/60 text-muted-foreground hover:bg-muted'
+              }`}
+            >
+              {pill.label} ({vitIdStatusCounts[pill.key]})
+            </button>
+          );
+        })}
+      </div>
+
       {/* Search */}
       <div className="mb-4">
         <div className="relative flex-1">
@@ -272,11 +329,11 @@ export function FellowsManagementPage() {
           icon={<Users className="h-12 w-12 mb-4" />}
           title="No appointees found"
           description={
-            searchQuery && (selectedStatuses.length > 0 || activeTab !== 'all')
+            searchQuery && (selectedStatuses.length > 0 || selectedVitIdStatuses.length > 0 || activeTab !== 'all')
               ? 'Try adjusting your search or filters.'
               : searchQuery
                 ? 'Try adjusting your search query.'
-                : selectedStatuses.length > 0 || activeTab !== 'all'
+                : selectedStatuses.length > 0 || selectedVitIdStatuses.length > 0 || activeTab !== 'all'
                   ? 'No appointees match the current filters.'
                   : `No appointees on file for ${selectedYear}.`
           }
@@ -452,7 +509,9 @@ const EMAIL_PREVIEW_ERROR_MESSAGES: Record<EmailPreviewReason, string> = {
 
 function formatLabel(value?: string): string {
   if (!value) return '';
-  return value.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  return value
+    .replace(/_/g, ' ')
+    .replace(/(^|\s)\w/g, (c) => c.toUpperCase());
 }
 
 function formatDate(dateStr: string): string {

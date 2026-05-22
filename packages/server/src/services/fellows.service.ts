@@ -28,18 +28,18 @@ export function deriveAppointmentCategory(
   appointment: string | undefined,
   fellowship: string | undefined
 ): AppointmentCategory | undefined {
-  const appt = (appointment ?? '').trim().toLowerCase();
-  const fell = (fellowship ?? '').trim().toLowerCase();
+  const appt = (appointment ?? '').trim().toLowerCase().replace(/[_-]/g, ' ');
+  const fell = (fellowship ?? '').trim().toLowerCase().replace(/[_-]/g, ' ');
 
   if (appt === 'fellow') return 'full-year-fellow';
-  if (appt === 'fellow short term') {
+  if (appt === 'fellow short term' || appt === 'visiting fellow') {
     return fell === 'artist in residence' ? 'artist-in-residence' : 'term-fellow';
   }
   if (appt === 'visiting professor' || appt === 'harvard visiting professor') {
     return 'visiting-professor';
   }
-  if (appt === "director's appointment") return 'directors-appointment';
-  if (appt.startsWith('post-doctoral fellow')) return 'post-doctoral';
+  if (appt === "director's appointment" || appt === 'directors appointment') return 'directors-appointment';
+  if (appt.startsWith('post-doctoral fellow') || appt.startsWith('post doctoral fellow')) return 'post-doctoral';
   if (appt === 'research associate') return 'research-associate';
   return undefined;
 }
