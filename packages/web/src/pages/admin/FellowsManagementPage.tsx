@@ -329,11 +329,11 @@ export function FellowsManagementPage() {
           icon={<Users className="h-12 w-12 mb-4" />}
           title="No appointees found"
           description={
-            searchQuery && (selectedStatuses.length > 0 || activeTab !== 'all')
+            searchQuery && (selectedStatuses.length > 0 || selectedVitIdStatuses.length > 0 || activeTab !== 'all')
               ? 'Try adjusting your search or filters.'
               : searchQuery
                 ? 'Try adjusting your search query.'
-                : selectedStatuses.length > 0 || activeTab !== 'all'
+                : selectedStatuses.length > 0 || selectedVitIdStatuses.length > 0 || activeTab !== 'all'
                   ? 'No appointees match the current filters.'
                   : `No appointees on file for ${selectedYear}.`
           }
