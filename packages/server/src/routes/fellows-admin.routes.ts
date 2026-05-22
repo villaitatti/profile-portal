@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { env, isDevMode } from '../env.js';
-import { getFellowsDashboard } from '../services/fellows.service.js';
+import { getFellowsDashboard, deriveAppointmentCategory } from '../services/fellows.service.js';
 import * as appointeeEmailService from '../services/appointee-email.service.js';
 import * as civicrmService from '../services/civicrm.service.js';
 import { listUsersByRole } from '../services/auth0.service.js';
@@ -67,11 +67,11 @@ function getDevMockData(academicYear?: string): FellowsDashboardResponse {
     { civicrmId: 2, firstName: 'James', lastName: 'Chen', email: 'jchen@princeton.edu', appointment: 'Fellow', fellowship: 'Mellon Fellow', fellowshipYear: '2025-2026', status: 'no-account', civicrmIdStatus: 'n/a', bioEmail: mockBioEmail('none', false, '2025-2026') },
 
     // Classic 'active' — matched via primary email
-    { civicrmId: 3, firstName: 'Sophie', lastName: 'Laurent', email: 's.laurent@sorbonne.fr', appointment: 'Visiting Fellow', fellowship: 'Berenson Fellow', fellowshipYear: '2025-2026', status: 'active', matchedVia: 'primary-email', matched: { userId: 'auth0|sophie', email: 's.laurent@sorbonne.fr', civicrmId: '3', name: 'Sophie Laurent' }, civicrmIdStatus: 'ok', bioEmail: mockBioEmail('sent', false, '2025-2026') },
+    { civicrmId: 3, firstName: 'Sophie', lastName: 'Laurent', email: 's.laurent@sorbonne.fr', appointment: 'Visiting Professor', fellowship: 'Berenson Fellow', fellowshipYear: '2025-2026', status: 'active', matchedVia: 'primary-email', matched: { userId: 'auth0|sophie', email: 's.laurent@sorbonne.fr', civicrmId: '3', name: 'Sophie Laurent' }, civicrmIdStatus: 'ok', bioEmail: mockBioEmail('sent', false, '2025-2026') },
     { civicrmId: 4, firstName: 'Alessandro', lastName: 'Bianchi', email: 'a.bianchi@uniroma1.it', appointment: 'Fellow', fellowship: 'Hanna Kiel Fellow', fellowshipYear: '2025-2026', status: 'no-account', civicrmIdStatus: 'n/a', bioEmail: mockBioEmail('none', false, '2025-2026') },
 
     // 'active' but civicrmId metadata missing — pre-existing flag
-    { civicrmId: 5, firstName: 'Elena', lastName: 'Petrova', email: 'e.petrova@msu.ru', appointment: 'Visiting Fellow', fellowship: 'Wallace Fellow', fellowshipYear: '2025-2026', status: 'active', matchedVia: 'primary-email', matched: { userId: 'auth0|elena', email: 'e.petrova@msu.ru', civicrmId: null, name: 'Elena Petrova' }, civicrmIdStatus: 'missing', bioEmail: mockBioEmail('pending', false, '2025-2026') },
+    { civicrmId: 5, firstName: 'Elena', lastName: 'Petrova', email: 'e.petrova@msu.ru', appointment: 'Visiting Professor', fellowship: 'Wallace Fellow', fellowshipYear: '2025-2026', status: 'active', matchedVia: 'primary-email', matched: { userId: 'auth0|elena', email: 'e.petrova@msu.ru', civicrmId: null, name: 'Elena Petrova' }, civicrmIdStatus: 'missing', bioEmail: mockBioEmail('pending', false, '2025-2026') },
     { civicrmId: 6, firstName: 'David', lastName: 'Williams', email: 'd.williams@yale.edu', appointment: 'Fellow', fellowship: 'Robert Lehman Fellow', fellowshipYear: '2025-2026', status: 'active', matchedVia: 'primary-email', matched: { userId: 'auth0|david', email: 'd.williams@yale.edu', civicrmId: '6', name: 'David Williams' }, civicrmIdStatus: 'ok', bioEmail: mockBioEmail('failed', true, '2025-2026') },
     { civicrmId: 7, firstName: 'Lucia', lastName: 'Moreno', email: 'l.moreno@csic.es', appointment: 'Fellow', fellowship: 'CRIA Fellow', fellowshipYear: '2025-2026', status: 'no-account', civicrmIdStatus: 'n/a', bioEmail: mockBioEmail('none', false, '2025-2026') },
 
@@ -97,7 +97,7 @@ function getDevMockData(academicYear?: string): FellowsDashboardResponse {
     ], civicrmIdStatus: 'n/a', bioEmail: mockBioEmail('none', false, '2025-2026') },
 
     // NEW — 'needs-review' with primary-conflict (data drift)
-    { civicrmId: 15, firstName: 'Giovanni', lastName: 'Verdi', email: 'g.verdi@unifi.it', appointment: 'Visiting Fellow', fellowship: 'Wallace Fellow', fellowshipYear: '2025-2026', status: 'needs-review', reason: 'primary-conflict', candidates: [
+    { civicrmId: 15, firstName: 'Giovanni', lastName: 'Verdi', email: 'g.verdi@unifi.it', appointment: 'Visiting Professor', fellowship: 'Wallace Fellow', fellowshipYear: '2025-2026', status: 'needs-review', reason: 'primary-conflict', candidates: [
       { userId: 'auth0|giovanni-1', email: 'g.verdi@unifi.it', civicrmId: null, name: 'Giovanni Verdi' },
       { userId: 'auth0|giovanni-2', email: 'g.verdi.other@unifi.it', civicrmId: '15', name: 'Giovanni Verdi' },
     ], civicrmIdStatus: 'n/a', bioEmail: mockBioEmail('none', false, '2025-2026') },
@@ -148,7 +148,7 @@ function getDevMockData(academicYear?: string): FellowsDashboardResponse {
       nominationSent: false,
       formSubmitted: false,
     });
-    return { ...p, fellowshipId: p.civicrmId * 100, vitIdInvitation, appointeeStatus, formInvitations: [] };
+    return { ...p, fellowshipId: p.civicrmId * 100, vitIdInvitation, appointeeStatus, appointmentCategory: deriveAppointmentCategory(p.appointment, p.fellowship), formInvitations: [] };
   });
 
   const filtered = academicYear
@@ -160,10 +160,6 @@ function getDevMockData(academicYear?: string): FellowsDashboardResponse {
     academicYears: ['2025-2026', '2024-2025'],
     summary: {
       total: filtered.length,
-      noAccount: filtered.filter((f) => f.status === 'no-account').length,
-      active: filtered.filter((f) => f.status === 'active').length,
-      activeDifferentEmail: filtered.filter((f) => f.status === 'active-different-email').length,
-      needsReview: filtered.filter((f) => f.status === 'needs-review').length,
     },
   };
 }

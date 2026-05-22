@@ -26,9 +26,6 @@ import { useGenerateFormInvitation, useMarkNominationSent } from '@/api/forms';
 import { getCurrentAcademicYear } from './utils/academic-year';
 import {
   Users,
-  UserX,
-  UserCheck,
-  UserSearch,
   Search,
   AlertCircle,
   ExternalLink,
@@ -46,7 +43,8 @@ import {
 } from 'lucide-react';
 import type {
   FellowDashboardEntry,
-  VitIdStatus,
+  AppointmentCategory,
+  AppointeeStatus,
   BioEmailStatus,
   FormDef,
   FormInvitationSummaryEntry,
@@ -55,23 +53,50 @@ import { getFormsForAppointmentType } from '@itatti/shared';
 
 const CIVICRM_URL = import.meta.env.VITE_CIVICRM_URL || '';
 
-type FilterTab = 'all' | VitIdStatus;
+type FilterTab = 'all' | AppointmentCategory;
+
+const APPOINTMENT_TABS: { key: FilterTab; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'full-year-fellow', label: 'Full Year Fellows' },
+  { key: 'term-fellow', label: 'Term Fellows' },
+  { key: 'visiting-professor', label: 'Visiting Professors' },
+  { key: 'artist-in-residence', label: 'Artist in Residence' },
+  { key: 'directors-appointment', label: "Director's Appts" },
+  { key: 'post-doctoral', label: 'Post-Doctoral' },
+  { key: 'research-associate', label: 'Research Associates' },
+];
+
+const STATUS_PILLS: { key: AppointeeStatus; label: string; tone: string }[] = [
+  { key: 'nominated', label: 'Nominated', tone: 'bg-muted text-muted-foreground' },
+  { key: 'nomination-sent', label: 'Nomination Sent', tone: 'bg-slate-100 text-slate-700' },
+  { key: 'form-submitted', label: 'Form Submitted', tone: 'bg-indigo-50 text-indigo-700' },
+  { key: 'accepted', label: 'Accepted', tone: 'bg-blue-50 text-blue-700' },
+  { key: 'vit-id-sent', label: 'VIT ID Sent', tone: 'bg-amber-50 text-amber-700' },
+  { key: 'vit-id-claimed', label: 'VIT ID Claimed', tone: 'bg-lime-50 text-lime-700' },
+  { key: 'enrolled', label: 'Enrolled', tone: 'bg-green-50 text-green-700' },
+];
 
 export function FellowsManagementPage() {
   const currentYear = getCurrentAcademicYear();
   const [selectedYear, setSelectedYear] = useState<string>(currentYear);
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
+  const [selectedStatuses, setSelectedStatuses] = useState<AppointeeStatus[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
   const { data, isLoading, error } = useFellowsDashboard(selectedYear || undefined);
 
-  const filteredFellows = useMemo(() => {
+  const fellowsByTab = useMemo(() => {
     if (!data) return [];
-    let fellows = data.fellows;
+    if (activeTab === 'all') return data.fellows;
+    return data.fellows.filter((f) => f.appointmentCategory === activeTab);
+  }, [data, activeTab]);
 
-    // Filter by status tab
-    if (activeTab !== 'all') {
-      fellows = fellows.filter((f) => f.status === activeTab);
+  const filteredFellows = useMemo(() => {
+    let fellows = fellowsByTab;
+
+    // Filter by selected status pills
+    if (selectedStatuses.length > 0) {
+      fellows = fellows.filter((f) => selectedStatuses.includes(f.appointeeStatus));
     }
 
     // Filter by search query
@@ -86,7 +111,40 @@ export function FellowsManagementPage() {
     }
 
     return fellows;
-  }, [data, activeTab, searchQuery]);
+  }, [fellowsByTab, selectedStatuses, searchQuery]);
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<AppointeeStatus, number> = {
+      nominated: 0,
+      'nomination-sent': 0,
+      'form-submitted': 0,
+      accepted: 0,
+      'vit-id-sent': 0,
+      'vit-id-claimed': 0,
+      enrolled: 0,
+    };
+    for (const f of fellowsByTab) {
+      counts[f.appointeeStatus]++;
+    }
+    return counts;
+  }, [fellowsByTab]);
+
+  const tabCounts = useMemo(() => {
+    if (!data) return {} as Record<FilterTab, number>;
+    const counts: Record<string, number> = { all: data.fellows.length };
+    for (const f of data.fellows) {
+      if (f.appointmentCategory) {
+        counts[f.appointmentCategory] = (counts[f.appointmentCategory] || 0) + 1;
+      }
+    }
+    return counts as Record<FilterTab, number>;
+  }, [data]);
+
+  function toggleStatus(status: AppointeeStatus) {
+    setSelectedStatuses((prev) =>
+      prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]
+    );
+  }
 
   if (isLoading) return <FellowsManagementSkeleton />;
 
@@ -108,31 +166,10 @@ export function FellowsManagementPage() {
     );
   }
 
-  const summary = data?.summary ?? {
-    total: 0,
-    noAccount: 0,
-    active: 0,
-    activeDifferentEmail: 0,
-    needsReview: 0,
-  };
   const academicYears = data?.academicYears ?? [];
 
-  const tabs: { key: FilterTab; label: string; count: number }[] = [
-    { key: 'all', label: 'All', count: summary.total },
-    { key: 'needs-review', label: 'Needs Review', count: summary.needsReview },
-    { key: 'active-different-email', label: 'Different Email', count: summary.activeDifferentEmail },
-    { key: 'no-account', label: 'Needs Account', count: summary.noAccount },
-    { key: 'active', label: 'Active', count: summary.active },
-  ];
-
-  // Dynamic subtitle: "YYYY-YYYY Appointees" when a year is selected,
-  // "All appointees" when the dropdown is cleared. Reacts on every change.
-  const subtitle = selectedYear
-    ? `${selectedYear} Appointees`
-    : 'All appointees';
-
   return (
-    <div>
+    <div className="px-2 sm:px-4">
       <PageHeader
         title="Manage Appointees"
         description="Track the onboarding lifecycle of current and past appointees."
@@ -140,18 +177,18 @@ export function FellowsManagementPage() {
 
       <div className="mb-6 flex items-center justify-between gap-4">
         <h2 className="text-[1.25rem] font-semibold tracking-tight text-foreground">
-          {subtitle}
+          {selectedYear} Appointees
         </h2>
         <select
           value={selectedYear}
           onChange={(e) => {
             setSelectedYear(e.target.value);
             setActiveTab('all');
+            setSelectedStatuses([]);
             setSearchQuery('');
           }}
           className="min-w-[150px] rounded-md border bg-background px-3.5 py-2.5 text-[0.95rem] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
         >
-          <option value="">All years</option>
           {academicYears.length > 0 ? (
             academicYears.map((year) => (
               <option key={year} value={year}>
@@ -164,67 +201,57 @@ export function FellowsManagementPage() {
         </select>
       </div>
 
-      {/* Summary Cards */}
-      <div className="mb-10 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5">
-        <SummaryCard
-          label="Total Fellows"
-          value={summary.total}
-          icon={<Users className="h-5 w-5 text-primary" />}
-        />
-        <SummaryCard
-          label="Needs Review"
-          value={summary.needsReview}
-          icon={<AlertTriangle className="h-5 w-5 text-amber-600" />}
-          valueClassName="text-amber-700"
-        />
-        <SummaryCard
-          label="Different Email"
-          value={summary.activeDifferentEmail}
-          icon={<UserSearch className="h-5 w-5 text-amber-500" />}
-          valueClassName="text-amber-600"
-        />
-        <SummaryCard
-          label="Needs Account"
-          value={summary.noAccount}
-          icon={<UserX className="h-5 w-5 text-destructive" />}
-          valueClassName="text-destructive"
-        />
-        <SummaryCard
-          label="Active"
-          value={summary.active}
-          icon={<UserCheck className="h-5 w-5 text-green-600" />}
-          valueClassName="text-green-600"
-        />
-      </div>
-
-      {/* Filter Tabs */}
-      <div className="mb-5 flex gap-2 border-b">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`rounded-t-lg border-b-2 px-4 py-2.5 text-[1rem] font-medium transition-colors ${
-              activeTab === tab.key
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {tab.label}
-            <span
-              className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-[0.8rem] ${
+      {/* Appointment Type Tabs */}
+      <div className="mb-4 overflow-x-auto border-b">
+        <div className="flex gap-1 min-w-max">
+          {APPOINTMENT_TABS.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => {
+                setActiveTab(tab.key);
+                setSelectedStatuses([]);
+              }}
+              className={`whitespace-nowrap rounded-t-lg border-b-2 px-3 py-2.5 text-[0.9rem] font-medium transition-colors ${
                 activeTab === tab.key
-                  ? 'bg-primary/10 text-primary'
-                  : 'bg-muted text-muted-foreground'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
-              {tab.count}
-            </span>
-          </button>
-        ))}
+              {tab.label}
+              <span
+                className={`ml-1.5 inline-flex items-center rounded-full px-1.5 py-0.5 text-[0.75rem] ${
+                  activeTab === tab.key
+                    ? 'bg-primary/10 text-primary'
+                    : 'bg-muted text-muted-foreground'
+                }`}
+              >
+                {tabCounts[tab.key] ?? 0}
+              </span>
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Search (year dropdown is now the hero control next to the H2) */}
-      <div className="mb-5">
+      {/* Status Pill Chips */}
+      <div className="mb-4 flex flex-wrap gap-2">
+        {STATUS_PILLS.map((pill) => {
+          const isActive = selectedStatuses.includes(pill.key);
+          return (
+            <button
+              key={pill.key}
+              onClick={() => toggleStatus(pill.key)}
+              className={`inline-flex items-center rounded-full px-2.5 py-1 text-[0.8rem] font-medium transition-colors ${
+                isActive ? pill.tone : 'bg-muted/60 text-muted-foreground hover:bg-muted'
+              }`}
+            >
+              {pill.label} ({statusCounts[pill.key]})
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Search */}
+      <div className="mb-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input
@@ -241,23 +268,17 @@ export function FellowsManagementPage() {
       {filteredFellows.length === 0 ? (
         <EmptyState
           icon={<Users className="h-12 w-12 mb-4" />}
-          title="No fellows found"
+          title="No appointees found"
           description={
-            // Three distinct zero-row cases — previously the copy said "No
-            // fellows match the current filters" even for a legitimately-
-            // empty year, which misled Angela into thinking she had a stuck
-            // filter when the data just wasn't there.
             searchQuery
               ? 'Try adjusting your search query.'
-              : activeTab !== 'all'
-                ? 'No fellows match this filter. Try "All" to see every appointee for this year.'
-                : selectedYear
-                  ? `No fellows on file for ${selectedYear}.`
-                  : 'No fellows on file.'
+              : selectedStatuses.length > 0 || activeTab !== 'all'
+                ? 'No appointees match the current filters.'
+                : `No appointees on file for ${selectedYear}.`
           }
         />
       ) : (
-        <FellowsTable fellows={filteredFellows} paginate={!selectedYear} />
+        <FellowsTable fellows={filteredFellows} paginate={false} />
       )}
     </div>
   );
@@ -265,95 +286,60 @@ export function FellowsManagementPage() {
 
 function FellowsManagementSkeleton() {
   return (
-    <div className="space-y-8 motion-safe:animate-pulse">
+    <div className="space-y-6 px-2 sm:px-4 motion-safe:animate-pulse">
       <div className="space-y-3">
         <SkeletonBlock className="h-10 w-64 rounded-full" />
         <SkeletonBlock className="h-5 w-[28rem] max-w-full rounded-full" />
       </div>
 
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
-        {Array.from({ length: 3 }).map((_, index) => (
-          <div key={index} className="rounded-xl border bg-card p-5">
-            <div className="flex items-center justify-between">
-              <SkeletonBlock className="h-3.5 w-24 rounded-full" />
-              <SkeletonBlock className="h-5 w-5 rounded-full" />
-            </div>
-            <SkeletonBlock className="mt-4 h-8 w-16 rounded-full" />
-          </div>
+      {/* Tabs skeleton */}
+      <div className="flex gap-2 border-b pb-0.5 overflow-x-auto">
+        {Array.from({ length: 8 }).map((_, index) => (
+          <SkeletonBlock key={index} className="h-10 w-28 flex-shrink-0 rounded-t-lg" />
         ))}
       </div>
 
-      <div className="space-y-5">
-        <div className="flex gap-2 border-b pb-0.5">
-          {Array.from({ length: 3 }).map((_, index) => (
-            <SkeletonBlock key={index} className="h-10 w-28 rounded-t-lg" />
-          ))}
-        </div>
+      {/* Status pills skeleton */}
+      <div className="flex flex-wrap gap-2">
+        {Array.from({ length: 7 }).map((_, index) => (
+          <SkeletonBlock key={index} className="h-7 w-24 rounded-full" />
+        ))}
+      </div>
 
-        <div className="flex gap-4">
-          <SkeletonBlock className="h-11 flex-1 rounded-md" />
-          <SkeletonBlock className="h-11 w-40 rounded-md" />
-        </div>
+      {/* Search skeleton */}
+      <SkeletonBlock className="h-11 w-full rounded-md" />
 
-        <div className="overflow-hidden rounded-xl border bg-card">
-          <div className="border-b bg-muted/50 px-4 py-3">
-            {/* 9 columns matches the real table: Name, Email, Appointment,
-                Fellowship, Appointee Status, Form, VIT ID Status, Bio Email,
-                Actions. Previously the skeleton used grid-cols-6 which
-                caused a visible layout shift when data arrived. */}
-            <div className="grid grid-cols-9 gap-4">
-              {Array.from({ length: 9 }).map((_, index) => (
-                <SkeletonBlock key={index} className="h-3.5 rounded-full" />
-              ))}
-            </div>
-          </div>
-          <div className="divide-y">
-            {Array.from({ length: 5 }).map((_, index) => (
-              <div key={index} className="grid grid-cols-9 items-center gap-4 px-4 py-4">
-                <div className="flex items-center gap-3">
-                  <SkeletonBlock className="h-16 w-16 rounded-full bg-muted/80" />
-                  <div className="space-y-2">
-                    <SkeletonBlock className="h-4 w-28 rounded-full" />
-                    <SkeletonBlock className="h-3.5 w-24 rounded-full" />
-                  </div>
-                </div>
-                {/* Middle columns = Email, Appointment, Fellowship,
-                    Appointee Status, Form, VIT ID Status, Bio Email. Last cell
-                    is Actions. */}
-                {Array.from({ length: 7 }).map((__, column) => (
-                  <SkeletonBlock key={column} className="h-4 w-20 rounded-full" />
-                ))}
-                <SkeletonBlock className="h-4 w-14 rounded-full" />
-              </div>
+      {/* Table skeleton */}
+      <div className="overflow-hidden rounded-xl border bg-card">
+        <div className="border-b bg-muted/50 px-3 py-3">
+          <div className="grid grid-cols-8 gap-3">
+            {Array.from({ length: 8 }).map((_, index) => (
+              <SkeletonBlock key={index} className="h-3.5 rounded-full" />
             ))}
           </div>
         </div>
+        <div className="divide-y">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <div key={index} className="grid grid-cols-8 items-center gap-3 px-3 py-3">
+              <div className="flex items-center gap-3">
+                <SkeletonBlock className="h-16 w-16 rounded-full bg-muted/80" />
+                <div className="space-y-2">
+                  <SkeletonBlock className="h-4 w-28 rounded-full" />
+                  <SkeletonBlock className="h-3 w-36 rounded-full" />
+                </div>
+              </div>
+              {Array.from({ length: 6 }).map((__, column) => (
+                <SkeletonBlock key={column} className="h-4 w-20 rounded-full" />
+              ))}
+              <SkeletonBlock className="h-4 w-14 rounded-full" />
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
 }
 
-function SummaryCard({
-  label,
-  value,
-  icon,
-  valueClassName,
-}: {
-  label: string;
-  value: number;
-  icon: React.ReactNode;
-  valueClassName?: string;
-}) {
-  return (
-    <div className="rounded-xl border bg-card p-5">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[0.85rem] uppercase tracking-[0.14em] text-muted-foreground">{label}</span>
-        {icon}
-      </div>
-      <div className={`mt-3 text-[2.1rem] font-semibold tracking-tight ${valueClassName || ''}`}>{value}</div>
-    </div>
-  );
-}
 
 // Status badge moved to components/shared/VitIdStatusBadge.tsx (used by both
 // this page and the Has VIT ID? page).
@@ -514,7 +500,6 @@ function getFormInvitation(
 type SortField =
   | 'name'
   | 'appointment'
-  | 'email'
   | 'fellowship'
   | 'appointeeStatus'
   | 'form'
@@ -584,14 +569,10 @@ function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEntry[]; 
           cmp = a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName);
           break;
         case 'appointment':
-          // Primary: appointment. Tie-break: lastName then firstName.
           cmp =
             (a.appointment || '').localeCompare(b.appointment || '') ||
             a.lastName.localeCompare(b.lastName) ||
             a.firstName.localeCompare(b.firstName);
-          break;
-        case 'email':
-          cmp = (a.email || '').localeCompare(b.email || '');
           break;
         case 'fellowship':
           cmp = (a.fellowship || '').localeCompare(b.fellowship || '');
@@ -747,19 +728,18 @@ function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEntry[]; 
 
   return (
     <>
-      <div className="overflow-hidden rounded-xl border bg-card">
-        <table className="w-full text-[1rem]">
+      <div className="overflow-x-auto rounded-xl border bg-card">
+        <table className="w-full text-[0.95rem]">
           <thead>
             <tr className="border-b bg-muted/50">
               <SortHeader field="name" label="Name" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
-              <SortHeader field="email" label="Email" className="hidden md:table-cell" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
-              <SortHeader field="appointment" label="Appointment" className="hidden lg:table-cell" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
-              <SortHeader field="fellowship" label="Fellowship Type" className="hidden lg:table-cell" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
               <SortHeader field="appointeeStatus" label="Appointee Status" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
+              <SortHeader field="appointment" label="Appointment" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
+              <SortHeader field="fellowship" label="Fellowship Type" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
               <SortHeader field="form" label="Form" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
               <SortHeader field="status" label="VIT ID Status" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
               <SortHeader field="bioEmail" label="Bio Email" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
-              <th className="px-4 py-3 text-center text-[0.75rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+              <th className="px-3 py-3 text-center text-[0.75rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">
                 Actions
               </th>
             </tr>
@@ -910,7 +890,7 @@ function SortHeader({
   return (
     <th
       aria-sort={ariaSort}
-      className={`px-4 py-3 text-left ${className || ''}`}
+      className={`px-3 py-3 text-left ${className || ''}`}
     >
       <button
         type="button"
@@ -1349,7 +1329,7 @@ function FellowRow({
   const isPending = pendingContactId === fellow.civicrmId;
   return (
     <tr className="hover:bg-muted/30">
-      <td className="px-4 py-3">
+      <td className="px-3 py-3">
         <div className="flex items-center gap-3">
           <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10">
             {fellow.imageUrl ? (
@@ -1365,28 +1345,19 @@ function FellowRow({
               </span>
             )}
           </div>
-          <div>
-            <div className="text-[1.08rem] font-semibold">
+          <div className="min-w-0">
+            <div className="whitespace-nowrap text-[1rem] font-semibold">
               {fellow.firstName} {fellow.lastName}
             </div>
-            <div className="text-[0.88rem] leading-5 text-muted-foreground md:hidden">
-              {fellow.email || 'No email'}
+            <div className="text-[0.82rem] leading-5 text-muted-foreground truncate" title={fellow.email || undefined}>
+              {fellow.email || (
+                <span className="italic text-muted-foreground/60">No email</span>
+              )}
             </div>
           </div>
         </div>
       </td>
-      <td className="hidden px-4 py-3 text-[0.95rem] text-muted-foreground md:table-cell">
-        {fellow.email || (
-          <span className="italic text-muted-foreground/60">No email in CiviCRM</span>
-        )}
-      </td>
-      <td className="hidden px-4 py-3 text-[0.95rem] text-muted-foreground lg:table-cell">
-        {formatLabel(fellow.appointment)}
-      </td>
-      <td className="hidden px-4 py-3 text-[0.95rem] text-muted-foreground lg:table-cell">
-        {formatLabel(fellow.fellowship)}
-      </td>
-      <td className="px-4 py-3">
+      <td className="px-3 py-3">
         <AppointeeStatusBadge
           status={fellow.appointeeStatus}
           subLabel={
@@ -1397,10 +1368,16 @@ function FellowRow({
           subLabelTone="destructive"
         />
       </td>
-      <td className="px-4 py-3">
+      <td className="px-3 py-3 text-[0.9rem] text-muted-foreground">
+        {formatLabel(fellow.appointment)}
+      </td>
+      <td className="px-3 py-3 text-[0.9rem] text-muted-foreground">
+        {formatLabel(fellow.fellowship)}
+      </td>
+      <td className="px-3 py-3">
         <FormStatusCell fellow={fellow} />
       </td>
-      <td className="px-4 py-3">
+      <td className="px-3 py-3">
         <div className="flex flex-col gap-1">
           <VitIdStatusBadge
             status={fellow.status}
@@ -1441,7 +1418,7 @@ function FellowRow({
             )}
         </div>
       </td>
-      <td className="px-4 py-3">
+      <td className="px-3 py-3">
         <BioEmailPill
           status={fellow.bioEmail.status}
           sentAt={fellow.bioEmail.sentAt}
@@ -1449,7 +1426,7 @@ function FellowRow({
           targetAcademicYear={fellow.bioEmail.targetAcademicYear}
         />
       </td>
-      <td className="px-4 py-3 text-center">
+      <td className="px-3 py-3 text-center">
         <FellowActionsMenu
           fellow={fellow}
           isPending={isPending}

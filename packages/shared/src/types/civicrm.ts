@@ -64,6 +64,15 @@ export type FellowMatch =
 
 export type CivicrmIdStatus = 'ok' | 'missing' | 'n/a';
 
+export type AppointmentCategory =
+  | 'full-year-fellow'
+  | 'term-fellow'
+  | 'visiting-professor'
+  | 'artist-in-residence'
+  | 'directors-appointment'
+  | 'post-doctoral'
+  | 'research-associate';
+
 export type BioEmailStatus = 'none' | 'pending' | 'sent' | 'failed';
 
 /**
@@ -148,6 +157,7 @@ export interface FellowDashboardEntry {
   imageUrl?: string;
   appointment?: string;
   fellowship?: string;
+  appointmentCategory?: AppointmentCategory;
   fellowshipYear: string;
   fellowshipId: number;
   status: VitIdStatus;
@@ -168,10 +178,6 @@ export interface FellowsDashboardResponse {
   academicYears: string[];
   summary: {
     total: number;
-    noAccount: number;
-    active: number;
-    activeDifferentEmail: number;
-    needsReview: number;
   };
 }
 

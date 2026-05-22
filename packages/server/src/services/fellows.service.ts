@@ -13,6 +13,7 @@ import { logger } from '../lib/logger.js';
 import { getFormDef } from '@itatti/shared';
 import { getInvitationsForContacts } from './form-invitation.service.js';
 import type {
+  AppointmentCategory,
   BioEmailSummary,
   VitIdInvitationSummary,
   FellowDashboardEntry,
@@ -22,6 +23,26 @@ import type {
   MatchedVia,
   NeedsReviewReason,
 } from '@itatti/shared';
+
+export function deriveAppointmentCategory(
+  appointment: string | undefined,
+  fellowship: string | undefined
+): AppointmentCategory | undefined {
+  const appt = (appointment ?? '').trim().toLowerCase();
+  const fell = (fellowship ?? '').trim().toLowerCase();
+
+  if (appt === 'fellow') return 'full-year-fellow';
+  if (appt === 'fellow short term') {
+    return fell === 'artist in residence' ? 'artist-in-residence' : 'term-fellow';
+  }
+  if (appt === 'visiting professor' || appt === 'harvard visiting professor') {
+    return 'visiting-professor';
+  }
+  if (appt === "director's appointment") return 'directors-appointment';
+  if (appt.startsWith('post-doctoral fellow')) return 'post-doctoral';
+  if (appt === 'research associate') return 'research-associate';
+  return undefined;
+}
 
 /**
  * Map a persisted AppointeeEmailStatus to the UI pill state + ISO sent-at.
@@ -216,6 +237,7 @@ export async function getFellowsDashboard(
           imageUrl: f.imageUrl,
           appointment: f.appointment,
           fellowship: f.fellowship,
+          appointmentCategory: deriveAppointmentCategory(f.appointment, f.fellowship),
           fellowshipYear: yearLabel,
           fellowshipId: f.fellowshipId,
         },
@@ -237,6 +259,7 @@ export async function getFellowsDashboard(
           imageUrl: f.imageUrl,
           appointment: f.appointment,
           fellowship: f.fellowship,
+          appointmentCategory: deriveAppointmentCategory(f.appointment, f.fellowship),
           fellowshipYear: yearLabel,
           fellowshipId: f.fellowshipId,
         };
@@ -560,10 +583,6 @@ export async function getFellowsDashboard(
     academicYears,
     summary: {
       total: fellows.length,
-      noAccount: fellows.filter((f) => f.status === 'no-account').length,
-      active: fellows.filter((f) => f.status === 'active').length,
-      activeDifferentEmail: fellows.filter((f) => f.status === 'active-different-email').length,
-      needsReview: fellows.filter((f) => f.status === 'needs-review').length,
     },
   };
 }
