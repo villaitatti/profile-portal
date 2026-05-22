@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.17.0] - 2026-05-22 - Manage Appointees redesign: appointment-type tabs + status pills
+
+### Changed
+- **Appointment-type tabs replace VIT ID status tabs.** Angela can now filter by Full Year Fellows, Term Fellows, Visiting Professors, Artist in Residence, Director's Appointments, Post-Doctoral, and Research Associates. Each tab shows its count.
+- **Status pill chips for appointee lifecycle filtering.** Multi-select chips (Nominated, Nomination Sent, Form Submitted, Accepted, VIT ID Sent, VIT ID Claimed, Enrolled) show per-tab counts and filter as a union.
+- **Name + Email combined into one column.** Profile picture left, name bold on top, email muted below. Saves a full column width.
+- **Column reorder.** Name | Appointee Status | Appointment | Fellowship Type | Form | VIT ID Status | Bio Email | Actions.
+- **Reduced horizontal padding** and added `overflow-x-auto` for horizontal scrolling on smaller screens.
+- **Server returns `appointmentCategory`** derived from CiviCRM appointment/fellowship fields with case-insensitive matching.
+
+### Removed
+- Summary cards (Total, Needs Review, Different Email, Needs Account, Active) replaced by pill chips.
+- "All years" dropdown option removed; year always defaults to current academic year.
+- Separate Email column (merged into Name).
+
 ## [0.16.3] - 2026-05-21 - Public badge contrast + email card framing
 
 ### Fixed
