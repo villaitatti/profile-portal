@@ -40,6 +40,7 @@ import {
   MoreHorizontal,
   Info,
   CalendarCheck,
+  X,
 } from 'lucide-react';
 import type {
   FellowDashboardEntry,
@@ -268,45 +269,69 @@ export function FellowsManagementPage() {
         </div>
       </div>
 
-      {/* Status Pill Chips */}
-      <div className="mb-4 flex flex-wrap gap-2">
-        {STATUS_PILLS.map((pill) => {
-          const isActive = selectedStatuses.includes(pill.key);
-          return (
+      {/* Filters Card */}
+      <div className="mb-4 rounded-xl border bg-card p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-foreground">Filters</h3>
+          {(selectedStatuses.length > 0 || selectedVitIdStatuses.length > 0) && (
             <button
-              key={pill.key}
-              aria-pressed={isActive}
-              onClick={() => toggleStatus(pill.key)}
-              className={`inline-flex items-center rounded-full px-2.5 py-1 text-[0.8rem] font-medium transition-colors ${
-                isActive ? pill.tone : 'bg-muted/60 text-muted-foreground hover:bg-muted'
-              }`}
+              onClick={() => {
+                setSelectedStatuses([]);
+                setSelectedVitIdStatuses([]);
+              }}
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             >
-              {pill.label} ({statusCounts[pill.key]})
+              <X className="h-3 w-3" />
+              Clear
             </button>
-          );
-        })}
-      </div>
+          )}
+        </div>
 
-      {/* VIT ID Status Pill Chips */}
-      <div className="mb-4 flex flex-wrap gap-2">
-        <span className="inline-flex items-center text-[0.8rem] font-medium text-muted-foreground mr-1">
-          VIT ID:
-        </span>
-        {VIT_ID_PILLS.map((pill) => {
-          const isActive = selectedVitIdStatuses.includes(pill.key);
-          return (
-            <button
-              key={pill.key}
-              aria-pressed={isActive}
-              onClick={() => toggleVitIdStatus(pill.key)}
-              className={`inline-flex items-center rounded-full px-2.5 py-1 text-[0.8rem] font-medium transition-colors ${
-                isActive ? pill.tone : 'bg-muted/60 text-muted-foreground hover:bg-muted'
-              }`}
-            >
-              {pill.label} ({vitIdStatusCounts[pill.key]})
-            </button>
-          );
-        })}
+        <div className="mb-3">
+          <span className="mb-1.5 block text-[0.75rem] font-medium text-muted-foreground">
+            Appointee Status
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {STATUS_PILLS.map((pill) => {
+              const isActive = selectedStatuses.includes(pill.key);
+              return (
+                <button
+                  key={pill.key}
+                  aria-pressed={isActive}
+                  onClick={() => toggleStatus(pill.key)}
+                  className={`inline-flex items-center rounded-full px-2.5 py-1 text-[0.8rem] font-medium transition-colors ${
+                    isActive ? pill.tone : 'bg-muted/60 text-muted-foreground hover:bg-muted'
+                  }`}
+                >
+                  {pill.label} ({statusCounts[pill.key]})
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <span className="mb-1.5 block text-[0.75rem] font-medium text-muted-foreground">
+            VIT ID Status
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {VIT_ID_PILLS.map((pill) => {
+              const isActive = selectedVitIdStatuses.includes(pill.key);
+              return (
+                <button
+                  key={pill.key}
+                  aria-pressed={isActive}
+                  onClick={() => toggleVitIdStatus(pill.key)}
+                  className={`inline-flex items-center rounded-full px-2.5 py-1 text-[0.8rem] font-medium transition-colors ${
+                    isActive ? pill.tone : 'bg-muted/60 text-muted-foreground hover:bg-muted'
+                  }`}
+                >
+                  {pill.label} ({vitIdStatusCounts[pill.key]})
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* Search */}

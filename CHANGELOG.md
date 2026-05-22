@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.17.2] - 2026-05-22 - Filters card + fix Term Fellow categorization
+
+### Fixed
+- **Term Fellows and Artists in Residence now categorize correctly.** CiviCRM returns label-format values like `"Fellow (short term)"` with parentheses. The normalization regex now strips `()` in addition to underscores and hyphens, so `"Fellow (short term)"` correctly maps to `"fellow short term"`.
+
+### Changed
+- **Filter pills wrapped in a "Filters" card.** Both pill groups (Appointee Status and VIT ID Status) are now inside a bordered card with a "Filters" header for visual grouping.
+- **Section labels added.** "Appointee Status" and "VIT ID Status" subheadings label each pill group.
+- **Clear button.** Appears when any filter pill is selected; clears all selections from both groups with one click.
+
 ## [0.17.1] - 2026-05-22 - Appointees page fixes: tab filtering, capitalization, VIT ID pills
 
 ### Fixed

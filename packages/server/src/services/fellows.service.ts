@@ -28,8 +28,8 @@ export function deriveAppointmentCategory(
   appointment: string | undefined,
   fellowship: string | undefined
 ): AppointmentCategory | undefined {
-  const appt = (appointment ?? '').trim().toLowerCase().replace(/[_-]/g, ' ');
-  const fell = (fellowship ?? '').trim().toLowerCase().replace(/[_-]/g, ' ');
+  const appt = (appointment ?? '').trim().toLowerCase().replace(/[_\-()]/g, ' ').replace(/\s+/g, ' ').trim();
+  const fell = (fellowship ?? '').trim().toLowerCase().replace(/[_\-()]/g, ' ').replace(/\s+/g, ' ').trim();
 
   if (appt === 'fellow') return 'full-year-fellow';
   if (appt === 'fellow short term' || appt === 'visiting fellow') {
