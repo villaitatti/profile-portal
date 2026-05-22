@@ -90,10 +90,6 @@ describe('getFellowsDashboard — empty state', () => {
     expect(result.fellows).toEqual([]);
     expect(result.summary).toEqual({
       total: 0,
-      noAccount: 0,
-      active: 0,
-      activeDifferentEmail: 0,
-      needsReview: 0,
     });
   });
 });
@@ -121,10 +117,6 @@ describe('getFellowsDashboard — ladder integration', () => {
     expect(result.fellows[0].civicrmIdStatus).toBe('ok');
     expect(result.summary).toEqual({
       total: 1,
-      noAccount: 0,
-      active: 1,
-      activeDifferentEmail: 0,
-      needsReview: 0,
     });
   });
 
@@ -142,8 +134,7 @@ describe('getFellowsDashboard — ladder integration', () => {
     expect(result.fellows[0].matchedVia).toBe('civicrm-id');
     expect(result.fellows[0].matched?.email).toBe('old@x.com');
     expect(result.fellows[0].civicrmIdStatus).toBe('ok');
-    expect(result.summary.activeDifferentEmail).toBe(1);
-    expect(result.summary.active).toBe(0);
+    expect(result.summary.total).toBe(1);
   });
 
   it('active-different-email via secondary-email: CiviCRM has old email as secondary', async () => {
@@ -178,7 +169,7 @@ describe('getFellowsDashboard — ladder integration', () => {
     expect(result.fellows[0].status).toBe('needs-review');
     expect(result.fellows[0].reason).toBe('name-collision');
     expect(result.fellows[0].candidates).toHaveLength(2);
-    expect(result.summary.needsReview).toBe(1);
+    expect(result.summary.total).toBe(1);
   });
 
   it('no-account: no ladder match', async () => {
@@ -191,7 +182,7 @@ describe('getFellowsDashboard — ladder integration', () => {
     expect(result.fellows[0].status).toBe('no-account');
     expect(result.fellows[0].matched).toBeUndefined();
     expect(result.fellows[0].civicrmIdStatus).toBe('n/a');
-    expect(result.summary.noAccount).toBe(1);
+    expect(result.summary.total).toBe(1);
   });
 
   it('civicrmIdStatus "missing" when active but Auth0 user lacks civicrm_id metadata', async () => {
