@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { ChevronRight, Download, FileText, Inbox } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { Download, FileText, Inbox } from 'lucide-react';
 import { useFormInvitations, useFormResponse, useFormRegistry } from '@/api/forms';
 import { useDownloadFormPdf } from '@/hooks/useDownloadFormPdf';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { FormsSectionNav } from '@/pages/admin/components/FormsSectionNav';
 import { getVisibleSections, isRetiredFormTitle } from '@/lib/form-render';
 import { cn } from '@/lib/utils';
 import type { AdminFormInvitation } from '@/api/forms';
@@ -185,60 +186,54 @@ export function FormsSubmissionsPage() {
   const selected = filteredItems.find((i) => i.id === selectedId) ?? null;
 
   return (
-    <div className="space-y-6">
+    <div>
       <PageHeader
-        title="Submissions"
-        description="All submitted appointee forms. Select a row to view the full response or download a PDF."
-        actions={
-          <Link
-            to="/admin/forms/templates"
-            className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-          >
-            Templates
-            <ChevronRight className="h-4 w-4" />
-          </Link>
-        }
+        title="Forms"
+        description="Review submitted appointee forms and inspect the templates used during nomination."
       />
+      <FormsSectionNav />
 
-      <FilterBar
-        year={effectiveYear}
-        yearOptions={facets.academicYears}
-        onYearChange={setYear}
-        formType={formTypeParam}
-        formTypeOptions={facets.formTypes}
-        formTitlesByType={formTitlesByType(items)}
-        onFormTypeChange={setFormType}
-        search={searchDraft}
-        onSearchChange={setSearchDraft}
-      />
-
-      {isError ? (
-        <ErrorBanner onRetry={refetch} />
-      ) : isLoading ? (
-        <ListSkeleton />
-      ) : items.length === 0 ? (
-        <EmptyState
-          icon={<Inbox className="h-12 w-12 mb-4" />}
-          title="No submissions yet"
-          description="Once appointees start submitting nomination forms, they will appear here."
+      <div className="mt-6 space-y-6">
+        <FilterBar
+          year={effectiveYear}
+          yearOptions={facets.academicYears}
+          onYearChange={setYear}
+          formType={formTypeParam}
+          formTypeOptions={facets.formTypes}
+          formTitlesByType={formTitlesByType(items)}
+          onFormTypeChange={setFormType}
+          search={searchDraft}
+          onSearchChange={setSearchDraft}
         />
-      ) : (
-        <>
-          {/* Announce filter-result count changes to assistive tech (WCAG 4.1.3).
-              Keeping this visually hidden avoids visual duplication of the list. */}
-          <div role="status" aria-live="polite" className="sr-only">
-            {filterSummary(filteredItems.length, items.length)}
-          </div>
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr,3fr]">
-            <SubmissionList
-              items={filteredItems}
-              selectedId={selectedId}
-              onSelect={selectInvitation}
-            />
-            <DetailPane invitation={selected} />
-          </div>
-        </>
-      )}
+
+        {isError ? (
+          <ErrorBanner onRetry={refetch} />
+        ) : isLoading ? (
+          <ListSkeleton />
+        ) : items.length === 0 ? (
+          <EmptyState
+            icon={<Inbox className="h-12 w-12 mb-4" />}
+            title="No submissions yet"
+            description="Once appointees start submitting nomination forms, they will appear here."
+          />
+        ) : (
+          <>
+            {/* Announce filter-result count changes to assistive tech (WCAG 4.1.3).
+                Keeping this visually hidden avoids visual duplication of the list. */}
+            <div role="status" aria-live="polite" className="sr-only">
+              {filterSummary(filteredItems.length, items.length)}
+            </div>
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr,3fr]">
+              <SubmissionList
+                items={filteredItems}
+                selectedId={selectedId}
+                onSelect={selectInvitation}
+              />
+              <DetailPane invitation={selected} />
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

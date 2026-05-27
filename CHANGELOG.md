@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.17.3] - 2026-05-27 - Forms section navigation
+
+### Changed
+- **Forms now has clear Submissions and Templates tabs.** Admins can switch between submitted responses and form templates from an obvious Forms-level navigation bar instead of relying on a small header link.
+
+### Fixed
+- **Forms stays selected while viewing templates.** The sidebar now keeps the Forms section highlighted on `/admin/forms/templates`, matching the user’s sense that templates are still part of Forms.
+
 ## [0.17.2] - 2026-05-22 - Filters card + fix Term Fellow categorization
 
 ### Fixed

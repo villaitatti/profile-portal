@@ -29,6 +29,7 @@ interface NavItem {
   label: string;
   path: string;
   icon: React.ElementType;
+  end?: boolean;
 }
 
 interface NavSection {
@@ -51,7 +52,7 @@ const navSections: NavSection[] = [
       { label: 'Has VIT ID?', path: '/admin/has-vitid', icon: Search },
       { label: 'Manage Appointees', path: '/admin/fellows', icon: Users },
       { label: 'Emails', path: '/admin/emails', icon: Mail },
-      { label: 'Forms', path: '/admin/forms', icon: FileText },
+      { label: 'Forms', path: '/admin/forms', icon: FileText, end: false },
     ],
   },
   {
@@ -148,7 +149,7 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
                     <div>
                       <NavLink
                         to={item.path}
-                        end
+                        end={item.end ?? true}
                         onClick={onNavigate}
                         aria-label={sidebarCollapsed ? item.label : undefined}
                         className={({ isActive }) =>

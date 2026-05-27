@@ -131,6 +131,28 @@ beforeEach(() => {
 });
 
 describe('FormsSubmissionsPage', () => {
+  it('shows Templates as a Forms section view instead of a header action', () => {
+    mockUseFormInvitations.mockReturnValue({
+      data: payload([inv1]),
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+
+    render(<FormsSubmissionsPage />, { wrapper: makeWrapper() });
+
+    expect(screen.getByRole('heading', { name: 'Forms' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Forms views' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Submissions' })).toHaveAttribute(
+      'href',
+      '/admin/forms'
+    );
+    expect(screen.getByRole('link', { name: 'Templates' })).toHaveAttribute(
+      'href',
+      '/admin/forms/templates'
+    );
+  });
+
   it('selects the most recent submission on load and renders its fields', async () => {
     mockUseFormInvitations.mockReturnValue({
       data: payload([inv1, inv2]),

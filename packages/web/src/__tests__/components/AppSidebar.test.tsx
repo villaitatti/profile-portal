@@ -33,7 +33,7 @@ function setUserRoles(roles: string[]) {
   };
 }
 
-function renderSidebar() {
+function renderSidebar(initialEntries = ['/']) {
   // AppSidebar uses useProfile() internally; wrap in a query client so
   // useQuery has a context to attach to. Disable retries and caches so
   // each test gets a clean slate.
@@ -42,7 +42,7 @@ function renderSidebar() {
   });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={initialEntries}>
         <AppSidebar />
       </MemoryRouter>
     </QueryClientProvider>
@@ -98,6 +98,19 @@ describe('AppSidebar', () => {
 
     const nav = screen.getByRole('navigation', { name: 'Main navigation' });
     expect(nav).toBeInTheDocument();
+  });
+
+  it('keeps Forms selected on the templates subroute', () => {
+    setUserRoles(['fellows-admin']);
+    renderSidebar(['/admin/forms/templates']);
+
+    expect(screen.getByRole('link', { name: 'Forms' })).toHaveAttribute(
+      'aria-current',
+      'page'
+    );
+    expect(screen.getByRole('link', { name: 'Emails' })).not.toHaveAttribute(
+      'aria-current'
+    );
   });
 
   it('calls onNavigate when a link is clicked', () => {

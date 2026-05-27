@@ -43,14 +43,21 @@ beforeEach(() => {
 });
 
 describe('FormsTemplatesPage', () => {
-  it('renders the page header with a "Submissions" back link', () => {
+  it('renders the Forms header with section navigation', () => {
     mockUseFormRegistry.mockReturnValue({ data: [fellowMemo], isLoading: false });
 
     render(<FormsTemplatesPage />, { wrapper: makeWrapper() });
 
-    expect(screen.getByRole('heading', { name: /Form Templates/ })).toBeInTheDocument();
-    const backLink = screen.getByRole('link', { name: /Submissions/ });
-    expect(backLink).toHaveAttribute('href', '/admin/forms');
+    expect(screen.getByRole('heading', { name: 'Forms' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Forms views' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Submissions' })).toHaveAttribute(
+      'href',
+      '/admin/forms'
+    );
+    expect(screen.getByRole('link', { name: 'Templates' })).toHaveAttribute(
+      'href',
+      '/admin/forms/templates'
+    );
   });
 
   it('renders each form in the registry with its title', () => {
