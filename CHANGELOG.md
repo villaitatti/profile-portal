@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.17.4] - 2026-05-28 - Access & Permissions reference
+## [0.17.4] - 28 May 2026 - Access & Permissions reference
 
 ### Added
 - **Read-only Access & Permissions page.** Staff-IT users can now open Portal Settings → Access & Permissions to see their current Auth0 roles, the menu visibility matrix, and the backend API access groups without inspecting code.
@@ -8,7 +8,7 @@
 ### Changed
 - **Sidebar navigation now comes from a shared registry.** The permissions page and sidebar read the same menu/role mapping so the documented visibility table stays aligned with the actual navigation.
 
-## [0.17.3] - 2026-05-27 - Forms section navigation
+## [0.17.3] - 27 May 2026 - Forms section navigation
 
 ### Changed
 - **Forms now has clear Submissions and Templates tabs.** Admins can switch between submitted responses and form templates from an obvious Forms-level navigation bar instead of relying on a small header link.
@@ -16,7 +16,7 @@
 ### Fixed
 - **Forms stays selected while viewing templates.** The sidebar now keeps the Forms section highlighted on `/admin/forms/templates`, matching the user’s sense that templates are still part of Forms.
 
-## [0.17.2] - 2026-05-22 - Filters card + fix Term Fellow categorization
+## [0.17.2] - 22 May 2026 - Filters card + fix Term Fellow categorization
 
 ### Fixed
 - **Term Fellows and Artists in Residence now categorize correctly.** CiviCRM returns label-format values like `"Fellow (short term)"` with parentheses. The normalization regex now strips `()` in addition to underscores and hyphens, so `"Fellow (short term)"` correctly maps to `"fellow short term"`.
@@ -26,7 +26,7 @@
 - **Section labels added.** "Appointee Status" and "VIT ID Status" subheadings label each pill group.
 - **Clear button.** Appears when any filter pill is selected; clears all selections from both groups with one click.
 
-## [0.17.1] - 2026-05-22 - Appointees page fixes: tab filtering, capitalization, VIT ID pills
+## [0.17.1] - 22 May 2026 - Appointees page fixes: tab filtering, capitalization, VIT ID pills
 
 ### Fixed
 - **Term Fellows and Artist in Residence tabs now show their fellows.** CiviCRM returns machine values (`visiting_fellow`, `artist_in_residence`) which weren't matching the label-based checks. Normalizes underscores and dashes before comparison.
@@ -36,7 +36,7 @@
 ### Added
 - **VIT ID status filter pills.** A second row of filter chips (Active, Different Email, Needs Review, No Account) lets Angela filter by VIT ID match status alongside the appointee lifecycle pills. Counts update per tab; filters reset on tab/year change.
 
-## [0.17.0] - 2026-05-22 - Manage Appointees redesign: appointment-type tabs + status pills
+## [0.17.0] - 22 May 2026 - Manage Appointees redesign: appointment-type tabs + status pills
 
 ### Changed
 - **Appointment-type tabs replace VIT ID status tabs.** Angela can now filter by Full Year Fellows, Term Fellows, Visiting Professors, Artist in Residence, Director's Appointments, Post-Doctoral, and Research Associates. Each tab shows its count.
@@ -51,13 +51,13 @@
 - "All years" dropdown option removed; year always defaults to current academic year.
 - Separate Email column (merged into Name).
 
-## [0.16.3] - 2026-05-21 - Public badge contrast + email card framing
+## [0.16.3] - 21 May 2026 - Public badge contrast + email card framing
 
 ### Fixed
 - **Public badge figure-ground separation.** Darkened badge background from `sky-100` to `sky-200` so the pill shape remains distinct on the grey page background (legend area), not just on white card surfaces.
 - **Email desktop card framing.** Added 24px grey spacing above and below the white content area in the form-notification email so the card is visually enclosed on all four sides at desktop width.
 
-## [0.16.2] - 2026-05-21 - Fix staff-IT role string mismatch
+## [0.16.2] - 21 May 2026 - Fix staff-IT role string mismatch
 
 ### Fixed
 - **Admin app-list bypass for staff-IT users.** `listApplications` checked the role with the lowercase literal `'staff-it'`, but Auth0 emits `'staff-IT'` (case-sensitive `Array.includes`), so the bypass branch never fired and staff-IT users had their dashboard filtered through `requiredRoles` like everyone else. Now uses the shared `KnownRoles.STAFF_IT` constant.
@@ -68,7 +68,7 @@
 ### Changed
 - **Switched to 3-digit semver.** Dropped the 4th version segment (e.g. `0.16.1.1` → `0.16.2`); patch-level changes now bump the third digit directly.
 
-## [0.16.1.1] - 2026-05-20 - Dashboard card animation rework
+## [0.16.1.1] - 20 May 2026 - Dashboard card animation rework
 
 ### Changed
 - **Smooth staggered entry animation.** Dashboard app cards now fade in with a subtle slide-up, staggered at 75ms intervals for a polished page load.
