@@ -26,6 +26,7 @@ import { AtlassianMappingsPage } from '@/pages/admin/AtlassianMappingsPage';
 import { AtlassianSyncPage } from '@/pages/admin/AtlassianSyncPage';
 import { ClaimLogPage } from '@/pages/admin/ClaimLogPage';
 import { AutomationsPage } from '@/pages/admin/AutomationsPage';
+import { AccessPermissionsPage } from '@/pages/admin/AccessPermissionsPage';
 import { EmailsPage } from '@/pages/admin/EmailsPage';
 import { FormsSubmissionsPage } from '@/pages/admin/FormsSubmissionsPage';
 import { FormsTemplatesPage } from '@/pages/admin/FormsTemplatesPage';
@@ -82,6 +83,7 @@ export const router = createBrowserRouter([
                   { path: '/admin/apps', element: <AppCatalogPage /> },
                   { path: '/admin/apps/new', element: <AppFormPage /> },
                   { path: '/admin/apps/:id/edit', element: <AppFormPage /> },
+                  { path: '/admin/permissions', element: <AccessPermissionsPage /> },
                   { path: '/admin/atlassian/mappings', element: <AtlassianMappingsPage /> },
                   { path: '/admin/atlassian/sync', element: <AtlassianSyncPage /> },
                 ],

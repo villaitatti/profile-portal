@@ -2,77 +2,19 @@ import { NavLink } from 'react-router-dom';
 import { useAuth0 } from '@auth0/auth0-react';
 import { useProfile } from '@/api/profile';
 import { useUserRoles } from '@/hooks/useUserRoles';
-import { hasAnyRole, KnownRoles } from '@itatti/shared';
+import { hasAnyRole } from '@itatti/shared';
 import { useUIStore } from '@/stores/ui-store';
+import { navSections } from '@/config/navigation';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import {
-  LayoutDashboard,
   User,
-  Users,
-  Search,
-  Grid3X3,
-  Link as LinkIcon,
-  RefreshCw,
   ChevronLeft,
   ChevronRight,
   LogOut,
-  ShieldCheck,
-  CalendarClock,
-  Mail,
-  FileText,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import itattiLogo from '@/assets/itatti-logo.png';
 import itattiMarchio from '@/assets/itatti-marchio.png';
-
-interface NavItem {
-  label: string;
-  path: string;
-  icon: React.ElementType;
-  end?: boolean;
-}
-
-interface NavSection {
-  heading?: string;
-  requiredRoles?: string[];
-  items: NavItem[];
-}
-
-const navSections: NavSection[] = [
-  {
-    items: [
-      { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-      { label: 'My Profile', path: '/profile', icon: User },
-    ],
-  },
-  {
-    heading: 'VIT ID Administration',
-    requiredRoles: [KnownRoles.FELLOWS_ADMIN, KnownRoles.STAFF_IT],
-    items: [
-      { label: 'Has VIT ID?', path: '/admin/has-vitid', icon: Search },
-      { label: 'Manage Appointees', path: '/admin/fellows', icon: Users },
-      { label: 'Emails', path: '/admin/emails', icon: Mail },
-      { label: 'Forms', path: '/admin/forms', icon: FileText, end: false },
-    ],
-  },
-  {
-    heading: 'Portal Settings',
-    requiredRoles: [KnownRoles.STAFF_IT],
-    items: [
-      { label: 'Claim Log', path: '/admin/claims', icon: ShieldCheck },
-      { label: 'Automations', path: '/admin/automations', icon: CalendarClock },
-      { label: 'Applications Catalog', path: '/admin/apps', icon: Grid3X3 },
-    ],
-  },
-  {
-    heading: 'Atlassian Cloud',
-    requiredRoles: [KnownRoles.STAFF_IT],
-    items: [
-      { label: 'Manage Group Mapping', path: '/admin/atlassian/mappings', icon: LinkIcon },
-      { label: 'Sync Users to Atlassian Cloud', path: '/admin/atlassian/sync', icon: RefreshCw },
-    ],
-  },
-];
 
 interface AppSidebarProps {
   onNavigate?: () => void;

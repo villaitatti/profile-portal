@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.17.4] - 2026-05-28 - Access & Permissions reference
+
+### Added
+- **Read-only Access & Permissions page.** Staff-IT users can now open Portal Settings → Access & Permissions to see their current Auth0 roles, the menu visibility matrix, and the backend API access groups without inspecting code.
+
+### Changed
+- **Sidebar navigation now comes from a shared registry.** The permissions page and sidebar read the same menu/role mapping so the documented visibility table stays aligned with the actual navigation.
+
 ## [0.17.3] - 2026-05-27 - Forms section navigation
 
 ### Changed

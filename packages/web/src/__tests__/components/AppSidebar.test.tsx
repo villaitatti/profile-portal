@@ -88,6 +88,7 @@ describe('AppSidebar', () => {
     expect(screen.getByText('Manage Appointees')).toBeInTheDocument();
     expect(screen.getByText('Emails')).toBeInTheDocument();
     expect(screen.getByText('Applications Catalog')).toBeInTheDocument();
+    expect(screen.getByText('Access & Permissions')).toBeInTheDocument();
     expect(screen.getByText('Manage Group Mapping')).toBeInTheDocument();
     expect(screen.getByText('Sync Users to Atlassian Cloud')).toBeInTheDocument();
   });
