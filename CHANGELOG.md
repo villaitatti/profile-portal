@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.17.5] - 29 May 2026 - Public fellowship form restyle
+
+### Added
+- **Elegant public fellowship form layout.** Appointees now see the memorandum form as grouped sections with icons, clearer spacing, responsive field grids, stronger labels, and polished validation states instead of a single vertical list of fields.
+- **Reusable title and country dropdowns.** The fellowship form now uses shared title options and searchable country selectors that can be reused by future form definitions.
+- **Split legal address fields.** The active fellowship memorandum now collects street address, city, postal code, state/province, and country separately, matching the CiviCRM-style address structure.
+
+### Changed
+- **Fellowship memorandum v2 is now the active template.** New Fellow invitations use `fellow-memorandum-v2`; the original `fellow-memorandum` remains retired but available for archived submissions and PDF generation.
+- **Form template administration now shows active and retired status.** Staff can distinguish templates used for new invitations from templates retained for archive viewing.
+- **Submitted PDFs render legal addresses as address blocks.** New split-address submissions appear as coherent address blocks, while older free-text legal addresses still render as originally submitted.
+
+### Fixed
+- **Notification emails keep the full submitted response in the attached PDF.** The form notification worker now has coverage proving v2 split-address submissions flow through PDF generation and into the email attachment.
+
 ## [0.17.4] - 28 May 2026 - Access & Permissions reference
 
 ### Added

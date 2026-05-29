@@ -2,6 +2,7 @@ import { useFormRegistry } from '@/api/forms';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { FormsSectionNav } from '@/pages/admin/components/FormsSectionNav';
+import { isActiveFormDef } from '@itatti/shared';
 import type { FormDef } from '@itatti/shared';
 
 export function FormsTemplatesPage() {
@@ -36,11 +37,25 @@ function FormCard({ form }: { form: FormDef }) {
       <div className="flex items-start justify-between mb-4">
         <div>
           <h3 className="text-lg font-semibold">{form.title}</h3>
+          {!isActiveFormDef(form) && (
+            <p className="mt-1 text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
+              Retired template kept for archived submissions
+            </p>
+          )}
           {form.description && (
             <p className="text-sm text-muted-foreground mt-1 max-w-2xl">{form.description}</p>
           )}
         </div>
         <div className="flex gap-2">
+          <span
+            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+              isActiveFormDef(form)
+                ? 'bg-primary/10 text-primary'
+                : 'bg-muted text-muted-foreground'
+            }`}
+          >
+            {isActiveFormDef(form) ? 'Active' : 'Retired'}
+          </span>
           {form.appointmentTypes.map((type) => (
             <span
               key={type}

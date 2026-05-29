@@ -1,7 +1,12 @@
 import crypto from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { buildRetiredFormTitle, getFormDef, getFormsForAppointmentType } from '@itatti/shared';
+import {
+  buildRetiredFormTitle,
+  getFormDef,
+  getFormsForAppointmentType,
+  isActiveFormDef,
+} from '@itatti/shared';
 import { buildFormSchema } from '../lib/form-schema.js';
 import { enqueueFormNotification } from '../workers/form-notification.worker.js';
 import { logger } from '../lib/logger.js';
@@ -31,6 +36,12 @@ export async function generateInvitation(
   const formDef = getFormDef(args.formType);
   if (!formDef) {
     throw new ServiceError(`Unknown form type: ${args.formType}`, 400);
+  }
+  if (!isActiveFormDef(formDef)) {
+    throw new ServiceError(`Form type is retired: ${args.formType}`, 400, {
+      code: 'form_retired',
+      formType: args.formType,
+    });
   }
 
   const existing = await prisma.formInvitation.findUnique({

@@ -11,6 +11,14 @@ function fieldToZod(field: FormFieldDef): z.ZodTypeAny {
     case 'email':
       schema = z.string().email().max(254).transform((v) => v.trim().toLowerCase());
       break;
+    case 'select':
+    case 'radio':
+      schema = z
+        .string()
+        .max(field.maxLength ?? 1000)
+        .transform((v) => v.trim())
+        .refine((v) => !field.options || field.options.includes(v), 'Invalid option');
+      break;
     case 'textarea':
       schema = z.string().max(field.maxLength ?? 5000).transform((v) => v.trim());
       break;
