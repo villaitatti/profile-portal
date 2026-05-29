@@ -7,6 +7,15 @@ export type FormFieldType =
   | 'radio'
   | 'checkbox';
 
+export type FormFieldLayout = 'full' | 'half' | 'third' | 'two-thirds';
+
+export type FormSectionIcon =
+  | 'user'
+  | 'map-pin'
+  | 'users'
+  | 'life-buoy'
+  | 'landmark';
+
 export interface FormFieldDef {
   name: string;
   label: string;
@@ -16,12 +25,15 @@ export interface FormFieldDef {
   placeholder?: string;
   helpText?: string;
   maxLength?: number;
+  layout?: FormFieldLayout;
+  autoComplete?: string;
   conditionalOn?: { field: string; value: string };
 }
 
 export interface FormSectionDef {
   title: string;
   description?: string;
+  icon?: FormSectionIcon;
   fields: FormFieldDef[];
 }
 
@@ -29,6 +41,7 @@ export interface FormDef {
   id: string;
   title: string;
   description?: string;
+  active?: boolean;
   appointmentTypes: string[];
   sections: FormSectionDef[];
 }

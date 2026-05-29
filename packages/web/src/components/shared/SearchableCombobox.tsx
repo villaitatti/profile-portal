@@ -23,6 +23,10 @@ interface SearchableComboboxProps {
   disallowChars?: string;
   disabled?: boolean;
   className?: string;
+  ariaLabelledBy?: string;
+  ariaDescribedBy?: string;
+  ariaInvalid?: boolean;
+  ariaRequired?: boolean;
 }
 
 export function SearchableCombobox({
@@ -38,6 +42,10 @@ export function SearchableCombobox({
   disallowChars,
   disabled = false,
   className,
+  ariaLabelledBy,
+  ariaDescribedBy,
+  ariaInvalid,
+  ariaRequired,
 }: SearchableComboboxProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -78,6 +86,10 @@ export function SearchableCombobox({
           type="button"
           role="combobox"
           aria-expanded={open}
+          aria-labelledby={ariaLabelledBy}
+          aria-describedby={ariaDescribedBy}
+          aria-invalid={ariaInvalid}
+          aria-required={ariaRequired}
           className={cn(
             'flex w-full items-center justify-between rounded-md border bg-background px-3.5 py-2.5 text-[0.95rem] text-left',
             'hover:bg-accent/50 transition-colors',

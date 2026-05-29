@@ -8,6 +8,7 @@ export * from './types/forms.js';
 export * from './constants/roles.js';
 export * from './constants/errors.js';
 export * from './constants/countries.js';
+export * from './constants/form-options.js';
 export * from './constants/form-registry.js';
 // Exported from the top-level so server + web tests can share a single
 // source of truth for the form-render parity fixture. Tree-shakers will

@@ -11,6 +11,8 @@ const { mockEnv } = vi.hoisted(() => ({
     APPOINTEE_EMAIL_FROM_NAME_BIO: 'I Tatti - Bio & Project',
     CLAIM_VIT_ID_URL: 'https://claim.test.example/claim',
     PORTAL_PUBLIC_URL: 'https://portal.test.example',
+    FORM_NOTIFICATION_EMAIL: 'forms@itatti.harvard.edu',
+    FORM_NOTIFICATION_OVERRIDE_TO: '',
   },
 }));
 
@@ -25,9 +27,12 @@ vi.mock('../../lib/logger.js', () => ({
 
 // Mock @aws-sdk/client-ses at the dynamic-import boundary. email.service lazily
 // imports SESClient and SendEmailCommand, so we mock both.
-const { sesSend, SendEmailCommandMock, SESClientMock } = vi.hoisted(() => ({
+const { sesSend, SendEmailCommandMock, SendRawEmailCommandMock, SESClientMock } = vi.hoisted(() => ({
   sesSend: vi.fn(),
   SendEmailCommandMock: vi.fn(function (this: any, input: any) {
+    this.input = input;
+  }),
+  SendRawEmailCommandMock: vi.fn(function (this: any, input: any) {
     this.input = input;
   }),
   SESClientMock: vi.fn(),
@@ -38,11 +43,13 @@ vi.mock('@aws-sdk/client-ses', () => ({
     return { send: sesSend };
   },
   SendEmailCommand: SendEmailCommandMock,
+  SendRawEmailCommand: SendRawEmailCommandMock,
 }));
 
 import {
   sendVitIdInvitationEmail,
   sendBioProjectDescriptionEmail,
+  sendFormNotificationEmail,
 } from '../../services/email.service.js';
 
 beforeEach(() => {
@@ -58,9 +65,12 @@ beforeEach(() => {
     APPOINTEE_EMAIL_FROM_NAME_BIO: 'I Tatti - Bio & Project',
     CLAIM_VIT_ID_URL: 'https://claim.test.example/claim',
     PORTAL_PUBLIC_URL: 'https://portal.test.example',
+    FORM_NOTIFICATION_EMAIL: 'forms@itatti.harvard.edu',
+    FORM_NOTIFICATION_OVERRIDE_TO: '',
   });
   sesSend.mockReset();
   SendEmailCommandMock.mockClear();
+  SendRawEmailCommandMock.mockClear();
   sesSend.mockResolvedValue({ MessageId: 'ses-default' });
 });
 
@@ -239,5 +249,35 @@ describe('sendBioProjectDescriptionEmail', () => {
     const cmd = SendEmailCommandMock.mock.calls[0][0];
     expect(cmd.Destination.ToAddresses).toEqual(['dev@test.local']);
     expect(cmd.Destination.BccAddresses).toBeUndefined();
+  });
+});
+
+describe('sendFormNotificationEmail', () => {
+  it('sends the generated PDF buffer as the form notification attachment', async () => {
+    const pdfBuffer = Buffer.from('generated-pdf-containing-v2-form-fields');
+
+    await sendFormNotificationEmail({
+      formTitle: 'Memorandum I Tatti Fellowship',
+      fellowshipId: 123,
+      contactId: 456,
+      academicYear: '2026-2027',
+      pdfBuffer,
+      responseData: {
+        legalStreetAddress: 'Via di Vincigliata 26',
+        legalCity: 'Florence',
+        legalCountry: 'Italy',
+      },
+      appointeeName: 'Maria Bianchi',
+    });
+
+    expect(sesSend).toHaveBeenCalledOnce();
+    expect(SendRawEmailCommandMock).toHaveBeenCalledOnce();
+
+    const cmd = SendRawEmailCommandMock.mock.calls[0][0];
+    const rawMessage = Buffer.from(cmd.RawMessage.Data).toString('utf8');
+
+    expect(rawMessage).toContain('To: forms@itatti.harvard.edu');
+    expect(rawMessage).toContain('Content-Type: application/pdf');
+    expect(rawMessage).toContain(pdfBuffer.toString('base64'));
   });
 });

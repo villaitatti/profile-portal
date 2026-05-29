@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { getVisibleFields } from '../../services/form-pdf.service.js';
+import { getVisibleFields, getVisiblePdfSections } from '../../services/form-pdf.service.js';
 import {
+  getFormDef,
   parityFormDef,
   parityResponseData,
   parityExpectedFields,
@@ -32,5 +33,74 @@ describe('form-pdf.service getVisibleFields — parity fixture', () => {
     const names = out.map((f) => f.name);
     expect(names).not.toContain('ssn');
     expect(names).toContain('nonResidentDetails');
+  });
+
+  it('keeps legacy legalAddress submissions visible in the PDF model', () => {
+    const formDef = getFormDef('fellow-memorandum');
+    expect(formDef).toBeDefined();
+
+    const sections = getVisiblePdfSections(formDef!, {
+      title: 'Dr.',
+      givenName: 'Maria',
+      surname: 'Bianchi',
+      email: 'maria@example.com',
+      legalAddress: 'Via di Vincigliata 26\n50135 Florence\nItaly',
+      countryMovingFrom: 'Italy',
+      hasUsSsn: 'No',
+      statusAtItatti: 'Independent Scholar',
+      nationality: 'Italian',
+      emergencyName: 'Luca Bianchi',
+      emergencyPhone: '+39 055 0000',
+      emergencyEmail: 'luca@example.com',
+      resources: 'University leave letter attached.',
+    });
+
+    const personal = sections.find((section) => section.title === 'Personal Information');
+    expect(personal?.rows).toContainEqual(
+      expect.objectContaining({
+        kind: 'field',
+        name: 'legalAddress',
+        value: 'Via di Vincigliata 26\n50135 Florence\nItaly',
+      })
+    );
+  });
+
+  it('renders v2 split legal-address fields as one coherent PDF address block', () => {
+    const formDef = getFormDef('fellow-memorandum-v2');
+    expect(formDef).toBeDefined();
+
+    const sections = getVisiblePdfSections(formDef!, {
+      givenName: 'Maria',
+      surname: 'Bianchi',
+      email: 'maria@example.com',
+      legalStreetAddress: 'Via di Vincigliata 26',
+      legalCity: 'Florence',
+      legalPostalCode: '50135',
+      legalStateProvince: 'FI',
+      legalCountry: 'Italy',
+      countryMovingFrom: 'Italy',
+      hasUsSsn: 'No',
+      statusAtItatti: 'Independent Scholar',
+      nationality: 'Italian',
+      emergencyName: 'Luca Bianchi',
+      emergencyPhone: '+39 055 0000',
+      emergencyEmail: 'luca@example.com',
+      resources: 'University leave letter attached.',
+    });
+
+    const legalAddress = sections.find((section) => section.title === 'Legal Address');
+    expect(legalAddress?.rows).toHaveLength(1);
+    expect(legalAddress?.rows[0]).toMatchObject({
+      kind: 'address',
+      label: 'Legal address',
+      value: 'Via di Vincigliata 26\nFlorence, 50135\nFI\nItaly',
+      fields: [
+        { name: 'legalStreetAddress', label: 'Street address', value: 'Via di Vincigliata 26' },
+        { name: 'legalCity', label: 'City', value: 'Florence' },
+        { name: 'legalPostalCode', label: 'Postal code', value: '50135' },
+        { name: 'legalStateProvince', label: 'State / Province', value: 'FI' },
+        { name: 'legalCountry', label: 'Country', value: 'Italy' },
+      ],
+    });
   });
 });
