@@ -155,7 +155,7 @@ const personalSection: FormSectionDef = {
       required: true,
       options: [...COUNTRIES],
       layout: 'half',
-      autoComplete: 'country-name',
+      autoComplete: 'section-moving-from country-name',
     },
     {
       name: 'hasUsSsn',
@@ -244,7 +244,7 @@ const legalAddressSection: FormSectionDef = {
       required: true,
       options: [...COUNTRIES],
       layout: 'half',
-      autoComplete: 'country-name',
+      autoComplete: 'section-legal country-name',
     },
   ],
 };
@@ -278,7 +278,7 @@ const emergencySection: FormSectionDef = {
       type: 'text',
       required: true,
       layout: 'half',
-      autoComplete: 'name',
+      autoComplete: 'section-emergency name',
     },
     {
       name: 'emergencyRelationship',
@@ -295,7 +295,7 @@ const emergencySection: FormSectionDef = {
       required: true,
       layout: 'half',
       placeholder: 'Include country code',
-      autoComplete: 'tel',
+      autoComplete: 'section-emergency tel',
     },
     {
       name: 'emergencyEmail',
@@ -303,7 +303,7 @@ const emergencySection: FormSectionDef = {
       type: 'email',
       required: true,
       layout: 'half',
-      autoComplete: 'email',
+      autoComplete: 'section-emergency email',
     },
   ],
 };

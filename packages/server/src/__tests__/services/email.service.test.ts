@@ -275,9 +275,10 @@ describe('sendFormNotificationEmail', () => {
 
     const cmd = SendRawEmailCommandMock.mock.calls[0][0];
     const rawMessage = Buffer.from(cmd.RawMessage.Data).toString('utf8');
+    const normalizedRawMessage = rawMessage.replace(/\r?\n/g, '');
 
     expect(rawMessage).toContain('To: forms@itatti.harvard.edu');
     expect(rawMessage).toContain('Content-Type: application/pdf');
-    expect(rawMessage).toContain(pdfBuffer.toString('base64'));
+    expect(normalizedRawMessage).toContain(pdfBuffer.toString('base64'));
   });
 });

@@ -6,13 +6,16 @@ const { Document, Page, Text, View, StyleSheet } = ReactPDF;
 
 /**
  * Canonical (label, value) pair that appears in the rendered form output.
- * Produced by {@link getVisibleFields}; consumed by the PDF renderer AND by
- * the parity test that compares PDF output to the web detail pane.
+ * Produced by {@link getVisibleFields}; consumed by archive/detail callers and
+ * by the parity test that compares server-side field formatting to the web
+ * detail pane.
  *
  * The parity test imports the web-side getVisibleFields (from
  * packages/web/src/lib/form-render.ts) against the same fixture+response and
- * asserts deep equality with the server-side output here. If the two drift,
- * the test fires with a clear diff instead of a subtle rendering mismatch.
+ * asserts deep equality with the server-side getVisibleFields output here.
+ * FormDocument renders from getVisiblePdfSections so it can collapse v2 legal
+ * address fields into one address block. Drift between getVisibleFields and
+ * getVisiblePdfSections is not caught by the existing parity test.
  */
 export interface VisibleField {
   name: string;
