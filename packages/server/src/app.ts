@@ -5,8 +5,10 @@ import pinoHttp from 'pino-http';
 import { logger } from './lib/logger.js';
 import { errorHandler } from './middleware/error.js';
 import { registerRoutes } from './routes/index.js';
+import { env } from './env.js';
 
 const app = express();
+const auth0Domain = env.PUBLIC_AUTH0_DOMAIN || process.env.VITE_AUTH0_DOMAIN || env.AUTH0_DOMAIN || 'harvard.eu.auth0.com';
 
 // Trust proxy — required behind cloudflared for correct client IP
 app.set('trust proxy', true);
@@ -20,8 +22,8 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'", "https://use.typekit.net", "https://p.typekit.net"],
       fontSrc: ["'self'", "https://use.typekit.net", "https://p.typekit.net"],
       imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", `https://${process.env.VITE_AUTH0_DOMAIN || 'harvard.eu.auth0.com'}`],
-      frameSrc: ["'self'", "https://challenges.cloudflare.com", `https://${process.env.VITE_AUTH0_DOMAIN || 'harvard.eu.auth0.com'}`],
+      connectSrc: ["'self'", `https://${auth0Domain}`],
+      frameSrc: ["'self'", "https://challenges.cloudflare.com", `https://${auth0Domain}`],
     },
   },
 }));

@@ -4,9 +4,8 @@ import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useClaims } from '@/api/claims';
 import type { VitIdClaim } from '@/api/claims';
+import { getCivicrmUrl } from '@/config/runtime';
 import { Search, ShieldCheck, Info, ExternalLink, AlertCircle } from 'lucide-react';
-
-const CIVICRM_URL = import.meta.env.VITE_CIVICRM_URL || '';
 
 type SortField = 'name' | 'email' | 'status' | 'claimedAt';
 type SortDir = 'asc' | 'desc';
@@ -179,6 +178,8 @@ export function ClaimLogPage() {
 }
 
 function ClaimRow({ claim }: { claim: VitIdClaim }) {
+  const civicrmUrl = getCivicrmUrl();
+
   return (
     <tr className="hover:bg-muted/30">
       <td className="py-3 px-1">
@@ -225,9 +226,9 @@ function ClaimRow({ claim }: { claim: VitIdClaim }) {
         {formatDateTime(claim.claimedAt)}
       </td>
       <td className="py-3 px-1">
-        {CIVICRM_URL && (
+        {civicrmUrl && (
           <a
-            href={`${CIVICRM_URL}/civicrm/contact/view?reset=1&cid=${claim.civicrmId}`}
+            href={`${civicrmUrl}/civicrm/contact/view?reset=1&cid=${claim.civicrmId}`}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-xs text-primary hover:underline"

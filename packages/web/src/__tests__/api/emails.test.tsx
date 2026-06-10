@@ -7,6 +7,7 @@ import { useEmailEvents, useEmailEventPreview, useTemplatePreview } from '@/api/
 // Mock the auth token provider
 vi.mock('@/api/client', () => ({
   useApiToken: () => async () => 'test-token',
+  apiUrl: (path: string) => path,
   apiFetch: vi.fn(),
 }));
 

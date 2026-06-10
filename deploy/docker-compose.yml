@@ -6,8 +6,7 @@ x-logging: &default-logging
 
 services:
   portal:
-    build:
-      context: .
+    image: ${IMAGE_NAME:?Set IMAGE_NAME}:${IMAGE_TAG:?Set IMAGE_TAG}
     env_file: .env
     environment:
       DATABASE_URL: postgresql://portal:${DB_PASSWORD}@db:5432/profile_portal

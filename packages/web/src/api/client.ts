@@ -1,7 +1,10 @@
 import { useAuth0 } from '@auth0/auth0-react';
 import { auth0Config } from '@/config/auth0';
+import { getApiBaseUrl } from '@/config/runtime';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+export function apiUrl(path: string) {
+  return `${getApiBaseUrl()}${path}`;
+}
 
 export async function apiFetch(
   path: string,
@@ -16,7 +19,7 @@ export async function apiFetch(
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetch(apiUrl(path), {
     ...fetchOptions,
     headers,
   });

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiFetch, useApiToken } from './client';
+import { apiFetch, apiUrl, useApiToken } from './client';
 import type {
   FellowsDashboardResponse,
   SendBioEmailReason,
@@ -12,8 +12,6 @@ export type {
   SendVitIdEmailReason,
   EmailPreviewReason,
 } from '@itatti/shared';
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 
 export function useFellowsDashboard(academicYear?: string) {
   const getToken = useApiToken();
@@ -64,7 +62,7 @@ export function useSendBioEmail() {
       // Use fetch directly so we can distinguish 400 {reason} (eligibility) from
       // 400 {error: 'invalid_request'} (malformed) and 500 errors. apiFetch
       // throws on any non-2xx and strips the body shape.
-      const res = await fetch(`${API_BASE}/api/admin/fellows/${contactId}/send-bio-email`, {
+      const res = await fetch(apiUrl(`/api/admin/fellows/${contactId}/send-bio-email`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -114,7 +112,7 @@ export function useSendVitIdEmail() {
     mutationFn: async ({ contactId, academicYear }) => {
       const token = await getToken();
       const res = await fetch(
-        `${API_BASE}/api/admin/fellows/${contactId}/send-vit-id-email`,
+        apiUrl(`/api/admin/fellows/${contactId}/send-vit-id-email`),
         {
           method: 'POST',
           headers: {
@@ -182,7 +180,7 @@ export function useEmailPreview(args: {
         academicYear: args.academicYear as string,
       });
       const res = await fetch(
-        `${API_BASE}/api/admin/fellows/${args.contactId}/email-preview?${qs.toString()}`,
+        apiUrl(`/api/admin/fellows/${args.contactId}/email-preview?${qs.toString()}`),
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (!res.ok) {

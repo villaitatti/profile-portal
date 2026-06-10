@@ -2,6 +2,7 @@ import type { Express } from 'express';
 import express from 'express';
 import { KnownRoles } from '@itatti/shared';
 import { healthRoutes } from './health.routes.js';
+import { configRoutes } from './config.routes.js';
 import { applicationsRoutes } from './applications.routes.js';
 import { uploadsRoutes, uploadsErrorHandler } from './uploads.routes.js';
 import { ensureUploadsDir, getUploadsDir } from '../services/image-upload.service.js';
@@ -39,6 +40,7 @@ export async function registerRoutes(app: Express) {
 
   // Public routes (no auth required)
   app.use('/api/health', healthRoutes);
+  app.use('/api/config', configRoutes);
   app.use('/api/claim', claimRoutes);
   app.use('/api/help', helpRoutes);
   app.use('/api/forms', formsPublicRoutes);

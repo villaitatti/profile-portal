@@ -1,0 +1,73 @@
+name: Deploy production
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: "Version tag to deploy, for example v1.1.0"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: ${{ vars.IMAGE_NAME || 'ghcr.io/villaitatti/profile-portal' }}
+
+jobs:
+  deploy:
+    name: Deploy selected version to production VM
+    runs-on:
+      group: itatti-it-deploy
+      labels: [self-hosted, linux, x64, itatti-it-deploy]
+    environment: production
+    env:
+      IMAGE_TAG: ${{ inputs.version_tag }}
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+      DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+      HEALTHCHECK_URL: ${{ vars.HEALTHCHECK_URL }}
+      COMPOSE_PROJECT_NAME: profile-portal
+      CREATE_BACKUP: "true"
+      BACKUP_DIR: ${{ vars.BACKUP_DIR || '/opt/profile-portal/backups' }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.version_tag }}
+          persist-credentials: false
+
+      - name: Validate production tag format
+        run: |
+          case "$IMAGE_TAG" in
+            v[0-9]*.[0-9]*.[0-9]*) ;;
+            *)
+              echo "version_tag must look like v1.1.0"
+              exit 1
+              ;;
+          esac
+
+      - name: Configure SSH
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/profile_portal_deploy
+          chmod 600 ~/.ssh/profile_portal_deploy
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy image
+        env:
+          SSH_KEY_PATH: ~/.ssh/profile_portal_deploy
+          SSH_KNOWN_HOSTS_FILE: ~/.ssh/known_hosts
+          REGISTRY_USERNAME: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: scripts/deploy-image.sh
+
+      - name: Check production health endpoint
+        if: ${{ env.HEALTHCHECK_URL != '' }}
+        run: curl -fsS "$HEALTHCHECK_URL"

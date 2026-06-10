@@ -23,6 +23,7 @@ import {
   type EmailPreviewType,
 } from '@/api/fellows';
 import { useGenerateFormInvitation, useMarkNominationSent } from '@/api/forms';
+import { getCivicrmUrl } from '@/config/runtime';
 import { getCurrentAcademicYear } from './utils/academic-year';
 import {
   Users,
@@ -52,8 +53,6 @@ import type {
   FormInvitationSummaryEntry,
 } from '@itatti/shared';
 import { getFormsForAppointmentType } from '@itatti/shared';
-
-const CIVICRM_URL = import.meta.env.VITE_CIVICRM_URL || '';
 
 type FilterTab = 'all' | AppointmentCategory;
 
@@ -1280,6 +1279,7 @@ function FellowActionsMenu({
   onNominationSentClick: (invitation: FormInvitationSummaryEntry) => void;
 }) {
   const formInvitation = getFormInvitation(fellow);
+  const civicrmUrl = getCivicrmUrl();
   const canMarkNominationSent =
     !!formInvitation &&
     formInvitation.status === 'pending' &&
@@ -1378,12 +1378,12 @@ function FellowActionsMenu({
             </DropdownMenu.Item>
           )}
 
-          {CIVICRM_URL && (
+          {civicrmUrl && (
             <>
               <DropdownMenu.Separator className="my-1 h-px bg-border" />
               <DropdownMenu.Item asChild>
                 <a
-                  href={`${CIVICRM_URL}/civicrm/contact/view?reset=1&cid=${fellow.civicrmId}`}
+                  href={`${civicrmUrl}/civicrm/contact/view?reset=1&cid=${fellow.civicrmId}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-primary outline-none transition-colors focus:bg-muted"

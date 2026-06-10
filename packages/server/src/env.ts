@@ -32,6 +32,18 @@ const envSchema = z.object({
   AUTH0_DOMAIN: requiredStr,
   AUTH0_AUDIENCE: requiredStr,
 
+  // Browser runtime config. These values are exposed by GET /api/config and
+  // must not contain secrets. They let one Docker image run in dev and prod
+  // with environment-specific settings supplied at container runtime.
+  PUBLIC_AUTH0_DOMAIN: z.string().optional(),
+  PUBLIC_AUTH0_CLIENT_ID: z.string().optional(),
+  PUBLIC_AUTH0_AUDIENCE: z.string().optional(),
+  PUBLIC_AUTH0_CALLBACK_URL: z.string().url().or(z.literal('')).optional(),
+  PUBLIC_AUTH0_NAMESPACE: z.string().optional(),
+  PUBLIC_API_BASE_URL: z.string().optional(),
+  PUBLIC_CIVICRM_URL: z.string().url().or(z.literal('')).optional(),
+  PUBLIC_DEV_SKIP_AUTH: booleanFlag(),
+
   // Auth0 - Management API (M2M)
   AUTH0_M2M_CLIENT_ID: requiredStr,
   AUTH0_M2M_CLIENT_SECRET: requiredStr,

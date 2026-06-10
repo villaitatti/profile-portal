@@ -5,7 +5,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { useEmailEvents, useEmailEventPreview, useTemplatePreview } from '@/api/emails';
-import { useApiToken } from '@/api/client';
+import { apiUrl, useApiToken } from '@/api/client';
 import type { EmailEvent, EmailEventsResponse } from '@/api/emails';
 import {
   Mail,
@@ -160,7 +160,7 @@ function SentEmailsTab() {
     setLoadingMore(true);
     try {
       const token = await getToken();
-      const url = new URL(`${import.meta.env.VITE_API_BASE_URL || ''}/api/admin/emails`, window.location.origin);
+      const url = new URL(apiUrl('/api/admin/emails'), window.location.origin);
       url.searchParams.set('limit', '100');
       url.searchParams.set('cursor', nextCursor);
       if (yearFilter !== 'all') url.searchParams.set('year', yearFilter);

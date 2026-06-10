@@ -1,8 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiFetch, useApiToken } from './client';
+import { apiFetch, apiUrl, useApiToken } from './client';
 import type { FormDef, FormResponseData } from '@itatti/shared';
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 
 export interface PublicFormData {
   id: string;
@@ -17,7 +15,7 @@ export function usePublicForm(token: string) {
   return useQuery({
     queryKey: ['public-form', token],
     queryFn: async () => {
-      const res = await fetch(`${API_BASE}/api/forms/${token}`);
+      const res = await fetch(apiUrl(`/api/forms/${token}`));
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: 'Unknown error' }));
         throw new Error(body.error || 'Failed to load form');
@@ -33,7 +31,7 @@ export function useSubmitForm(token: string) {
 
   return useMutation({
     mutationFn: async (data: Record<string, unknown>) => {
-      const res = await fetch(`${API_BASE}/api/forms/${token}`, {
+      const res = await fetch(apiUrl(`/api/forms/${token}`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -197,4 +195,3 @@ export function useResetFormInvitation() {
     },
   });
 }
-

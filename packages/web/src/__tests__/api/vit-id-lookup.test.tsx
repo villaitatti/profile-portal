@@ -12,6 +12,7 @@ const { mockApiFetch, mockGetToken } = vi.hoisted(() => ({
 
 vi.mock('@/api/client', () => ({
   apiFetch: mockApiFetch,
+  apiUrl: (path: string) => path,
   useApiToken: () => mockGetToken,
 }));
 

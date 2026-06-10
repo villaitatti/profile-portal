@@ -8,6 +8,7 @@ import { apiFetch } from '@/api/client';
 
 vi.mock('@/api/client', () => ({
   useApiToken: () => async () => 'test-token',
+  apiUrl: (path: string) => path,
   apiFetch: vi.fn(),
 }));
 

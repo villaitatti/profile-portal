@@ -1,6 +1,4 @@
-import { useApiToken } from './client';
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+import { apiUrl, useApiToken } from './client';
 
 export async function uploadImage(
   file: Blob,
@@ -9,7 +7,7 @@ export async function uploadImage(
   const formData = new FormData();
   formData.append('image', file);
 
-  const response = await fetch(`${API_BASE}/api/admin/uploads/images`, {
+  const response = await fetch(apiUrl('/api/admin/uploads/images'), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
