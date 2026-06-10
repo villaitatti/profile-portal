@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Download, FileText, Inbox } from 'lucide-react';
+import { Download, FileText, Inbox, Landmark } from 'lucide-react';
 import { useFormInvitations, useFormResponse, useFormRegistry } from '@/api/forms';
 import { useDownloadFormPdf } from '@/hooks/useDownloadFormPdf';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -28,7 +28,7 @@ import type { FormDef } from '@itatti/shared';
 // │   List pane (roving tabindex, ul/li)  ◀──▶  Detail pane (getVisibleSections)│
 // │          │                                         │                       │
 // │          │                                         ▼                       │
-// │          └── [↓ PDF] ──────────────▶  useDownloadFormPdf (bearer blob)     │
+// │          └── [PDF kind] ───────────▶  useDownloadFormPdf (bearer blob)     │
 // │                                                                            │
 // │  Special states:                                                           │
 // │   - contactName === null   → render "Contact #<id>" (CiviCRM-down)         │
@@ -451,7 +451,7 @@ function SubmissionList({ items, selectedId, onSelect }: SubmissionListProps) {
                   : inv.academicYear}
               </div>
             </div>
-            <PdfButton invitation={inv} variant="icon" />
+            <PdfButtons invitation={inv} variant="icon" />
           </div>
         </li>
       ))}
@@ -498,7 +498,7 @@ function DetailPane({ invitation }: { invitation: AdminFormInvitation | null }) 
             </div>
           )}
         </div>
-        <PdfButton invitation={invitation} variant="button" />
+        <PdfButtons invitation={invitation} variant="button" />
       </div>
 
       {retired ? (
@@ -570,7 +570,12 @@ function DetailFields({
 // PDF button
 // ──────────────────────────────────────────────────────────────────────────
 
-function PdfButton({
+const PDF_DOWNLOADS = [
+  { kind: 'memorandum' as const, label: 'Memorandum', icon: FileText },
+  { kind: 'grants-resources' as const, label: 'Grants & Resources', icon: Landmark },
+];
+
+function PdfButtons({
   invitation,
   variant,
 }: {
@@ -579,55 +584,77 @@ function PdfButton({
 }) {
   const download = useDownloadFormPdf();
   const retired = isRetiredFormTitle(invitation.formTitle);
-  const label = `Download PDF for ${displayName(invitation)}, ${invitation.formTitle}`;
-
-  const onClick = (e: React.MouseEvent) => {
-    e.stopPropagation(); // clicking PDF in a list row must NOT select the row
-    if (retired) return;
-    void download({
-      invitationId: invitation.id,
-      contactName: invitation.contactName,
-      formTitle: invitation.formTitle,
-    });
-  };
 
   if (variant === 'icon') {
     return (
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={retired}
-        aria-label={label}
-        title={retired ? 'PDF unavailable for retired forms' : 'Download PDF'}
-        className={cn(
-          // p-2 gives 32px on fine pointers; pointer-coarse:p-4 bumps to 48px
-          // so touch users clear WCAG 2.5.5 Target Size (AAA) without
-          // affecting desktop density. Icon itself is 16px.
-          'shrink-0 rounded p-2 pointer-coarse:p-4 text-muted-foreground hover:bg-accent-foreground/10 hover:text-foreground',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-          retired && 'cursor-not-allowed opacity-40'
-        )}
-      >
-        <Download className="h-4 w-4" />
-      </button>
+      <div className="flex shrink-0 items-center gap-1">
+        {PDF_DOWNLOADS.map((pdf) => {
+          const Icon = pdf.icon;
+          return (
+            <button
+              key={pdf.kind}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation(); // clicking PDF in a list row must NOT select the row
+                if (retired) return;
+                void download({
+                  invitationId: invitation.id,
+                  pdfKind: pdf.kind,
+                  pdfLabel: pdf.label,
+                  contactName: invitation.contactName,
+                  formTitle: invitation.formTitle,
+                });
+              }}
+              disabled={retired}
+              aria-label={`Download ${pdf.label} PDF for ${displayName(invitation)}, ${invitation.formTitle}`}
+              title={retired ? 'PDF unavailable for retired forms' : `Download ${pdf.label} PDF`}
+              className={cn(
+                // p-2 gives 32px on fine pointers; pointer-coarse:p-4 bumps to 48px
+                // so touch users clear WCAG 2.5.5 Target Size (AAA) without
+                // affecting desktop density. Icon itself is 16px.
+                'shrink-0 rounded p-2 pointer-coarse:p-4 text-muted-foreground hover:bg-accent-foreground/10 hover:text-foreground',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                retired && 'cursor-not-allowed opacity-40'
+              )}
+            >
+              <Icon className="h-4 w-4" />
+            </button>
+          );
+        })}
+      </div>
     );
   }
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={retired}
-      aria-label={label}
-      className={cn(
-        'inline-flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium',
-        'hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-        retired && 'cursor-not-allowed opacity-50'
-      )}
-    >
-      <Download className="h-4 w-4" />
-      Download PDF
-    </button>
+    <div className="flex shrink-0 flex-wrap justify-end gap-2">
+      {PDF_DOWNLOADS.map((pdf) => (
+        <button
+          key={pdf.kind}
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (retired) return;
+            void download({
+              invitationId: invitation.id,
+              pdfKind: pdf.kind,
+              pdfLabel: pdf.label,
+              contactName: invitation.contactName,
+              formTitle: invitation.formTitle,
+            });
+          }}
+          disabled={retired}
+          aria-label={`Download ${pdf.label} PDF for ${displayName(invitation)}, ${invitation.formTitle}`}
+          className={cn(
+            'inline-flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium',
+            'hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+            retired && 'cursor-not-allowed opacity-50'
+          )}
+        >
+          <Download className="h-4 w-4" />
+          {pdf.label} PDF
+        </button>
+      ))}
+    </div>
   );
 }
 

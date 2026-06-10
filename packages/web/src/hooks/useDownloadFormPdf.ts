@@ -14,6 +14,8 @@ function sanitizeFilename(stem: string): string {
 
 export interface DownloadFormPdfArgs {
   invitationId: string;
+  pdfKind: 'memorandum' | 'grants-resources';
+  pdfLabel: string;
   /** Display name used as the base for the downloaded filename. */
   contactName: string | null;
   /** Form title used alongside contactName in the filename. */
@@ -33,11 +35,11 @@ export function useDownloadFormPdf() {
   const getToken = useApiToken();
 
   return useCallback(
-    async ({ invitationId, contactName, formTitle }: DownloadFormPdfArgs) => {
+    async ({ invitationId, pdfKind, pdfLabel, contactName, formTitle }: DownloadFormPdfArgs) => {
       let url: string | null = null;
       try {
         const token = await getToken();
-        const res = await apiFetch(`/api/admin/forms/response/${invitationId}/pdf`, {
+        const res = await apiFetch(`/api/admin/forms/response/${invitationId}/pdf/${pdfKind}`, {
           token,
         });
         const blob = await res.blob();
@@ -45,7 +47,7 @@ export function useDownloadFormPdf() {
         const a = document.createElement('a');
         a.href = url;
         const stem = sanitizeFilename(
-          `${contactName ?? `contact_${invitationId.slice(0, 8)}`}_${formTitle}`
+          `${contactName ?? `contact_${invitationId.slice(0, 8)}`}_${formTitle}_${pdfLabel}`
         );
         a.download = `${stem || 'form-response'}.pdf`;
         document.body.appendChild(a);

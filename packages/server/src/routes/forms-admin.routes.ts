@@ -1,11 +1,15 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { FORM_REGISTRY, getFormDef } from '@itatti/shared';
+import { FORM_REGISTRY, getFormDef, type FormPdfKind } from '@itatti/shared';
 import { validate } from '../middleware/validate.js';
 import { prisma } from '../lib/prisma.js';
 import * as formService from '../services/form-invitation.service.js';
 import * as civicrmService from '../services/civicrm.service.js';
-import { generateFormPdf } from '../services/form-pdf.service.js';
+import {
+  FORM_PDF_KINDS,
+  generateFormPdf,
+  type FormPdfMetadata,
+} from '../services/form-pdf.service.js';
 import { isDevMode } from '../env.js';
 import { logger } from '../lib/logger.js';
 
@@ -73,6 +77,10 @@ const generateSchema = z.object({
 const resetSchema = z.object({
   invitationId: z.string().min(1),
 });
+
+const pdfKindSchema = z.enum(
+  FORM_PDF_KINDS.map(({ kind }) => kind) as [FormPdfKind, ...FormPdfKind[]]
+);
 
 const nominationSentSchema = z.object({
   nominationSentOn: z
@@ -226,7 +234,14 @@ router.get('/response/:invitationId', async (req, res) => {
   res.json({ id: response.id, data: response.data, createdAt: response.createdAt.toISOString() });
 });
 
-router.get('/response/:invitationId/pdf', async (req, res) => {
+router.get('/response/:invitationId/pdf/:pdfKind', async (req, res) => {
+  const parsedKind = pdfKindSchema.safeParse(req.params.pdfKind);
+  if (!parsedKind.success) {
+    res.status(400).json({ error: 'Invalid PDF kind' });
+    return;
+  }
+  const pdfKind = parsedKind.data as FormPdfKind;
+
   const invitation = await prisma.formInvitation.findUnique({
     where: { id: req.params.invitationId },
     include: { response: true },
@@ -243,12 +258,66 @@ router.get('/response/:invitationId/pdf', async (req, res) => {
     return;
   }
 
-  const pdfBuffer = await generateFormPdf(formDef, invitation.response.data as Record<string, unknown>);
-  const filename = `${formDef.title.replace(/[^a-zA-Z0-9]/g, '_')}_${invitation.contactId}.pdf`;
+  const responseData = invitation.response.data as Record<string, unknown>;
+  const metadata = await buildPdfMetadata(invitation, responseData);
+  const pdfBuffer = await generateFormPdf(formDef, responseData, {
+    kind: pdfKind,
+    metadata,
+  });
+  const label = FORM_PDF_KINDS.find((item) => item.kind === pdfKind)?.label ?? pdfKind;
+  const filename = `${sanitizeFilename(formDef.title)}_${sanitizeFilename(label)}_${invitation.contactId}.pdf`;
 
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   res.send(pdfBuffer);
 });
+
+async function buildPdfMetadata(
+  invitation: {
+    fellowshipId: number;
+    contactId: number;
+    academicYear: string;
+  },
+  responseData: Record<string, unknown>
+): Promise<FormPdfMetadata> {
+  let civiName: string | null = null;
+  let fellowshipType: string | null = null;
+  let appointment: string | null = null;
+
+  try {
+    const fellow = await civicrmService.getFellowWithContact(
+      invitation.fellowshipId,
+      invitation.contactId
+    );
+    if (fellow) {
+      civiName = [fellow.firstName, fellow.lastName].filter(Boolean).join(' ').trim() || null;
+      fellowshipType = fellow.fellowship ?? null;
+      appointment = fellow.appointment ?? null;
+    }
+  } catch (err) {
+    logger.warn(
+      { err, fellowshipId: invitation.fellowshipId, contactId: invitation.contactId },
+      'forms_admin_pdf_metadata_civicrm_failed'
+    );
+  }
+
+  return {
+    appointeeName: responseName(responseData) ?? civiName,
+    academicYear: invitation.academicYear,
+    fellowshipType,
+    appointment,
+  };
+}
+
+function responseName(data: Record<string, unknown>): string | null {
+  const givenName = typeof data.givenName === 'string' ? data.givenName.trim() : '';
+  const surname = typeof data.surname === 'string' ? data.surname.trim() : '';
+  const fullName = [givenName, surname].filter(Boolean).join(' ').trim();
+  return fullName || null;
+}
+
+function sanitizeFilename(value: string): string {
+  return value.replace(/[^a-zA-Z0-9]/g, '_').replace(/^_+|_+$/g, '') || 'form';
+}
 
 export { router as formsAdminRoutes };

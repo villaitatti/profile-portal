@@ -10,7 +10,7 @@ type FormNotificationHandler = (jobs: FormNotificationJob[]) => Promise<void>;
 const {
   bossSend,
   bossWork,
-  generateFormPdfMock,
+  generateFormPdfAttachmentsMock,
   getFellowWithContactMock,
   loggerMock,
   mockPrisma,
@@ -27,7 +27,7 @@ const {
       workerState.handler = handler;
       return Promise.resolve();
     }),
-    generateFormPdfMock: vi.fn(),
+    generateFormPdfAttachmentsMock: vi.fn(),
     getFellowWithContactMock: vi.fn(),
     loggerMock: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
     mockPrisma: {
@@ -46,7 +46,7 @@ vi.mock('../../lib/job-queue.js', () => ({
 }));
 
 vi.mock('../../services/form-pdf.service.js', () => ({
-  generateFormPdf: generateFormPdfMock,
+  generateFormPdfAttachments: generateFormPdfAttachmentsMock,
 }));
 
 vi.mock('../../services/email.service.js', () => ({
@@ -77,7 +77,7 @@ describe('form notification worker', () => {
     });
   });
 
-  it('generates the notification PDF from the submitted v2 form definition and sends it as the email attachment', async () => {
+  it('generates split notification PDFs from the submitted v2 form definition and sends them as email attachments', async () => {
     const responseData = {
       givenName: 'Maria',
       surname: 'Bianchi',
@@ -96,7 +96,14 @@ describe('form notification worker', () => {
       emergencyEmail: 'luca@example.com',
       resources: 'University leave letter attached.',
     };
-    const pdfBuffer = Buffer.from('generated-v2-form-pdf');
+    const pdfAttachments = [
+      { kind: 'memorandum', label: 'Memorandum', buffer: Buffer.from('memorandum-pdf') },
+      {
+        kind: 'grants-resources',
+        label: 'Grants & Resources',
+        buffer: Buffer.from('grants-pdf'),
+      },
+    ];
 
     mockPrisma.formInvitation.findUnique.mockResolvedValue({
       id: 'inv_1',
@@ -109,10 +116,12 @@ describe('form notification worker', () => {
         data: responseData,
       },
     });
-    generateFormPdfMock.mockResolvedValue(pdfBuffer);
+    generateFormPdfAttachmentsMock.mockResolvedValue(pdfAttachments);
     getFellowWithContactMock.mockResolvedValue({
       firstName: 'Maria',
       lastName: 'Bianchi',
+      fellowship: 'Fellow',
+      appointment: 'Research Fellow',
     });
     sendFormNotificationEmailMock.mockResolvedValue(undefined);
 
@@ -123,7 +132,7 @@ describe('form notification worker', () => {
       { id: 'job_1', data: { invitationId: 'inv_1', responseId: 'resp_1' } },
     ]);
 
-    expect(generateFormPdfMock).toHaveBeenCalledWith(
+    expect(generateFormPdfAttachmentsMock).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'fellow-memorandum-v2' }),
       expect.objectContaining({
         legalStreetAddress: 'Via di Vincigliata 26',
@@ -131,7 +140,13 @@ describe('form notification worker', () => {
         legalPostalCode: '50135',
         legalStateProvince: 'FI',
         legalCountry: 'Italy',
-      })
+      }),
+      {
+        appointeeName: 'Maria Bianchi',
+        academicYear: '2026-2027',
+        fellowshipType: 'Fellow',
+        appointment: 'Research Fellow',
+      }
     );
     expect(sendFormNotificationEmailMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -139,7 +154,7 @@ describe('form notification worker', () => {
         fellowshipId: 123,
         contactId: 456,
         academicYear: '2026-2027',
-        pdfBuffer,
+        pdfAttachments,
         responseData: expect.objectContaining({
           legalStreetAddress: 'Via di Vincigliata 26',
           legalCity: 'Florence',

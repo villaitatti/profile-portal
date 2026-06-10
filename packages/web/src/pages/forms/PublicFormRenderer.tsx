@@ -7,7 +7,9 @@ import {
   Landmark,
   LifeBuoy,
   MapPin,
+  Plus,
   Send,
+  Trash2,
   User,
   Users,
 } from 'lucide-react';
@@ -22,6 +24,9 @@ interface PublicFormRendererProps {
   isSuccess: boolean;
 }
 
+type RepeatableItem = Record<string, string | boolean>;
+type FormValue = string | boolean | RepeatableItem[];
+
 export function PublicFormRenderer({
   formDef,
   onSubmit,
@@ -29,7 +34,7 @@ export function PublicFormRenderer({
   submitError,
   isSuccess,
 }: PublicFormRendererProps) {
-  const [values, setValues] = useState<Record<string, string | boolean>>({});
+  const [values, setValues] = useState<Record<string, FormValue>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   if (isSuccess) {
@@ -46,15 +51,16 @@ export function PublicFormRenderer({
     );
   }
 
-  function handleChange(name: string, value: string | boolean) {
+  function handleChange(name: string, value: FormValue) {
     setValues((prev) => ({ ...prev, [name]: value }));
-    if (errors[name]) {
-      setErrors((prev) => {
-        const next = { ...prev };
-        delete next[name];
-        return next;
-      });
-    }
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next[name];
+      for (const key of Object.keys(next)) {
+        if (key.startsWith(`${name}.`)) delete next[key];
+      }
+      return next;
+    });
   }
 
   function isFieldVisible(field: FormFieldDef): boolean {
@@ -67,6 +73,26 @@ export function PublicFormRenderer({
     for (const section of formDef.sections) {
       for (const field of section.fields) {
         if (!isFieldVisible(field)) continue;
+        if (field.type === 'subheader') continue;
+        if (field.type === 'repeatable-group') {
+          const items = values[field.name];
+          const rows = Array.isArray(items) ? items : [];
+          if (field.required && rows.length === 0) {
+            newErrors[field.name] = 'This field is required';
+          }
+          rows.forEach((row, rowIndex) => {
+            for (const childField of field.fields ?? []) {
+              if (childField.type === 'subheader') continue;
+              if (!childField.required) continue;
+              const childValue = row[childField.name];
+              if (childValue === undefined || childValue === '' || childValue === false) {
+                newErrors[`${field.name}.${rowIndex}.${childField.name}`] =
+                  'This field is required';
+              }
+            }
+          });
+          continue;
+        }
         if (field.required) {
           const v = values[field.name];
           if (v === undefined || v === '' || v === false) {
@@ -92,14 +118,14 @@ export function PublicFormRenderer({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-7" noValidate>
+    <form onSubmit={handleSubmit} className="space-y-8" noValidate>
       {formDef.sections.map((section, si) => (
         <section
           key={si}
           className="overflow-hidden rounded-lg border bg-card shadow-sm"
           aria-labelledby={`form-section-${si}`}
         >
-          <div className="flex items-start gap-3 border-b bg-secondary/55 px-5 py-4 sm:px-6">
+          <div className="flex items-start gap-3 border-b bg-secondary/55 px-5 py-5 sm:px-7">
             <SectionIcon icon={section.icon} />
             <div>
               <h2 id={`form-section-${si}`} className="text-lg font-semibold tracking-tight">
@@ -113,13 +139,14 @@ export function PublicFormRenderer({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-x-5 gap-y-5 p-5 sm:grid-cols-12 sm:p-6">
+          <div className="grid grid-cols-1 gap-x-6 gap-y-7 p-5 sm:grid-cols-12 sm:p-7">
             {section.fields.filter(isFieldVisible).map((field) => (
               <FieldRenderer
                 key={field.name}
                 field={field}
                 value={values[field.name]}
                 error={errors[field.name]}
+                errors={errors}
                 onChange={(v) => handleChange(field.name, v)}
               />
             ))}
@@ -172,7 +199,11 @@ function SectionIcon({ icon }: { icon?: FormSectionIcon }) {
 function fieldLayoutClass(field: FormFieldDef): string {
   const layout =
     field.layout ??
-    (field.type === 'textarea' || field.type === 'radio' || field.type === 'checkbox'
+    (field.type === 'textarea' ||
+      field.type === 'radio' ||
+      field.type === 'checkbox' ||
+      field.type === 'subheader' ||
+      field.type === 'repeatable-group'
       ? 'full'
       : 'half');
 
@@ -193,12 +224,14 @@ function FieldRenderer({
   field,
   value,
   error,
+  errors,
   onChange,
 }: {
   field: FormFieldDef;
-  value: string | boolean | undefined;
+  value: FormValue | undefined;
   error?: string;
-  onChange: (value: string | boolean) => void;
+  errors: Record<string, string>;
+  onChange: (value: FormValue) => void;
 }) {
   const reactId = useId();
   const fieldId = `${reactId}-${field.name}`;
@@ -211,8 +244,37 @@ function FieldRenderer({
   const labelClass = 'mb-1.5 block text-sm font-semibold text-foreground';
   const showSearchableSelect = field.type === 'select' && (field.options?.length ?? 0) > 20;
 
+  if (field.type === 'subheader') {
+    return (
+      <div className={cn(fieldLayoutClass(field), 'min-w-0 pt-1')}>
+        <h3 className="border-b border-border/70 pb-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
+          {field.label}
+        </h3>
+      </div>
+    );
+  }
+
+  if (field.type === 'repeatable-group') {
+    return (
+      <RepeatableGroupRenderer
+        field={field}
+        value={Array.isArray(value) ? value : []}
+        error={error}
+        errors={errors}
+        onChange={onChange}
+      />
+    );
+  }
+
   return (
-    <div className={cn(fieldLayoutClass(field), 'min-w-0')}>
+    <div
+      className={cn(
+        fieldLayoutClass(field),
+        'min-w-0',
+        field.conditionalOn &&
+          'rounded-md border-l-2 border-primary/35 bg-primary/[0.03] py-2 pl-4 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1 motion-safe:duration-200'
+      )}
+    >
       {field.type === 'radio' ? (
         <fieldset aria-describedby={describedBy} aria-invalid={!!error}>
           <legend id={labelId} className={labelClass}>
@@ -379,6 +441,202 @@ function FieldRenderer({
       )}
     </div>
   );
+}
+
+function RepeatableGroupRenderer({
+  field,
+  value,
+  error,
+  errors,
+  onChange,
+}: {
+  field: FormFieldDef;
+  value: RepeatableItem[];
+  error?: string;
+  errors: Record<string, string>;
+  onChange: (value: FormValue) => void;
+}) {
+  const reactId = useId();
+  const groupId = `${reactId}-${field.name}`;
+  const childFields = field.fields ?? [];
+  const emptyMessage = repeatableGroupEmptyMessage(field);
+  const baseInputClass =
+    'w-full rounded-md border border-input bg-background px-3.5 py-2.5 text-[0.95rem] ring-offset-background transition-colors placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50';
+  const labelClass = 'mb-1.5 block text-sm font-semibold text-foreground';
+
+  function emptyItem(): RepeatableItem {
+    return Object.fromEntries(
+      childFields
+        .filter((childField) => childField.type !== 'subheader')
+        .map((childField) => [childField.name, ''])
+    );
+  }
+
+  function updateItem(index: number, childName: string, childValue: string | boolean) {
+    onChange(
+      value.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, [childName]: childValue } : item
+      )
+    );
+  }
+
+  return (
+    <div className={cn(fieldLayoutClass(field), 'min-w-0')}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h4 id={groupId} className={labelClass}>
+            {field.label}
+            {field.required && <RequiredMark />}
+          </h4>
+          {field.helpText && (
+            <p className="text-sm leading-5 text-muted-foreground">{field.helpText}</p>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => onChange([...value, emptyItem()])}
+          className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        >
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          {field.addLabel ?? 'Add entry'}
+        </button>
+      </div>
+
+      {value.length === 0 ? (
+        <p className="mt-3 text-sm text-muted-foreground">{emptyMessage}</p>
+      ) : (
+        <div className="mt-4 space-y-5" aria-labelledby={groupId}>
+          {value.map((item, index) => (
+            <div
+              key={index}
+              className="border-l-2 border-primary/25 pl-4 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1 motion-safe:duration-200"
+            >
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="text-sm font-semibold text-foreground">
+                  {field.itemLabel ?? 'Entry'} {index + 1}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onChange(value.filter((_, itemIndex) => itemIndex !== index))}
+                  className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  aria-label={`Remove ${(field.itemLabel ?? 'entry').toLowerCase()} ${index + 1}`}
+                >
+                  <Trash2 className="h-4 w-4" aria-hidden="true" />
+                  Remove
+                </button>
+              </div>
+              <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-12">
+                {childFields
+                  .filter((childField) => childField.type !== 'subheader')
+                  .map((childField) => {
+                    const childId = `${groupId}-${index}-${childField.name}`;
+                    const childError = errors[`${field.name}.${index}.${childField.name}`];
+                    const childHelpId = childField.helpText ? `${childId}-help` : undefined;
+                    const childErrorId = childError ? `${childId}-error` : undefined;
+                    const describedBy = [childHelpId, childErrorId].filter(Boolean).join(' ') || undefined;
+
+                    return (
+                      <div key={childField.name} className={cn(fieldLayoutClass(childField), 'min-w-0')}>
+                        <label htmlFor={childId} className={labelClass}>
+                          {childField.label}
+                          {childField.required && <RequiredMark />}
+                        </label>
+                        {childField.helpText && (
+                          <p id={childHelpId} className="mb-1.5 text-sm leading-5 text-muted-foreground">
+                            {childField.helpText}
+                          </p>
+                        )}
+                        {childField.type === 'textarea' ? (
+                          <textarea
+                            id={childId}
+                            value={String(item[childField.name] ?? '')}
+                            onChange={(e) => updateItem(index, childField.name, e.target.value)}
+                            placeholder={childField.placeholder}
+                            maxLength={childField.maxLength}
+                            required={childField.required}
+                            rows={3}
+                            aria-describedby={describedBy}
+                            aria-invalid={!!childError}
+                            className={cn(
+                              baseInputClass,
+                              'min-h-28 resize-y',
+                              childError &&
+                                'border-destructive focus:border-destructive focus:ring-destructive/20'
+                            )}
+                          />
+                        ) : childField.type === 'select' ? (
+                          <select
+                            id={childId}
+                            value={String(item[childField.name] ?? '')}
+                            onChange={(e) => updateItem(index, childField.name, e.target.value)}
+                            required={childField.required}
+                            aria-describedby={describedBy}
+                            aria-invalid={!!childError}
+                            className={cn(
+                              baseInputClass,
+                              childError &&
+                                'border-destructive focus:border-destructive focus:ring-destructive/20'
+                            )}
+                          >
+                            <option value="">{childField.placeholder || 'Select...'}</option>
+                            {childField.options?.map((opt) => (
+                              <option key={opt} value={opt}>
+                                {opt}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            id={childId}
+                            type={
+                              childField.type === 'email'
+                                ? 'email'
+                                : childField.type === 'date'
+                                  ? 'date'
+                                  : 'text'
+                            }
+                            value={String(item[childField.name] ?? '')}
+                            onChange={(e) => updateItem(index, childField.name, e.target.value)}
+                            placeholder={childField.placeholder}
+                            maxLength={childField.maxLength}
+                            autoComplete={childField.autoComplete}
+                            required={childField.required}
+                            aria-describedby={describedBy}
+                            aria-invalid={!!childError}
+                            className={cn(
+                              baseInputClass,
+                              childError &&
+                                'border-destructive focus:border-destructive focus:ring-destructive/20'
+                            )}
+                          />
+                        )}
+                        {childError && (
+                          <p id={childErrorId} className="mt-1.5 text-xs font-medium text-destructive">
+                            {childError}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {error && (
+        <p className="mt-2 text-xs font-medium text-destructive">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function repeatableGroupEmptyMessage(field: FormFieldDef): string {
+  const label = (field.label || field.name).trim();
+  if (!label) return 'No items added.';
+  return `No ${label.toLowerCase()} added.`;
 }
 
 function RequiredMark() {

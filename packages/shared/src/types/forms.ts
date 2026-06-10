@@ -5,7 +5,9 @@ export type FormFieldType =
   | 'date'
   | 'select'
   | 'radio'
-  | 'checkbox';
+  | 'checkbox'
+  | 'subheader'
+  | 'repeatable-group';
 
 export type FormFieldLayout = 'full' | 'half' | 'third' | 'two-thirds';
 
@@ -15,6 +17,8 @@ export type FormSectionIcon =
   | 'users'
   | 'life-buoy'
   | 'landmark';
+
+export type FormPdfKind = 'memorandum' | 'grants-resources';
 
 export interface FormFieldDef {
   name: string;
@@ -28,6 +32,9 @@ export interface FormFieldDef {
   layout?: FormFieldLayout;
   autoComplete?: string;
   conditionalOn?: { field: string; value: string };
+  fields?: FormFieldDef[];
+  addLabel?: string;
+  itemLabel?: string;
 }
 
 export interface FormSectionDef {
@@ -42,6 +49,7 @@ export interface FormDef {
   title: string;
   description?: string;
   active?: boolean;
+  pdfKinds?: FormPdfKind[];
   appointmentTypes: string[];
   sections: FormSectionDef[];
 }
@@ -59,6 +67,14 @@ export interface FormInvitationSummary {
   createdAt: string;
 }
 
+export type FormResponseScalar = string | boolean | null;
+
+export interface FormResponseGroupItem {
+  [fieldName: string]: FormResponseScalar;
+}
+
+export type FormResponseValue = FormResponseScalar | FormResponseGroupItem[];
+
 export interface FormResponseData {
-  [fieldName: string]: string | boolean | null;
+  [fieldName: string]: FormResponseValue;
 }

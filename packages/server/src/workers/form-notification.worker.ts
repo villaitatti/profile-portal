@@ -1,5 +1,8 @@
 import { getJobQueue, QUEUE_NAMES } from '../lib/job-queue.js';
-import { generateFormPdf } from '../services/form-pdf.service.js';
+import {
+  generateFormPdfAttachments,
+  type FormPdfMetadata,
+} from '../services/form-pdf.service.js';
 import { sendFormNotificationEmail } from '../services/email.service.js';
 import { getFellowWithContact } from '../services/civicrm.service.js';
 import { prisma } from '../lib/prisma.js';
@@ -59,7 +62,7 @@ export async function registerFormNotificationWorker(): Promise<void> {
           continue;
         }
 
-        const pdfBuffer = await generateFormPdf(formDef, invitation.response.data as Record<string, unknown>);
+        const responseData = invitation.response.data as Record<string, unknown>;
 
         // Resolve the appointee's human-readable name from CiviCRM so the
         // notification email can read as "submitted by Andrea Caselli"
@@ -68,6 +71,8 @@ export async function registerFormNotificationWorker(): Promise<void> {
         // renders degraded subject/body variants in that case (no
         // "Appointee:" line) so the email still ships.
         let appointeeName: string | null = null;
+        let fellowshipType: string | null = null;
+        let appointment: string | null = null;
         try {
           const fellow = await getFellowWithContact(
             invitation.fellowshipId,
@@ -77,6 +82,8 @@ export async function registerFormNotificationWorker(): Promise<void> {
             const name = `${fellow.firstName} ${fellow.lastName}`.trim();
             if (name) appointeeName = name;
           }
+          fellowshipType = fellow?.fellowship ?? null;
+          appointment = fellow?.appointment ?? null;
           // Note: the email service (sendFormNotificationEmail) is the
           // authoritative sanitiser for strings that reach SMTP headers —
           // it strips CR/LF/control chars and RFC 2047-encodes non-ASCII.
@@ -89,18 +96,37 @@ export async function registerFormNotificationWorker(): Promise<void> {
           );
         }
 
+        const metadata: FormPdfMetadata = {
+          appointeeName: responseName(responseData) ?? appointeeName,
+          academicYear: invitation.academicYear,
+          fellowshipType,
+          appointment,
+        };
+        const pdfAttachments = await generateFormPdfAttachments(
+          formDef,
+          responseData,
+          metadata
+        );
+
         await sendFormNotificationEmail({
           formTitle: formDef.title,
           fellowshipId: invitation.fellowshipId,
           contactId: invitation.contactId,
           academicYear: invitation.academicYear,
-          pdfBuffer,
-          responseData: invitation.response.data as Record<string, unknown>,
-          appointeeName,
+          pdfAttachments,
+          responseData,
+          appointeeName: metadata.appointeeName,
         });
 
         logger.info({ invitationId, jobId: job.id }, 'form notification sent');
       }
     }
   );
+}
+
+function responseName(data: Record<string, unknown>): string | null {
+  const givenName = typeof data.givenName === 'string' ? data.givenName.trim() : '';
+  const surname = typeof data.surname === 'string' ? data.surname.trim() : '';
+  const fullName = [givenName, surname].filter(Boolean).join(' ').trim();
+  return fullName || null;
 }

@@ -1,10 +1,12 @@
-import type { FormDef, FormSectionDef } from '../types/forms.js';
+import type { FormDef, FormPdfKind, FormSectionDef } from '../types/forms.js';
 
 import { COUNTRIES } from './countries.js';
 import { TITLE_OPTIONS } from './form-options.js';
 
 const FORM_DESCRIPTION =
   'I understand that the information I provide is being collected for the purposes described in, and will be used in accordance with, I Tatti’s Privacy Policy (available at http://itatti.harvard.edu/privacy-policy)';
+
+const FELLOW_MEMORANDUM_PDF_KINDS: FormPdfKind[] = ['memorandum', 'grants-resources'];
 
 const legacyPersonalSection: FormSectionDef = {
   title: 'Personal Information',
@@ -200,6 +202,107 @@ const personalSection: FormSectionDef = {
   ],
 };
 
+const personalSectionV3: FormSectionDef = {
+  title: 'Personal Information',
+  icon: 'user',
+  fields: [
+    {
+      name: 'title',
+      label: 'Title',
+      type: 'select',
+      required: false,
+      options: [...TITLE_OPTIONS],
+      placeholder: 'Select title',
+      layout: 'third',
+      autoComplete: 'honorific-prefix',
+    },
+    {
+      name: 'givenName',
+      label: 'Given name',
+      type: 'text',
+      required: true,
+      layout: 'third',
+      autoComplete: 'given-name',
+    },
+    {
+      name: 'surname',
+      label: 'Surname / family name',
+      type: 'text',
+      required: true,
+      layout: 'third',
+      autoComplete: 'family-name',
+    },
+    {
+      name: 'email',
+      label: 'Email',
+      type: 'email',
+      required: true,
+      layout: 'half',
+      autoComplete: 'email',
+    },
+    {
+      name: 'mobilePhone',
+      label: 'Mobile phone',
+      type: 'text',
+      required: true,
+      layout: 'half',
+      placeholder: 'Include country code',
+      autoComplete: 'tel',
+    },
+    {
+      name: 'countryMovingFrom',
+      label: 'Country you will be moving from',
+      type: 'select',
+      required: true,
+      options: [...COUNTRIES],
+      layout: 'half',
+      autoComplete: 'section-moving-from country-name',
+    },
+    {
+      name: 'hasUsSsn',
+      label: 'Do you have a US Social Security number?',
+      type: 'select',
+      required: true,
+      options: ['Yes', 'No'],
+      placeholder: 'Select an answer',
+      layout: 'full',
+    },
+    {
+      name: 'statusAtItatti',
+      label: 'What will your status be while residing at I Tatti?',
+      type: 'select',
+      required: true,
+      options: ['On sabbatical leave from university', 'Independent Scholar', 'Other'],
+      placeholder: 'Select status',
+      layout: 'full',
+    },
+    {
+      name: 'statusOther',
+      label: 'If other, please indicate',
+      type: 'text',
+      required: false,
+      layout: 'full',
+      conditionalOn: { field: 'statusAtItatti', value: 'Other' },
+    },
+    { name: 'nationality', label: 'Nationality', type: 'text', required: true, layout: 'half' },
+    {
+      name: 'secondNationality',
+      label: 'Second nationality',
+      type: 'text',
+      required: false,
+      layout: 'half',
+    },
+    {
+      name: 'dateOfBirth',
+      label: 'Date of birth',
+      type: 'date',
+      required: false,
+      layout: 'third',
+      autoComplete: 'bday',
+    },
+  ],
+};
+
 const legalAddressSection: FormSectionDef = {
   title: 'Legal Address',
   description: 'Use the address format you would normally provide for official correspondence.',
@@ -212,6 +315,64 @@ const legalAddressSection: FormSectionDef = {
       required: true,
       layout: 'full',
       autoComplete: 'street-address',
+    },
+    {
+      name: 'legalCity',
+      label: 'City',
+      type: 'text',
+      required: true,
+      layout: 'half',
+      autoComplete: 'address-level2',
+    },
+    {
+      name: 'legalPostalCode',
+      label: 'Postal code',
+      type: 'text',
+      required: false,
+      layout: 'half',
+      autoComplete: 'postal-code',
+    },
+    {
+      name: 'legalStateProvince',
+      label: 'State / Province',
+      type: 'text',
+      required: false,
+      layout: 'half',
+      autoComplete: 'address-level1',
+    },
+    {
+      name: 'legalCountry',
+      label: 'Country',
+      type: 'select',
+      required: true,
+      options: [...COUNTRIES],
+      layout: 'half',
+      autoComplete: 'section-legal country-name',
+    },
+  ],
+};
+
+const legalAddressSectionV3: FormSectionDef = {
+  title: 'Legal Address',
+  description: 'Use the address format you would normally provide for official correspondence.',
+  icon: 'map-pin',
+  fields: [
+    {
+      name: 'legalStreetAddress',
+      label: 'Street address',
+      type: 'text',
+      required: true,
+      layout: 'full',
+      autoComplete: 'street-address',
+    },
+    {
+      name: 'legalSupplementalAddress',
+      label: 'Supplemental address',
+      type: 'text',
+      required: false,
+      layout: 'full',
+      placeholder: 'Apartment, building, c/o, department, or other address details',
+      autoComplete: 'address-line2',
     },
     {
       name: 'legalCity',
@@ -264,6 +425,44 @@ const familySection: FormSectionDef = {
       layout: 'half',
     },
     { name: 'childrenDatesOfStay', label: 'Dates of stay', type: 'text', required: false, layout: 'half' },
+  ],
+};
+
+const familySectionV3: FormSectionDef = {
+  title: 'Family',
+  description: 'Members of your family who may be accompanying or visiting you during your fellowship.',
+  icon: 'users',
+  fields: [
+    {
+      name: 'partnerSubheader',
+      label: 'Partner',
+      type: 'subheader',
+      required: false,
+      layout: 'full',
+    },
+    { name: 'partnerName', label: 'Full name of partner', type: 'text', required: false, layout: 'half' },
+    { name: 'partnerDatesOfStay', label: 'Dates of stay', type: 'text', required: false, layout: 'half' },
+    {
+      name: 'childrenSubheader',
+      label: 'Children',
+      type: 'subheader',
+      required: false,
+      layout: 'full',
+    },
+    {
+      name: 'children',
+      label: 'Children',
+      type: 'repeatable-group',
+      required: false,
+      layout: 'full',
+      addLabel: 'Add child',
+      itemLabel: 'Child',
+      fields: [
+        { name: 'fullName', label: 'Full name', type: 'text', required: true, layout: 'full' },
+        { name: 'dateOfBirth', label: 'Date of birth', type: 'date', required: true, layout: 'third' },
+        { name: 'datesOfStay', label: 'Dates of stay', type: 'text', required: true, layout: 'two-thirds' },
+      ],
+    },
   ],
 };
 
@@ -341,6 +540,7 @@ export const FORM_REGISTRY: FormDef[] = [
     title: 'Memorandum I Tatti Fellowship',
     description: FORM_DESCRIPTION,
     active: false,
+    pdfKinds: [...FELLOW_MEMORANDUM_PDF_KINDS],
     appointmentTypes: ['Fellow'],
     sections: [
       legacyPersonalSection,
@@ -353,12 +553,28 @@ export const FORM_REGISTRY: FormDef[] = [
     id: 'fellow-memorandum-v2',
     title: 'Memorandum I Tatti Fellowship',
     description: FORM_DESCRIPTION,
-    active: true,
+    active: false,
+    pdfKinds: [...FELLOW_MEMORANDUM_PDF_KINDS],
     appointmentTypes: ['Fellow'],
     sections: [
       personalSection,
       legalAddressSection,
       familySection,
+      emergencySection,
+      grantsSection,
+    ],
+  },
+  {
+    id: 'fellow-memorandum-v3',
+    title: 'Memorandum I Tatti Fellowship',
+    description: FORM_DESCRIPTION,
+    active: true,
+    pdfKinds: [...FELLOW_MEMORANDUM_PDF_KINDS],
+    appointmentTypes: ['Fellow'],
+    sections: [
+      personalSectionV3,
+      legalAddressSectionV3,
+      familySectionV3,
       emergencySection,
       grantsSection,
     ],

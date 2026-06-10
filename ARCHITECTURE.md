@@ -76,9 +76,9 @@ Both paths use an atomic `updateMany(PENDING → SENDING)` guard so concurrent c
 
 Form definitions live in `@itatti/shared` so the public renderer, admin archive, server validation, and PDF generation all read the same schema. `FORM_REGISTRY` keeps retired definitions resolvable for existing invitations while `getFormsForAppointmentType()` returns only active definitions for new link generation.
 
-The current active Fellow memorandum is `fellow-memorandum-v2`. It uses reusable title/country option constants, section icons, layout metadata, and split legal-address fields (`legalStreetAddress`, `legalCity`, `legalPostalCode`, `legalStateProvince`, `legalCountry`). The original `fellow-memorandum` remains inactive with its legacy field labels and free-text `legalAddress` so archived submissions and regenerated PDFs preserve the original prompt surface.
+The current active Fellow memorandum is `fellow-memorandum-v3`. It uses reusable title/country option constants, section icons, layout metadata, split legal-address fields (`legalStreetAddress`, `legalSupplementalAddress`, `legalCity`, `legalPostalCode`, `legalStateProvince`, `legalCountry`), required mobile phone, select-driven status fields, and repeatable child rows. The original `fellow-memorandum` and `fellow-memorandum-v2` remain inactive so archived submissions and regenerated PDFs preserve their original prompt surface.
 
-Submitted responses remain JSON, so no database migration is needed when a form version changes. Server-side Zod validation is built from the submitted invitation's `formType`; select and radio fields must match their declared options. The notification worker also resolves the submitted `formType` before generating the PDF attachment, which keeps email PDFs aligned with the form version the appointee actually submitted.
+Submitted responses remain JSON. Server-side Zod validation is built from the submitted invitation's `formType`; select and radio fields must match their declared options, and repeatable child rows must be complete once added. The notification worker also resolves the submitted `formType` before generating the two PDF attachments (Memorandum and Grants & Resources), which keeps email PDFs aligned with the form version the appointee actually submitted.
 
 ## Security
 

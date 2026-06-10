@@ -21,6 +21,15 @@ vi.mock('../../lib/prisma.js', () => ({
 
 vi.mock('../../services/civicrm.service.js', () => ({
   getFellowsWithContacts: vi.fn(),
+  getFellowWithContact: vi.fn(),
+}));
+
+vi.mock('../../services/form-pdf.service.js', () => ({
+  FORM_PDF_KINDS: [
+    { kind: 'memorandum', label: 'Memorandum' },
+    { kind: 'grants-resources', label: 'Grants & Resources' },
+  ],
+  generateFormPdf: vi.fn(),
 }));
 
 vi.mock('../../lib/logger.js', () => ({
@@ -29,9 +38,11 @@ vi.mock('../../lib/logger.js', () => ({
 
 import { prisma } from '../../lib/prisma.js';
 import * as civicrmService from '../../services/civicrm.service.js';
+import { generateFormPdf } from '../../services/form-pdf.service.js';
 
 const mockPrisma = vi.mocked(prisma, true);
 const mockCivicrm = vi.mocked(civicrmService);
+const mockGenerateFormPdf = vi.mocked(generateFormPdf);
 
 // Per-test fresh route module so the module-scoped fellows cache
 // (cachedFellows / cachedFellowsExpires) does not leak between tests.
@@ -47,11 +58,65 @@ beforeEach(async () => {
   vi.doMock('../../env.js', () => ({ env: {}, isDevMode: false }));
   vi.doMock('../../lib/prisma.js', () => ({ prisma }));
   vi.doMock('../../services/civicrm.service.js', () => civicrmService);
+  vi.doMock('../../services/form-pdf.service.js', () => ({
+    FORM_PDF_KINDS: [
+      { kind: 'memorandum', label: 'Memorandum' },
+      { kind: 'grants-resources', label: 'Grants & Resources' },
+    ],
+    generateFormPdf: mockGenerateFormPdf,
+  }));
   vi.doMock('../../lib/logger.js', () => ({
     logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
   }));
   const mod = await import('../../routes/forms-admin.routes.js');
   formsAdminRoutes = mod.formsAdminRoutes;
+});
+
+describe('GET /api/admin/forms/response/:invitationId/pdf/:pdfKind', () => {
+  it('generates the requested split PDF with metadata', async () => {
+    const pdf = Buffer.from('%PDF memorandum');
+    mockPrisma.formInvitation.findUnique.mockResolvedValue({
+      ...baseInvitation,
+      formType: 'fellow-memorandum-v3',
+      response: {
+        id: 'r_1',
+        data: {
+          givenName: 'Maria',
+          surname: 'Bianchi',
+          mobilePhone: '+39 333 0000',
+        },
+        createdAt: new Date('2026-04-24T10:00:00Z'),
+      },
+    } as any);
+    mockCivicrm.getFellowWithContact.mockResolvedValue({
+      firstName: 'Maria',
+      lastName: 'Bianchi',
+      fellowship: 'Fellow',
+      appointment: 'Research Fellow',
+    } as any);
+    mockGenerateFormPdf.mockResolvedValue(pdf);
+
+    const res = await request(makeApp())
+      .get('/api/admin/forms/response/inv_1/pdf/memorandum')
+      .expect(200);
+
+    expect(res.headers['content-type']).toMatch(/application\/pdf/);
+    expect(res.headers['content-disposition']).toContain('Memorandum');
+    expect(res.body).toEqual(pdf);
+    expect(mockGenerateFormPdf).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'fellow-memorandum-v3' }),
+      expect.objectContaining({ givenName: 'Maria', surname: 'Bianchi' }),
+      {
+        kind: 'memorandum',
+        metadata: {
+          appointeeName: 'Maria Bianchi',
+          academicYear: '2026-2027',
+          fellowshipType: 'Fellow',
+          appointment: 'Research Fellow',
+        },
+      }
+    );
+  });
 });
 
 function makeApp() {

@@ -1,7 +1,11 @@
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import itattiLogo from '@/assets/itatti-logo.png';
+import { cn } from '@/lib/utils';
 
 export function PublicLayout() {
+  const location = useLocation();
+  const isFormRoute = location.pathname.startsWith('/forms/');
+
   return (
     <div className="min-h-screen bg-background">
       <header className="h-16 border-b border-primary/10 bg-card flex items-center px-6">
@@ -12,7 +16,7 @@ export function PublicLayout() {
           Profile Portal
         </span>
       </header>
-      <main className="max-w-2xl mx-auto py-12 px-6">
+      <main className={cn('mx-auto py-12 px-6', isFormRoute ? 'max-w-5xl' : 'max-w-2xl')}>
         <Outlet />
       </main>
     </div>

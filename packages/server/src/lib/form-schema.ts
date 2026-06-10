@@ -5,6 +5,18 @@ function fieldToZod(field: FormFieldDef): z.ZodTypeAny {
   let schema: z.ZodTypeAny;
 
   switch (field.type) {
+    case 'subheader':
+      schema = z.never();
+      break;
+    case 'repeatable-group': {
+      const itemShape: Record<string, z.ZodTypeAny> = {};
+      for (const childField of field.fields ?? []) {
+        if (childField.type === 'subheader') continue;
+        itemShape[childField.name] = fieldToZod(childField);
+      }
+      schema = z.array(z.object(itemShape).strict());
+      break;
+    }
     case 'checkbox':
       schema = z.boolean();
       break;
@@ -27,6 +39,24 @@ function fieldToZod(field: FormFieldDef): z.ZodTypeAny {
       break;
   }
 
+  if (field.type === 'subheader') return schema;
+
+  if (field.type === 'repeatable-group') {
+    if (field.required) {
+      schema = (schema as z.ZodArray<z.ZodTypeAny>).min(1);
+    } else {
+      schema = schema.optional();
+    }
+    return schema;
+  }
+
+  if (field.required && !field.conditionalOn && field.type !== 'checkbox') {
+    schema = schema.refine(
+      (value) => typeof value !== 'string' || value.length > 0,
+      'Required'
+    );
+  }
+
   if (!field.required || field.conditionalOn) {
     if (field.type === 'checkbox') {
       schema = schema.optional();
@@ -43,6 +73,7 @@ export function buildFormSchema(formDef: FormDef): z.ZodObject<Record<string, z.
 
   for (const section of formDef.sections) {
     for (const field of section.fields) {
+      if (field.type === 'subheader') continue;
       shape[field.name] = fieldToZod(field);
     }
   }
