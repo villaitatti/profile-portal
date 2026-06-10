@@ -14,6 +14,7 @@ import {
 // Mock the auth token provider — the hooks call this to attach a Bearer token.
 vi.mock('@/api/client', () => ({
   useApiToken: () => async () => 'test-token',
+  apiUrl: (path: string) => path,
   apiFetch: vi.fn(),
 }));
 

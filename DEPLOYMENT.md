@@ -2,7 +2,9 @@
 
 ## Architecture
 
-The Profile Portal runs as a single Docker container behind a Cloudflare Tunnel (cloudflared). The container includes the Express API, the built React frontend, and runs Prisma migrations automatically on startup.
+The Profile Portal runs as a single Docker image behind a Cloudflare Tunnel (cloudflared). GitHub Actions builds the image and publishes it to GitHub Container Registry. The app VM pulls that image and runs it with Docker Compose.
+
+The container includes the Express API, the built React frontend, and runs Prisma migrations automatically on startup.
 
 ```
 Internet → Cloudflare Tunnel → cloudflared container → portal container (Express)
@@ -15,37 +17,68 @@ All containers share an internal Docker network. No host ports are exposed excep
 ## Dev Server
 
 **Host:** `civicrm-dev` (also runs CiviCRM)
-**Path:** `/home/vitadmin/profile-portal`
+**Path:** `/opt/profile-portal`
 **Network:** Shared `itatti-tunnel` Docker network for cloudflared access
 
 ### Deploy a new version
 
+Normal dev deployment is automatic:
+
 ```bash
-cd /home/vitadmin/profile-portal
-git pull origin main
-docker compose build && docker compose up -d
+merge PR to main
+# GitHub Actions builds ghcr.io/villaitatti/profile-portal:sha-<commit>
+# GitHub Actions deploys that image to civicrm-dev
 ```
 
-That's it. The `docker-entrypoint.sh` runs `prisma migrate deploy` before starting the app, so database migrations are applied automatically on every restart.
+The server no longer needs `git pull` or `docker compose build` during normal deployment.
+
+Manual emergency deployment, if GitHub Actions is unavailable:
+
+```bash
+cd /opt/profile-portal
+export COMPOSE_PROJECT_NAME=profile-portal
+export IMAGE_NAME=ghcr.io/villaitatti/profile-portal
+export IMAGE_TAG=sha-<commit-sha>
+docker compose pull
+docker compose up -d --remove-orphans
+```
+
+The `docker-entrypoint.sh` runs `prisma migrate deploy` before starting the app, so database migrations are applied automatically on every restart.
+
+## GitHub Actions Deployment
+
+| Workflow | Runner | Trigger | Purpose |
+|----------|--------|---------|---------|
+| `CI` | GitHub-hosted | pull requests and pushes to `main` | Typecheck and test. |
+| `Build image` | GitHub-hosted | pushes to `main`, version tags, manual | Build and push GHCR images. |
+| `Deploy dev` | Internal self-hosted runner | successful `Build image` from `main`, or manual image tag | Deploy dev automatically from accepted `main` code. |
+| `Deploy production` | Internal self-hosted runner | manual `workflow_dispatch` version tag | Create a DB backup, then deploy the selected release tag. |
+
+Production deploys are intentionally manual and tag-based. Dev deploys are automatic from `main`.
 
 ### View logs
 
 ```bash
+cd /opt/profile-portal
 docker compose logs -f portal
 ```
 
 ### Restart without rebuilding
 
 ```bash
+cd /opt/profile-portal
 docker compose restart portal
 ```
 
-### Full rebuild (after dependency changes)
+### Roll to a different image tag
 
 ```bash
-docker compose down
-docker compose build --no-cache
-docker compose up -d
+cd /opt/profile-portal
+export COMPOSE_PROJECT_NAME=profile-portal
+export IMAGE_NAME=ghcr.io/villaitatti/profile-portal
+export IMAGE_TAG=sha-<commit-sha-or-version-tag>
+docker compose pull portal
+docker compose up -d --remove-orphans
 ```
 
 ## Environment Variables
@@ -100,19 +133,22 @@ The server refuses to start if `APPOINTEE_EMAIL_REDIRECT_TO` is set under `NODE_
 
 The cron dispatches **only** bio-email rows; VIT ID invitations are manual-send-only. `CLAIM_VIT_ID_URL` and `PORTAL_PUBLIC_URL` are required for the invitation email's CTA and logo asset respectively — the server refuses to start without them.
 
-### Frontend variables (VITE_ prefix, baked into the build)
+### Browser runtime config
 
-These are set as Docker build args in `docker-compose.yml` and compiled into the frontend at build time:
+These are exposed publicly by `GET /api/config`. They are not secrets. Use `PUBLIC_*` values in deployed containers so the same GHCR image can run in dev and production without rebuilding.
 
 | Variable | Purpose |
 |----------|---------|
-| `VITE_AUTH0_DOMAIN` | Auth0 domain for the SPA |
-| `VITE_AUTH0_CLIENT_ID` | Auth0 SPA application client ID |
-| `VITE_AUTH0_AUDIENCE` | Auth0 API audience |
-| `VITE_AUTH0_CALLBACK_URL` | OAuth callback URL |
-| `VITE_AUTH0_NAMESPACE` | Auth0 custom claim namespace |
-| `VITE_API_BASE_URL` | Backend API base URL |
-| `VITE_CIVICRM_URL` | CiviCRM URL for admin links |
+| `PUBLIC_AUTH0_DOMAIN` | Auth0 domain for the SPA |
+| `PUBLIC_AUTH0_CLIENT_ID` | Auth0 SPA application client ID |
+| `PUBLIC_AUTH0_AUDIENCE` | Auth0 API audience |
+| `PUBLIC_AUTH0_CALLBACK_URL` | OAuth callback URL |
+| `PUBLIC_AUTH0_NAMESPACE` | Auth0 custom claim namespace |
+| `PUBLIC_API_BASE_URL` | Backend API base URL; usually blank for same-origin production |
+| `PUBLIC_CIVICRM_URL` | CiviCRM URL for admin links |
+| `PUBLIC_DEV_SKIP_AUTH` | Enables mock auth for local/dev-only cases |
+
+The old `VITE_*` values remain as local Vite fallback values only. They are no longer Docker build arguments and should not be used as the deployed configuration source.
 
 ## Database
 

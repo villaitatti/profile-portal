@@ -1,7 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useApiToken } from './client';
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+import { apiUrl, useApiToken } from './client';
 
 export interface EmailEvent {
   id: string;
@@ -54,7 +52,7 @@ export function useEmailEvents(params: EmailEventsParams = {}) {
     queryKey: ['admin-emails', params],
     queryFn: async () => {
       const token = await getToken();
-      const url = new URL(`${API_BASE}/api/admin/emails`, window.location.origin);
+      const url = new URL(apiUrl('/api/admin/emails'), window.location.origin);
       if (params.limit) url.searchParams.set('limit', String(params.limit));
       if (params.cursor) url.searchParams.set('cursor', params.cursor);
       if (params.year && params.year !== 'all') url.searchParams.set('year', params.year);
@@ -82,7 +80,7 @@ export function useEmailEventPreview(eventId: string | null) {
     queryFn: async () => {
       if (!eventId) return null;
       const token = await getToken();
-      const res = await fetch(`${API_BASE}/api/admin/emails/${eventId}/preview`, {
+      const res = await fetch(apiUrl(`/api/admin/emails/${eventId}/preview`), {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -107,7 +105,7 @@ export function useTemplatePreview(type: 'vit-id-invitation' | 'bio-project-desc
     queryFn: async () => {
       if (!type) return null;
       const token = await getToken();
-      const res = await fetch(`${API_BASE}/api/admin/emails/templates/${type}/preview`, {
+      const res = await fetch(apiUrl(`/api/admin/emails/templates/${type}/preview`), {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',

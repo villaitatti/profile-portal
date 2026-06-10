@@ -5,10 +5,11 @@ import { auth0Config } from '@/config/auth0';
 import { queryClient } from '@/config/query-client';
 import { router } from '@/config/routes';
 import { DevAuthProvider } from '@/components/auth/DevAuthProvider';
-
-const isDevMode = import.meta.env.VITE_DEV_SKIP_AUTH === 'true';
+import { getRuntimeConfig } from '@/config/runtime';
 
 export default function App() {
+  const isDevMode = getRuntimeConfig().devSkipAuth;
+
   const content = (
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />

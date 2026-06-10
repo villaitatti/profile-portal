@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiFetch, useApiToken } from './client';
+import { apiFetch, apiUrl, useApiToken } from './client';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -193,8 +193,6 @@ export function useSyncRunDetail(runId: string | null) {
 
 // ── SSE token + stream helper ──────────────────────────────────────
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
-
 // Fetch a short-lived SSE token (5 min expiry) so we never put the full JWT in a URL.
 export async function fetchSseToken(getToken: () => Promise<string>): Promise<string> {
   const jwt = await getToken();
@@ -210,7 +208,7 @@ export function subscribeSyncProgress(
   onDone: () => void,
   onError: (err: string) => void
 ): () => void {
-  const url = `${API_BASE}/api/admin/sync/runs/${runId}/stream?sse_token=${encodeURIComponent(sseToken)}`;
+  const url = apiUrl(`/api/admin/sync/runs/${runId}/stream?sse_token=${encodeURIComponent(sseToken)}`);
   const source = new EventSource(url);
 
   source.onmessage = (event) => {

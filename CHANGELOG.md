@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.17.6] - 10 June 2026 - GitHub Actions deployment pipeline
+
+### Added
+- **GitHub Container Registry image publishing.** Merges to `main` and version tags now build immutable Docker image tags in GHCR, including `sha-<commit>`, `main`, and release tags.
+- **Automated dev deployment workflow.** A successful `main` image build can now deploy to the internal dev VM through the IT self-hosted runner.
+- **Manual production deployment workflow.** Production deploys are tag-based, manually triggered, and create a PostgreSQL backup before replacing the app container.
+- **Runtime browser config endpoint.** The frontend now loads public Auth0, API, and CiviCRM settings from `/api/config`, so the same Docker image can run in dev and production.
+
+### Changed
+- **Deployment Compose now uses published images.** Normal server deployment uses `image:` instead of building source on the VM.
+- **Deployment documentation now reflects the GHCR/self-hosted-runner model.** The runbook documents automatic dev deploys, manual production deploys, and required environment variables/secrets.
+
 ## [0.17.5] - 29 May 2026 - Public fellowship form restyle
 
 ### Added
