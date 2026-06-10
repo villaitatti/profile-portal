@@ -89,6 +89,7 @@ All configuration is in `.env` at the project root. See `.env.example` for the f
 
 | Variable | Purpose |
 |----------|---------|
+| `DB_PASSWORD` | Postgres user password for the `portal` database user in Docker Compose. Required before deploying; use a long random password with no spaces. |
 | `DATABASE_URL` | PostgreSQL connection string |
 | `AUTH0_DOMAIN` | Auth0 tenant domain |
 | `AUTH0_AUDIENCE` | Auth0 API identifier |

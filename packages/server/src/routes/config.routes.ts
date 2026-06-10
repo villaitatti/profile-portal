@@ -2,7 +2,9 @@ import { Router } from 'express';
 import { env } from '../env.js';
 
 function fromEnv(primary: string | undefined, legacyViteName: string, fallback = '') {
-  return primary !== undefined ? primary : process.env[legacyViteName] ?? fallback;
+  return primary !== undefined && primary !== ''
+    ? primary
+    : process.env[legacyViteName] ?? fallback;
 }
 
 function defaultCallbackUrl() {

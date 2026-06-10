@@ -80,24 +80,29 @@ describe('GET /api/config', () => {
       auth0Audience: 'https://public-api.example',
       auth0CallbackUrl: 'https://portal.example/callback',
       auth0Namespace: 'https://claims.example',
-      apiBaseUrl: '',
+      apiBaseUrl: 'https://legacy-api.example',
       civicrmUrl: 'https://crm.example',
       devSkipAuth: true,
     });
     expect(res.body).not.toHaveProperty('AUTH0_M2M_CLIENT_SECRET');
   });
 
-  it('falls back to legacy VITE values and server Auth0 values', async () => {
+  it('falls back to legacy VITE values and server Auth0 values when public values are unset or empty', async () => {
+    process.env.VITE_AUTH0_DOMAIN = 'legacy.auth0.example';
     process.env.VITE_AUTH0_CLIENT_ID = 'legacy-client-id';
     process.env.VITE_AUTH0_NAMESPACE = 'https://legacy-claims.example';
     process.env.VITE_API_BASE_URL = 'https://api.example';
     process.env.VITE_DEV_SKIP_AUTH = 'true';
 
-    const app = await makeApp();
+    const app = await makeApp({
+      PUBLIC_AUTH0_DOMAIN: '',
+      PUBLIC_AUTH0_CLIENT_ID: '',
+      PUBLIC_AUTH0_NAMESPACE: '',
+    });
     const res = await request(app).get('/api/config').expect(200);
 
     expect(res.body).toMatchObject({
-      auth0Domain: 'server.auth0.example',
+      auth0Domain: 'legacy.auth0.example',
       auth0ClientId: 'legacy-client-id',
       auth0Audience: 'https://server-api.example',
       auth0CallbackUrl: 'https://portal.example/callback',
