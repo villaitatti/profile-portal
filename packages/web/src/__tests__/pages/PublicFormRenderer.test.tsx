@@ -255,6 +255,43 @@ describe('PublicFormRenderer', () => {
     });
   });
 
+  it('uses the repeatable group label in the empty state copy', () => {
+    const guestForm: FormDef = {
+      id: 'renderer-guests-test',
+      title: 'Renderer Guests Test',
+      appointmentTypes: ['Fellow'],
+      sections: [
+        {
+          title: 'Guests',
+          fields: [
+            {
+              name: 'guests',
+              label: 'Guests',
+              type: 'repeatable-group',
+              required: false,
+              addLabel: 'Add guest',
+              itemLabel: 'Guest',
+              fields: [
+                { name: 'fullName', label: 'Full name', type: 'text', required: true },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    render(
+      <PublicFormRenderer
+        formDef={guestForm}
+        onSubmit={vi.fn()}
+        isSubmitting={false}
+        isSuccess={false}
+      />
+    );
+
+    expect(screen.getByText('No guests added.')).toBeInTheDocument();
+  });
+
   it('requires every field in an added child row', () => {
     const onSubmit = vi.fn();
     const familyForm: FormDef = {

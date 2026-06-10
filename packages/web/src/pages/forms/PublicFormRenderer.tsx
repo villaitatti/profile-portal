@@ -459,6 +459,7 @@ function RepeatableGroupRenderer({
   const reactId = useId();
   const groupId = `${reactId}-${field.name}`;
   const childFields = field.fields ?? [];
+  const emptyMessage = repeatableGroupEmptyMessage(field);
   const baseInputClass =
     'w-full rounded-md border border-input bg-background px-3.5 py-2.5 text-[0.95rem] ring-offset-background transition-colors placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50';
   const labelClass = 'mb-1.5 block text-sm font-semibold text-foreground';
@@ -502,7 +503,7 @@ function RepeatableGroupRenderer({
       </div>
 
       {value.length === 0 ? (
-        <p className="mt-3 text-sm text-muted-foreground">No children added.</p>
+        <p className="mt-3 text-sm text-muted-foreground">{emptyMessage}</p>
       ) : (
         <div className="mt-4 space-y-5" aria-labelledby={groupId}>
           {value.map((item, index) => (
@@ -630,6 +631,12 @@ function RepeatableGroupRenderer({
       )}
     </div>
   );
+}
+
+function repeatableGroupEmptyMessage(field: FormFieldDef): string {
+  const label = (field.label || field.name).trim();
+  if (!label) return 'No items added.';
+  return `No ${label.toLowerCase()} added.`;
 }
 
 function RequiredMark() {

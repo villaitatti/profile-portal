@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { FORM_REGISTRY, getFormDef } from '@itatti/shared';
+import { FORM_REGISTRY, getFormDef, type FormPdfKind } from '@itatti/shared';
 import { validate } from '../middleware/validate.js';
 import { prisma } from '../lib/prisma.js';
 import * as formService from '../services/form-invitation.service.js';
@@ -8,7 +8,6 @@ import * as civicrmService from '../services/civicrm.service.js';
 import {
   FORM_PDF_KINDS,
   generateFormPdf,
-  type FormPdfKind,
   type FormPdfMetadata,
 } from '../services/form-pdf.service.js';
 import { isDevMode } from '../env.js';
@@ -79,7 +78,9 @@ const resetSchema = z.object({
   invitationId: z.string().min(1),
 });
 
-const pdfKindSchema = z.enum(['memorandum', 'grants-resources']);
+const pdfKindSchema = z.enum(
+  FORM_PDF_KINDS.map(({ kind }) => kind) as [FormPdfKind, ...FormPdfKind[]]
+);
 
 const nominationSentSchema = z.object({
   nominationSentOn: z

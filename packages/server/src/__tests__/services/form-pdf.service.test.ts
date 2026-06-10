@@ -1,11 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { generateFormPdf, getVisibleFields, getVisiblePdfSections } from '../../services/form-pdf.service.js';
+import {
+  generateFormPdf,
+  generateFormPdfAttachments,
+  getVisibleFields,
+  getVisiblePdfSections,
+} from '../../services/form-pdf.service.js';
 import {
   getFormDef,
   parityFormDef,
   parityResponseData,
   parityExpectedFields,
 } from '@itatti/shared';
+import type { FormDef } from '@itatti/shared';
 
 describe('form-pdf.service getVisibleFields — parity fixture', () => {
   // This test pins the PDF renderer's visible-field logic to the shared
@@ -183,6 +189,77 @@ describe('form-pdf.service getVisibleFields — parity fixture', () => {
       'Emergency Contact',
     ]);
     expect(grantsSections.map((section) => section.title)).toEqual(['Grants & Resources']);
+  });
+
+  it('does not filter sections for forms that do not opt into split PDFs', () => {
+    const formDef: FormDef = {
+      id: 'generic-form',
+      title: 'Generic Form',
+      appointmentTypes: ['Fellow'],
+      sections: [
+        {
+          title: 'Personal Information',
+          fields: [
+            { name: 'fullName', label: 'Full name', type: 'text', required: true },
+          ],
+        },
+        {
+          title: 'Grants & Resources',
+          fields: [
+            { name: 'resources', label: 'Resources', type: 'textarea', required: true },
+          ],
+        },
+      ],
+    };
+
+    const sections = getVisiblePdfSections(
+      formDef,
+      { fullName: 'Maria Bianchi', resources: 'University leave letter attached.' },
+      'memorandum'
+    );
+
+    expect(sections.map((section) => section.title)).toEqual([
+      'Personal Information',
+      'Grants & Resources',
+    ]);
+  });
+
+  it('falls back to one full submission attachment when a form has no split PDF kinds', async () => {
+    const formDef: FormDef = {
+      id: 'generic-form',
+      title: 'Generic Form',
+      appointmentTypes: ['Fellow'],
+      sections: [
+        {
+          title: 'Personal Information',
+          fields: [
+            { name: 'fullName', label: 'Full name', type: 'text', required: true },
+          ],
+        },
+        {
+          title: 'Grants & Resources',
+          fields: [
+            { name: 'resources', label: 'Resources', type: 'textarea', required: true },
+          ],
+        },
+      ],
+    };
+
+    const attachments = await generateFormPdfAttachments(
+      formDef,
+      { fullName: 'Maria Bianchi', resources: 'University leave letter attached.' },
+      {
+        appointeeName: 'Maria Bianchi',
+        academicYear: '2026-2027',
+        fellowshipType: null,
+        appointment: null,
+      }
+    );
+
+    expect(attachments).toHaveLength(1);
+    expect(attachments[0]).toMatchObject({ label: 'Submission' });
+    expect(attachments[0].kind).toBeUndefined();
+    expect(attachments[0].buffer.length).toBeGreaterThan(0);
   });
 
   it('renders split PDFs with metadata without throwing', async () => {

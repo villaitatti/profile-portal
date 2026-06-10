@@ -18,6 +18,8 @@ export type FormSectionIcon =
   | 'life-buoy'
   | 'landmark';
 
+export type FormPdfKind = 'memorandum' | 'grants-resources';
+
 export interface FormFieldDef {
   name: string;
   label: string;
@@ -47,6 +49,7 @@ export interface FormDef {
   title: string;
   description?: string;
   active?: boolean;
+  pdfKinds?: FormPdfKind[];
   appointmentTypes: string[];
   sections: FormSectionDef[];
 }

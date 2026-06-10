@@ -1,10 +1,12 @@
-import type { FormDef, FormSectionDef } from '../types/forms.js';
+import type { FormDef, FormPdfKind, FormSectionDef } from '../types/forms.js';
 
 import { COUNTRIES } from './countries.js';
 import { TITLE_OPTIONS } from './form-options.js';
 
 const FORM_DESCRIPTION =
   'I understand that the information I provide is being collected for the purposes described in, and will be used in accordance with, I Tatti’s Privacy Policy (available at http://itatti.harvard.edu/privacy-policy)';
+
+const FELLOW_MEMORANDUM_PDF_KINDS: FormPdfKind[] = ['memorandum', 'grants-resources'];
 
 const legacyPersonalSection: FormSectionDef = {
   title: 'Personal Information',
@@ -538,6 +540,7 @@ export const FORM_REGISTRY: FormDef[] = [
     title: 'Memorandum I Tatti Fellowship',
     description: FORM_DESCRIPTION,
     active: false,
+    pdfKinds: [...FELLOW_MEMORANDUM_PDF_KINDS],
     appointmentTypes: ['Fellow'],
     sections: [
       legacyPersonalSection,
@@ -551,6 +554,7 @@ export const FORM_REGISTRY: FormDef[] = [
     title: 'Memorandum I Tatti Fellowship',
     description: FORM_DESCRIPTION,
     active: false,
+    pdfKinds: [...FELLOW_MEMORANDUM_PDF_KINDS],
     appointmentTypes: ['Fellow'],
     sections: [
       personalSection,
@@ -565,6 +569,7 @@ export const FORM_REGISTRY: FormDef[] = [
     title: 'Memorandum I Tatti Fellowship',
     description: FORM_DESCRIPTION,
     active: true,
+    pdfKinds: [...FELLOW_MEMORANDUM_PDF_KINDS],
     appointmentTypes: ['Fellow'],
     sections: [
       personalSectionV3,

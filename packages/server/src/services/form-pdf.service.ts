@@ -1,15 +1,13 @@
 import ReactPDF from '@react-pdf/renderer';
 import React from 'react';
-import type { FormDef, FormFieldDef } from '@itatti/shared';
+import type { FormDef, FormFieldDef, FormPdfKind } from '@itatti/shared';
 
 const { Document, Page, Text, View, StyleSheet } = ReactPDF;
 
-export type FormPdfKind = 'memorandum' | 'grants-resources';
-
-export const FORM_PDF_KINDS: { kind: FormPdfKind; label: string }[] = [
+export const FORM_PDF_KINDS = [
   { kind: 'memorandum', label: 'Memorandum' },
   { kind: 'grants-resources', label: 'Grants & Resources' },
-];
+] as const satisfies readonly { kind: FormPdfKind; label: string }[];
 
 export interface FormPdfMetadata {
   appointeeName: string | null;
@@ -19,7 +17,7 @@ export interface FormPdfMetadata {
 }
 
 export interface FormPdfAttachment {
-  kind: FormPdfKind;
+  kind?: FormPdfKind;
   label: string;
   buffer: Buffer;
 }
@@ -147,9 +145,10 @@ export function getVisiblePdfSections(
   kind?: FormPdfKind
 ): VisiblePdfSection[] {
   const sections: VisiblePdfSection[] = [];
+  const sectionTitles = kind ? getPdfSectionTitles(formDef, kind) : null;
 
   for (const section of formDef.sections) {
-    if (kind && !PDF_SECTION_TITLES[kind].has(section.title)) continue;
+    if (sectionTitles && !sectionTitles.has(section.title)) continue;
 
     const visibleFields = section.fields
       .filter((f) => isFieldVisible(f, data))
@@ -179,6 +178,11 @@ export function getVisiblePdfSections(
   }
 
   return sections;
+}
+
+function getPdfSectionTitles(formDef: FormDef, kind: FormPdfKind): Set<string> | null {
+  if (!formDef.pdfKinds?.includes(kind)) return null;
+  return PDF_SECTION_TITLES[kind];
 }
 
 function buildLegalAddressBlock(
@@ -423,8 +427,18 @@ export async function generateFormPdfAttachments(
   data: Record<string, unknown>,
   metadata: FormPdfMetadata
 ): Promise<FormPdfAttachment[]> {
+  const pdfKinds = FORM_PDF_KINDS.filter(({ kind }) => formDef.pdfKinds?.includes(kind));
+  if (pdfKinds.length === 0) {
+    return [
+      {
+        label: 'Submission',
+        buffer: await generateFormPdf(formDef, data, { metadata }),
+      },
+    ];
+  }
+
   return Promise.all(
-    FORM_PDF_KINDS.map(async ({ kind, label }) => ({
+    pdfKinds.map(async ({ kind, label }) => ({
       kind,
       label,
       buffer: await generateFormPdf(formDef, data, { kind, metadata }),
