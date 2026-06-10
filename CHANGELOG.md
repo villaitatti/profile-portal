@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.17.7] - 10 June 2026 - Fellow memorandum v3 and split PDFs
+
+### Added
+- **Fellow memorandum v3.** New Fellow invitations now use `fellow-memorandum-v3` with required mobile phone, supplemental address, full-width Social Security/status dropdowns, clearer Family subheaders, and repeatable child entries.
+- **Separate submission PDFs.** Submitted Fellow forms now generate separate Memorandum and Grants & Resources PDFs in both notification emails and the admin submissions archive.
+- **PDF metadata headers.** Generated form PDFs include the appointee name, academic year, fellowship type, and appointment when available.
+
+### Changed
+- **Public form layout is roomier.** The public form route now has a wider form body with larger section and field spacing while keeping the claim flow at its existing width.
+- **Pending v2 Fellow invitations move to v3.** A data-only migration updates pending `fellow-memorandum-v2` invitations to `fellow-memorandum-v3`; submitted v2 responses remain tied to their original form version.
+
+### Fixed
+- **Submitted form rendering handles repeatable groups.** The server PDF renderer and admin detail renderer now format repeatable child rows consistently with the submitted form data.
+
 ## [0.17.6] - 10 June 2026 - GitHub Actions deployment pipeline
 
 ### Added
