@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getVisibleFields, getVisiblePdfSections } from '../../services/form-pdf.service.js';
+import { generateFormPdf, getVisibleFields, getVisiblePdfSections } from '../../services/form-pdf.service.js';
 import {
   getFormDef,
   parityFormDef,
@@ -102,5 +102,122 @@ describe('form-pdf.service getVisibleFields — parity fixture', () => {
         { name: 'legalCountry', label: 'Country', value: 'Italy' },
       ],
     });
+  });
+
+  it('renders v3 supplemental address between street and city in the PDF address block', () => {
+    const formDef = getFormDef('fellow-memorandum-v3');
+    expect(formDef).toBeDefined();
+
+    const sections = getVisiblePdfSections(formDef!, {
+      givenName: 'Maria',
+      surname: 'Bianchi',
+      email: 'maria@example.com',
+      mobilePhone: '+39 333 0000',
+      legalStreetAddress: 'Via di Vincigliata 26',
+      legalSupplementalAddress: 'Villa I Tatti',
+      legalCity: 'Florence',
+      legalPostalCode: '50135',
+      legalStateProvince: 'FI',
+      legalCountry: 'Italy',
+      countryMovingFrom: 'Italy',
+      hasUsSsn: 'No',
+      statusAtItatti: 'Independent Scholar',
+      nationality: 'Italian',
+      emergencyName: 'Luca Bianchi',
+      emergencyPhone: '+39 055 0000',
+      emergencyEmail: 'luca@example.com',
+      resources: 'University leave letter attached.',
+    });
+
+    const legalAddress = sections.find((section) => section.title === 'Legal Address');
+    expect(legalAddress?.rows[0]).toMatchObject({
+      kind: 'address',
+      label: 'Legal address',
+      value: 'Via di Vincigliata 26\nVilla I Tatti\nFlorence, 50135\nFI\nItaly',
+    });
+  });
+
+  it('formats repeatable children as structured PDF rows', () => {
+    const formDef = getFormDef('fellow-memorandum-v3');
+    expect(formDef).toBeDefined();
+
+    const sections = getVisiblePdfSections(formDef!, {
+      children: [
+        {
+          fullName: 'Giulia Bianchi',
+          dateOfBirth: '2018-04-24',
+          datesOfStay: 'September to December',
+        },
+      ],
+    });
+
+    const family = sections.find((section) => section.title === 'Family');
+    const children = family?.rows.find((row) => row.kind === 'repeatableGroup');
+    expect(children).toMatchObject({
+      kind: 'repeatableGroup',
+      label: 'Children',
+      itemLabel: 'Child',
+      value:
+        'Child 1\nFull name: Giulia Bianchi\nDate of birth: 24 Apr 2018\nDates of stay: September to December',
+      items: [
+        [
+          { name: 'fullName', label: 'Full name', value: 'Giulia Bianchi' },
+          { name: 'dateOfBirth', label: 'Date of birth', value: '24 Apr 2018' },
+          { name: 'datesOfStay', label: 'Dates of stay', value: 'September to December' },
+        ],
+      ],
+    });
+  });
+
+  it('splits memorandum and grants/resources sections by PDF kind', () => {
+    const formDef = getFormDef('fellow-memorandum-v3');
+    expect(formDef).toBeDefined();
+
+    const memorandumSections = getVisiblePdfSections(formDef!, {}, 'memorandum');
+    const grantsSections = getVisiblePdfSections(formDef!, {}, 'grants-resources');
+
+    expect(memorandumSections.map((section) => section.title)).toEqual([
+      'Personal Information',
+      'Legal Address',
+      'Family',
+      'Emergency Contact',
+    ]);
+    expect(grantsSections.map((section) => section.title)).toEqual(['Grants & Resources']);
+  });
+
+  it('renders split PDFs with metadata without throwing', async () => {
+    const formDef = getFormDef('fellow-memorandum-v3');
+    expect(formDef).toBeDefined();
+
+    const pdf = await generateFormPdf(
+      formDef!,
+      {
+        givenName: 'Maria',
+        surname: 'Bianchi',
+        email: 'maria@example.com',
+        mobilePhone: '+39 333 0000',
+        countryMovingFrom: 'Italy',
+        hasUsSsn: 'No',
+        statusAtItatti: 'Independent Scholar',
+        nationality: 'Italian',
+        legalStreetAddress: 'Via di Vincigliata 26',
+        legalCity: 'Florence',
+        legalCountry: 'Italy',
+        emergencyName: 'Luca Bianchi',
+        emergencyPhone: '+39 055 0000',
+        emergencyEmail: 'luca@example.com',
+      },
+      {
+        kind: 'memorandum',
+        metadata: {
+          appointeeName: 'Maria Bianchi',
+          academicYear: '2026-2027',
+          fellowshipType: 'Fellow',
+          appointment: 'Research Fellow',
+        },
+      }
+    );
+
+    expect(pdf.length).toBeGreaterThan(0);
   });
 });

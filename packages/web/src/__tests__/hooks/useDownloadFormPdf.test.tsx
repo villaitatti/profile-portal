@@ -82,19 +82,23 @@ describe('useDownloadFormPdf', () => {
     await act(async () => {
       await result.current({
         invitationId: 'inv_abc12345',
+        pdfKind: 'memorandum',
+        pdfLabel: 'Memorandum',
         contactName: 'Maria Bianchi',
         formTitle: 'Memorandum I Tatti Fellowship',
       });
     });
 
     expect(mockApiFetch).toHaveBeenCalledWith(
-      '/api/admin/forms/response/inv_abc12345/pdf',
+      '/api/admin/forms/response/inv_abc12345/pdf/memorandum',
       { token: 'test-token' }
     );
     expect(clickSpy).toHaveBeenCalledOnce();
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:fake-url');
     expect(appendedAnchors).toHaveLength(1);
-    expect(appendedAnchors[0].download).toBe('Maria_Bianchi_Memorandum_I_Tatti_Fellowship.pdf');
+    expect(appendedAnchors[0].download).toBe(
+      'Maria_Bianchi_Memorandum_I_Tatti_Fellowship_Memorandum.pdf'
+    );
   });
 
   it('falls back to a contact-id stem when contactName is null (CiviCRM-down path)', async () => {
@@ -106,12 +110,14 @@ describe('useDownloadFormPdf', () => {
     await act(async () => {
       await result.current({
         invitationId: 'inv_abc12345',
+        pdfKind: 'grants-resources',
+        pdfLabel: 'Grants & Resources',
         contactName: null,
         formTitle: 'Memo',
       });
     });
 
-    expect(appendedAnchors[0].download).toBe('contact_inv_abc1_Memo.pdf');
+    expect(appendedAnchors[0].download).toBe('contact_inv_abc1_Memo_Grants_Resources.pdf');
   });
 
   it('surfaces a sonner toast on non-2xx API responses', async () => {
@@ -123,6 +129,8 @@ describe('useDownloadFormPdf', () => {
       act(async () => {
         await result.current({
           invitationId: 'inv_1',
+          pdfKind: 'memorandum',
+          pdfLabel: 'Memorandum',
           contactName: 'Test',
           formTitle: 'Form',
         });

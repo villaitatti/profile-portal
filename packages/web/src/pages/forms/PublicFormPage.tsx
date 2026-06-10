@@ -78,7 +78,7 @@ export function PublicFormPage() {
   // isSubmitting, submitError) are only read when the renderer draws the form.
   if (submitMutation.isSuccess) {
     return (
-      <div className="mx-auto max-w-4xl">
+      <div className="mx-auto max-w-5xl">
         <PublicFormRenderer
           formDef={data.formDef}
           onSubmit={() => undefined}
@@ -90,7 +90,7 @@ export function PublicFormPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="mx-auto max-w-5xl">
       <div className="mb-8 border-b border-primary/15 pb-6">
         <p className="mb-2 text-sm font-semibold uppercase tracking-[0.08em] text-primary">
           Fellowship form

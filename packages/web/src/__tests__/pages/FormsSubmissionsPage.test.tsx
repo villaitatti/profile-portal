@@ -205,11 +205,11 @@ describe('FormsSubmissionsPage', () => {
       screen.getByText(/This form is no longer in the registry/)
     ).toBeInTheDocument();
 
-    // Both the list-row PDF button (icon variant) AND the detail-pane
-    // Download PDF button render with the same aria-label. Both must be
+    // Both the list-row PDF buttons (icon variant) AND the detail-pane
+    // PDF buttons render with matching aria-labels. All must be
     // disabled on a retired row — assert on all of them.
     const buttons = screen.getAllByRole('button', {
-      name: /Download PDF for Old Timer/,
+      name: /Download .* PDF for Old Timer/,
     });
     expect(buttons.length).toBeGreaterThanOrEqual(1);
     buttons.forEach((b) => expect(b).toBeDisabled());
@@ -229,7 +229,7 @@ describe('FormsSubmissionsPage', () => {
     render(<FormsSubmissionsPage />, { wrapper: makeWrapper() });
 
     // Scope to the submissions list so we don't pick up the detail pane's
-    // Download PDF button. The second row is inv_2 (contactName=null →
+    // PDF buttons. The second row is inv_2 (contactName=null →
     // falls back to "Contact #101" in the aria-label).
     const list = screen.getByRole('listbox', { name: 'Form submissions' });
     // data-invitation-id scoping is the cleanest way to target a specific
@@ -238,13 +238,15 @@ describe('FormsSubmissionsPage', () => {
     const row2 = within(list)
       .getAllByRole('option')
       .find((li) => li.getAttribute('data-invitation-id') === 'inv_2')!;
-    const row2Button = within(row2).getByRole('button', { name: /Download PDF/ });
+    const row2Button = within(row2).getByRole('button', { name: /Download Memorandum PDF/ });
 
     const user = userEvent.setup();
     await user.click(row2Button);
 
     expect(mockDownload).toHaveBeenCalledWith({
       invitationId: 'inv_2',
+      pdfKind: 'memorandum',
+      pdfLabel: 'Memorandum',
       contactName: null,
       formTitle: 'Memorandum I Tatti Fellowship',
     });
@@ -421,7 +423,7 @@ describe('FormsSubmissionsPage', () => {
     const row2 = within(list)
       .getAllByRole('option')
       .find((li) => li.getAttribute('data-invitation-id') === 'inv_b')!;
-    const row2Pdf = within(row2).getByRole('button', { name: /Download PDF/ });
+    const row2Pdf = within(row2).getByRole('button', { name: /Download Memorandum PDF/ });
 
     row2Pdf.focus();
     expect(document.activeElement).toBe(row2Pdf);
@@ -432,6 +434,8 @@ describe('FormsSubmissionsPage', () => {
     // The download hook fires (button click path).
     expect(mockDownload).toHaveBeenCalledWith({
       invitationId: 'inv_b',
+      pdfKind: 'memorandum',
+      pdfLabel: 'Memorandum',
       contactName: 'Maria Bianchi',
       formTitle: 'Memorandum I Tatti Fellowship',
     });

@@ -138,4 +138,167 @@ describe('PublicFormRenderer', () => {
 
     expect(screen.getByLabelText('If other, please indicate')).toBeInTheDocument();
   });
+
+  it('shows the status other field beneath a select with animation styling', () => {
+    const conditionalForm: FormDef = {
+      id: 'renderer-status-select-test',
+      title: 'Renderer Status Select Test',
+      appointmentTypes: ['Fellow'],
+      sections: [
+        {
+          title: 'Status',
+          fields: [
+            {
+              name: 'statusAtItatti',
+              label: 'What will your status be while residing at I Tatti?',
+              type: 'select',
+              required: true,
+              options: ['Independent Scholar', 'Other'],
+              layout: 'full',
+            },
+            {
+              name: 'statusOther',
+              label: 'If other, please indicate',
+              type: 'text',
+              required: false,
+              layout: 'full',
+              conditionalOn: { field: 'statusAtItatti', value: 'Other' },
+            },
+          ],
+        },
+      ],
+    };
+
+    render(
+      <PublicFormRenderer
+        formDef={conditionalForm}
+        onSubmit={vi.fn()}
+        isSubmitting={false}
+        isSuccess={false}
+      />
+    );
+
+    expect(screen.queryByLabelText('If other, please indicate')).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('combobox', { name: /What will your status be/ }), {
+      target: { value: 'Other' },
+    });
+
+    const otherField = screen.getByLabelText('If other, please indicate');
+    expect(otherField).toBeInTheDocument();
+    expect(otherField.closest('div')).toHaveClass('motion-safe:animate-in');
+  });
+
+  it('renders family subheaders and submits complete repeatable children', () => {
+    const onSubmit = vi.fn();
+    const familyForm: FormDef = {
+      id: 'renderer-family-test',
+      title: 'Renderer Family Test',
+      appointmentTypes: ['Fellow'],
+      sections: [
+        {
+          title: 'Family',
+          fields: [
+            { name: 'partnerSubheader', label: 'Partner', type: 'subheader', required: false },
+            { name: 'partnerName', label: 'Full name of partner', type: 'text', required: false },
+            { name: 'childrenSubheader', label: 'Children', type: 'subheader', required: false },
+            {
+              name: 'children',
+              label: 'Children',
+              type: 'repeatable-group',
+              required: false,
+              addLabel: 'Add child',
+              itemLabel: 'Child',
+              fields: [
+                { name: 'fullName', label: 'Full name', type: 'text', required: true },
+                { name: 'dateOfBirth', label: 'Date of birth', type: 'date', required: true },
+                { name: 'datesOfStay', label: 'Dates of stay', type: 'text', required: true },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    render(
+      <PublicFormRenderer
+        formDef={familyForm}
+        onSubmit={onSubmit}
+        isSubmitting={false}
+        isSuccess={false}
+      />
+    );
+
+    expect(screen.getByRole('heading', { name: 'Partner' })).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { name: 'Children' }).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Add child' }));
+    const childFullName = screen.getAllByLabelText(/^Full name/).at(-1)!;
+    fireEvent.change(childFullName, {
+      target: { value: 'Giulia Bianchi' },
+    });
+    fireEvent.change(screen.getByLabelText(/^Date of birth/), {
+      target: { value: '2018-04-24' },
+    });
+    fireEvent.change(screen.getByLabelText(/^Dates of stay/), {
+      target: { value: 'September to December' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /submit form/i }));
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      children: [
+        {
+          fullName: 'Giulia Bianchi',
+          dateOfBirth: '2018-04-24',
+          datesOfStay: 'September to December',
+        },
+      ],
+    });
+  });
+
+  it('requires every field in an added child row', () => {
+    const onSubmit = vi.fn();
+    const familyForm: FormDef = {
+      id: 'renderer-child-required-test',
+      title: 'Renderer Child Required Test',
+      appointmentTypes: ['Fellow'],
+      sections: [
+        {
+          title: 'Family',
+          fields: [
+            {
+              name: 'children',
+              label: 'Children',
+              type: 'repeatable-group',
+              required: false,
+              addLabel: 'Add child',
+              itemLabel: 'Child',
+              fields: [
+                { name: 'fullName', label: 'Full name', type: 'text', required: true },
+                { name: 'dateOfBirth', label: 'Date of birth', type: 'date', required: true },
+                { name: 'datesOfStay', label: 'Dates of stay', type: 'text', required: true },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    render(
+      <PublicFormRenderer
+        formDef={familyForm}
+        onSubmit={onSubmit}
+        isSubmitting={false}
+        isSuccess={false}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add child' }));
+    fireEvent.change(screen.getByLabelText(/^Full name/), {
+      target: { value: 'Giulia Bianchi' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /submit form/i }));
+
+    expect(screen.getAllByText('This field is required')).toHaveLength(2);
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
 });

@@ -17,6 +17,10 @@ function isFieldVisible(field: FormFieldDef, data: Record<string, unknown>): boo
   return data[field.conditionalOn.field] === field.conditionalOn.value;
 }
 
+function isDataField(field: FormFieldDef): boolean {
+  return field.type !== 'subheader';
+}
+
 /**
  * Walk formDef.sections, filter by conditionalOn, return the canonical
  * (label, value) list. Shared semantics with form-pdf.service.ts#getVisibleFields.
@@ -29,10 +33,14 @@ export function getVisibleFields(
   for (const section of formDef.sections) {
     for (const field of section.fields) {
       if (!isFieldVisible(field, data)) continue;
+      if (!isDataField(field)) continue;
       out.push({
         name: field.name,
         label: field.label,
-        value: formatValue(data[field.name], field.type),
+        value:
+          field.type === 'repeatable-group'
+            ? formatRepeatableGroupValue(data[field.name], field)
+            : formatValue(data[field.name], field.type),
       });
     }
   }
@@ -60,13 +68,35 @@ export function getVisibleSections(
       description: section.description,
       fields: section.fields
         .filter((f) => isFieldVisible(f, data))
+        .filter(isDataField)
         .map((f) => ({
           name: f.name,
           label: f.label,
-          value: formatValue(data[f.name], f.type),
+          value:
+            f.type === 'repeatable-group'
+              ? formatRepeatableGroupValue(data[f.name], f)
+              : formatValue(data[f.name], f.type),
         })),
     }))
     .filter((s) => s.fields.length > 0);
+}
+
+function formatRepeatableGroupValue(value: unknown, field: FormFieldDef): string {
+  if (!Array.isArray(value) || value.length === 0) return '—';
+  const childFields = field.fields?.filter(isDataField) ?? [];
+  return value
+    .map((item, index) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        return String(item);
+      }
+      const data = item as Record<string, unknown>;
+      const lines = childFields.map((childField) => {
+        const formatted = formatValue(data[childField.name], childField.type);
+        return `${childField.label}: ${formatted}`;
+      });
+      return `${field.itemLabel ?? 'Entry'} ${index + 1}\n${lines.join('\n')}`;
+    })
+    .join('\n\n');
 }
 
 /**

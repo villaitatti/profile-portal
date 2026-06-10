@@ -253,15 +253,19 @@ describe('sendBioProjectDescriptionEmail', () => {
 });
 
 describe('sendFormNotificationEmail', () => {
-  it('sends the generated PDF buffer as the form notification attachment', async () => {
-    const pdfBuffer = Buffer.from('generated-pdf-containing-v2-form-fields');
+  it('sends the generated PDF buffers as form notification attachments', async () => {
+    const memorandumPdf = Buffer.from('generated-memorandum-pdf-containing-v3-form-fields');
+    const grantsPdf = Buffer.from('generated-grants-resources-pdf-containing-v3-form-fields');
 
     await sendFormNotificationEmail({
       formTitle: 'Memorandum I Tatti Fellowship',
       fellowshipId: 123,
       contactId: 456,
       academicYear: '2026-2027',
-      pdfBuffer,
+      pdfAttachments: [
+        { label: 'Memorandum', buffer: memorandumPdf },
+        { label: 'Grants & Resources', buffer: grantsPdf },
+      ],
       responseData: {
         legalStreetAddress: 'Via di Vincigliata 26',
         legalCity: 'Florence',
@@ -278,7 +282,10 @@ describe('sendFormNotificationEmail', () => {
     const normalizedRawMessage = rawMessage.replace(/\r?\n/g, '');
 
     expect(rawMessage).toContain('To: forms@itatti.harvard.edu');
-    expect(rawMessage).toContain('Content-Type: application/pdf');
-    expect(normalizedRawMessage).toContain(pdfBuffer.toString('base64'));
+    expect(rawMessage.match(/Content-Type: application\/pdf/g)).toHaveLength(2);
+    expect(rawMessage).toContain('Memorandum_I_Tatti_Fellowship_Memorandum_Maria_Bianchi.pdf');
+    expect(rawMessage).toContain('Memorandum_I_Tatti_Fellowship_Grants_Resources_Maria_Bianchi.pdf');
+    expect(normalizedRawMessage).toContain(memorandumPdf.toString('base64'));
+    expect(normalizedRawMessage).toContain(grantsPdf.toString('base64'));
   });
 });

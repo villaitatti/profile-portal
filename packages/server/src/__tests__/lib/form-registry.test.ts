@@ -20,11 +20,23 @@ describe('form registry active/retired behavior', () => {
     ).toBe('Telephone (including country code)');
   });
 
-  it('uses the v2 fellowship form for new Fellow invitations', () => {
+  it('keeps the v2 fellowship form resolvable but retired', () => {
+    const v2 = getFormDef('fellow-memorandum-v2');
+
+    expect(v2).toBeDefined();
+    expect(v2 && isActiveFormDef(v2)).toBe(false);
+  });
+
+  it('uses the v3 fellowship form for new Fellow invitations', () => {
     const forms = getFormsForAppointmentType('Fellow');
 
-    expect(forms.map((form) => form.id)).toEqual(['fellow-memorandum-v2']);
+    expect(forms.map((form) => form.id)).toEqual(['fellow-memorandum-v3']);
     expect(forms.every(isActiveFormDef)).toBe(true);
+    expect(
+      forms[0].sections
+        .flatMap((section) => section.fields)
+        .find((field) => field.name === 'mobilePhone')
+    ).toMatchObject({ required: true });
   });
 
   it('centralizes inclusive title dropdown options', () => {

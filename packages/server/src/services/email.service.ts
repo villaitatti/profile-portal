@@ -430,7 +430,10 @@ export interface FormNotificationEmailInput {
   /** Kept for diagnostic logging only — never rendered into the email. */
   contactId: number;
   academicYear: string;
-  pdfBuffer: Buffer;
+  pdfAttachments: {
+    label: string;
+    buffer: Buffer;
+  }[];
   /**
    * Retained in the interface for potential future consumers; intentionally
    * NOT rendered into the email body anymore. The PDF attachment carries
@@ -494,8 +497,8 @@ function buildFilenameParams(stem: string, formTitle: string): {
   asciiFilename: string;
   utf8FilenameParam: string;
 } {
-  const asciiStem = stem.replace(/[^a-zA-Z0-9]/g, '_').replace(/^_+|_+$/g, '') || 'form-response';
-  const asciiTitle = formTitle.replace(/[^a-zA-Z0-9]/g, '_').replace(/^_+|_+$/g, '') || 'form';
+  const asciiStem = sanitizeAsciiFilenamePart(stem) || 'form-response';
+  const asciiTitle = sanitizeAsciiFilenamePart(formTitle) || 'form';
   const asciiFilename = `${asciiTitle}_${asciiStem}.pdf`;
   const utf8Filename = `${formTitle}_${stem}.pdf`;
   // encodeURIComponent leaves !'()* unescaped, but RFC 5987 uses the
@@ -508,6 +511,10 @@ function buildFilenameParams(stem: string, formTitle: string): {
   );
   const utf8FilenameParam = `filename*=UTF-8''${utf8Encoded}`;
   return { asciiFilename, utf8FilenameParam };
+}
+
+function sanitizeAsciiFilenamePart(value: string): string {
+  return value.replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
 }
 
 export async function sendFormNotificationEmail(input: FormNotificationEmailInput): Promise<void> {
@@ -544,8 +551,12 @@ export async function sendFormNotificationEmail(input: FormNotificationEmailInpu
     // fellowshipId + pdfSize are enough to correlate with the worker's
     // 'form notification sent' line.
     logger.info(
-      { fellowshipId: input.fellowshipId, pdfSize: input.pdfBuffer.length },
-      'Form notification email (dev mode): would send with PDF attachment'
+      {
+        fellowshipId: input.fellowshipId,
+        pdfCount: input.pdfAttachments.length,
+        pdfSize: input.pdfAttachments.reduce((sum, attachment) => sum + attachment.buffer.length, 0),
+      },
+      'Form notification email (dev mode): would send with PDF attachments'
     );
     return;
   }
@@ -569,13 +580,33 @@ export async function sendFormNotificationEmail(input: FormNotificationEmailInpu
   // inbox/attachments). Fall back to contactId when CiviCRM failed so we
   // never produce an ambiguous name.
   const filenameStem = safeName ?? String(input.contactId);
-  const { asciiFilename, utf8FilenameParam } = buildFilenameParams(filenameStem, safeFormTitle);
 
   // Base64-encode both text and HTML bodies so non-ASCII content (e.g. a
   // form title with Italian diacritics) is transported safely.
   // Chunk to 76-char lines per RFC 2045.
   const bodyBase64 = Buffer.from(rendered.text, 'utf8').toString('base64').replace(/.{76}(?=.)/g, '$&\r\n');
   const htmlBase64 = Buffer.from(rendered.html, 'utf8').toString('base64').replace(/.{76}(?=.)/g, '$&\r\n');
+  const attachmentParts = input.pdfAttachments.flatMap((attachment) => {
+    const safeLabel = sanitizeHeaderValue(attachment.label);
+    const { asciiFilename, utf8FilenameParam } = buildFilenameParams(
+      filenameStem,
+      `${safeFormTitle} ${safeLabel}`
+    );
+    return [
+      `--${mixedBoundary}`,
+      // Keep the ASCII filename= for legacy clients; add filename*= (RFC 2231)
+      // for anything modern so "François_Élise.pdf" displays correctly instead
+      // of collapsing to underscores. The `name=` param on Content-Type is
+      // kept alongside for maximum compatibility.
+      `Content-Type: application/pdf; name="${asciiFilename}"`,
+      `Content-Disposition: attachment; filename="${asciiFilename}"; ${utf8FilenameParam}`,
+      `Content-Transfer-Encoding: base64`,
+      ``,
+      attachment.buffer.toString('base64').replace(/.{76}(?=.)/g, '$&\r\n'),
+      ``,
+    ];
+  });
+
   const rawMessage = [
     `From: ${buildSesSource()}`,
     `To: ${recipient}`,
@@ -600,17 +631,7 @@ export async function sendFormNotificationEmail(input: FormNotificationEmailInpu
     ``,
     `--${altBoundary}--`,
     ``,
-    `--${mixedBoundary}`,
-    // Keep the ASCII filename= for legacy clients; add filename*= (RFC 2231)
-    // for anything modern so "François_Élise.pdf" displays correctly instead
-    // of collapsing to underscores. The `name=` param on Content-Type is
-    // kept alongside for maximum compatibility.
-    `Content-Type: application/pdf; name="${asciiFilename}"`,
-    `Content-Disposition: attachment; filename="${asciiFilename}"; ${utf8FilenameParam}`,
-    `Content-Transfer-Encoding: base64`,
-    ``,
-    input.pdfBuffer.toString('base64').replace(/.{76}(?=.)/g, '$&\r\n'),
-    ``,
+    ...attachmentParts,
     `--${mixedBoundary}--`,
   ].join('\r\n');
 

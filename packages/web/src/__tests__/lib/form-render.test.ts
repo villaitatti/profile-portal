@@ -147,6 +147,48 @@ describe('getVisibleSections', () => {
     const sections = getVisibleSections(minimalDef, {});
     expect(sections).toEqual([]);
   });
+
+  it('formats repeatable groups as readable entries', () => {
+    const formDef = {
+      ...parityFormDef,
+      sections: [
+        {
+          title: 'Family',
+          fields: [
+            {
+              name: 'children',
+              label: 'Children',
+              type: 'repeatable-group' as const,
+              required: false,
+              itemLabel: 'Child',
+              fields: [
+                { name: 'fullName', label: 'Full name', type: 'text' as const, required: true },
+                { name: 'dateOfBirth', label: 'Date of birth', type: 'date' as const, required: true },
+                { name: 'datesOfStay', label: 'Dates of stay', type: 'text' as const, required: true },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const sections = getVisibleSections(formDef, {
+      children: [
+        {
+          fullName: 'Giulia Bianchi',
+          dateOfBirth: '2018-04-24',
+          datesOfStay: 'September to December',
+        },
+      ],
+    });
+
+    expect(sections[0].fields[0]).toEqual({
+      name: 'children',
+      label: 'Children',
+      value:
+        'Child 1\nFull name: Giulia Bianchi\nDate of birth: 24 Apr 2018\nDates of stay: September to December',
+    });
+  });
 });
 
 describe('isRetiredFormTitle', () => {

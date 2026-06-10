@@ -48,7 +48,7 @@ describe('generateInvitation', () => {
         fellowshipId: 123,
         contactId: 456,
         academicYear: '2026-2027',
-        formType: 'fellow-memorandum-v2',
+        formType: 'fellow-memorandum-v3',
         appointmentType: 'Visiting Professor',
         enforceAppointmentType: true,
         triggeredBy: 'admin:test',
@@ -59,7 +59,7 @@ describe('generateInvitation', () => {
       details: {
         code: 'no_form_configured',
         appointmentType: 'Visiting Professor',
-        formType: 'fellow-memorandum-v2',
+        formType: 'fellow-memorandum-v3',
       },
     } satisfies Partial<ServiceError>);
 
@@ -67,7 +67,7 @@ describe('generateInvitation', () => {
       where: {
         fellowshipId_formType_academicYear: {
           fellowshipId: 123,
-          formType: 'fellow-memorandum-v2',
+          formType: 'fellow-memorandum-v3',
           academicYear: '2026-2027',
         },
       },
@@ -81,7 +81,7 @@ describe('generateInvitation', () => {
         fellowshipId: 123,
         contactId: 456,
         academicYear: '2026-2027',
-        formType: 'fellow-memorandum-v2',
+        formType: 'fellow-memorandum-v3',
         enforceAppointmentType: true,
         triggeredBy: 'admin:test',
       })
@@ -97,7 +97,7 @@ describe('generateInvitation', () => {
       where: {
         fellowshipId_formType_academicYear: {
           fellowshipId: 123,
-          formType: 'fellow-memorandum-v2',
+          formType: 'fellow-memorandum-v3',
           academicYear: '2026-2027',
         },
       },
@@ -109,7 +109,7 @@ describe('generateInvitation', () => {
     mockPrisma.formInvitation.findUnique.mockResolvedValue({
       id: 'inv_existing',
       token: 'existing-token',
-      formType: 'fellow-memorandum-v2',
+      formType: 'fellow-memorandum-v3',
       status: 'pending',
     } as any);
 
@@ -118,7 +118,7 @@ describe('generateInvitation', () => {
         fellowshipId: 123,
         contactId: 456,
         academicYear: '2026-2027',
-        formType: 'fellow-memorandum-v2',
+        formType: 'fellow-memorandum-v3',
         appointmentType: 'Visiting Professor',
         triggeredBy: 'admin:test',
       })
