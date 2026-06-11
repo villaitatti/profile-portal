@@ -177,7 +177,6 @@ function SentEmailsTab() {
     } finally {
       setLoadingMore(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nextCursor, loadingMore, getToken, yearFilter, typeFilter, statusParam]);
 
   if (isLoading) return <EmailsSkeleton />;

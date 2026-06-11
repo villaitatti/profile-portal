@@ -18,7 +18,6 @@ import { join, dirname, basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 // mjml's default export is the compile function. In 5.x it is async;
 // in 4.x it was sync. `await` is safe either way.
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error: mjml ships no types in some versions
 import mjml2html from 'mjml';
 

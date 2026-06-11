@@ -48,14 +48,14 @@ export interface CreateAddressInput {
   locationTypeId?: number;
 }
 
-export interface UpdateAddressInput extends Partial<CreateAddressInput> {}
+export type UpdateAddressInput = Partial<CreateAddressInput>;
 
 export interface CreatePhoneInput {
   phone: string;
   phoneTypeId: number;
 }
 
-export interface UpdatePhoneInput extends Partial<CreatePhoneInput> {}
+export type UpdatePhoneInput = Partial<CreatePhoneInput>;
 
 export interface CountryOption {
   id: number;
