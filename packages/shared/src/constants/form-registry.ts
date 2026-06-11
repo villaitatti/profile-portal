@@ -534,6 +534,47 @@ const grantsSection: FormSectionDef = {
   ],
 };
 
+const grantsSectionV3: FormSectionDef = {
+  title: 'Grant Information',
+  description: `• The base grant is paid either directly to the Fellow or to the Fellow's home institution.
+• Any additional funding (e.g. housing subsidy, travel) is paid directly to the Fellow
+• Base grant payment is made in two installments:
+  o Half at the end of July
+  o Half at the end of January
+• Any additional funding is also made in two installments:
+  o Beginning of October
+  o Beginning of February`,
+  icon: 'landmark',
+  fields: [
+    {
+      name: 'resources',
+      label: 'Resources (1 July – 30 June)',
+      type: 'textarea',
+      required: true,
+      layout: 'full',
+      helpText: `Please describe all financial resources available to you during the fellowship year.
+You must also provide an official letter from your employer (University, Museum, or other institution) confirming that:
+• You will be on sabbatical leave or leave of absence for the full fellowship period (1 July–30 June).
+• The financial terms of your leave are clearly specified (e.g. whether you will receive full or partial salary).
+• If you continue to receive a salary, the letter must include the relevant administrative contact, as the base grant will be directed to your home institution.
+• You will be fully released from all duties and entirely free from any professional obligations, whether paid or unpaid, for the entire fellowship period.
+Please note: Fellows may not hold any other fellowship or professional appointment concurrently.
+If you are receiving any additional grants:
+• List them below
+• Send a copy of each award letter by email attachment`,
+    },
+    {
+      name: 'additionalInfo',
+      label: 'Additional information',
+      type: 'textarea',
+      required: false,
+      layout: 'full',
+      helpText:
+        'Please indicate any special circumstances or difficulties that may arise as a result of your fellowship.',
+    },
+  ],
+};
+
 export const FORM_REGISTRY: FormDef[] = [
   {
     id: 'fellow-memorandum',
@@ -576,7 +617,7 @@ export const FORM_REGISTRY: FormDef[] = [
       legalAddressSectionV3,
       familySectionV3,
       emergencySection,
-      grantsSection,
+      grantsSectionV3,
     ],
   },
 ];

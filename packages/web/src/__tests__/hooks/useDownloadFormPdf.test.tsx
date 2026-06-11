@@ -111,13 +111,13 @@ describe('useDownloadFormPdf', () => {
       await result.current({
         invitationId: 'inv_abc12345',
         pdfKind: 'grants-resources',
-        pdfLabel: 'Grants & Resources',
+        pdfLabel: 'Grant Information',
         contactName: null,
         formTitle: 'Memo',
       });
     });
 
-    expect(appendedAnchors[0].download).toBe('contact_inv_abc1_Memo_Grants_Resources.pdf');
+    expect(appendedAnchors[0].download).toBe('contact_inv_abc1_Memo_Grant_Information.pdf');
   });
 
   it('surfaces a sonner toast on non-2xx API responses', async () => {

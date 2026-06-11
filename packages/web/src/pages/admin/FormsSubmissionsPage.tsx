@@ -574,8 +574,21 @@ function DetailFields({
 
 const PDF_DOWNLOADS = [
   { kind: 'memorandum' as const, label: 'Memorandum', icon: FileText },
-  { kind: 'grants-resources' as const, label: 'Grants & Resources', icon: Landmark },
+  { kind: 'grants-resources' as const, label: 'Grant Information', icon: Landmark },
 ];
+
+const GRANT_SECTION_TITLES = new Set(['Grants & Resources', 'Grant Information']);
+
+function pdfDownloadLabel(
+  kind: 'memorandum' | 'grants-resources',
+  formDef: FormDef | undefined,
+  fallback: string
+): string {
+  if (kind !== 'grants-resources') return fallback;
+  return (
+    formDef?.sections.find((section) => GRANT_SECTION_TITLES.has(section.title))?.title ?? fallback
+  );
+}
 
 function PdfButtons({
   invitation,
@@ -584,13 +597,19 @@ function PdfButtons({
   invitation: AdminFormInvitation;
   variant: 'icon' | 'button';
 }) {
+  const { data: registry } = useFormRegistry();
   const download = useDownloadFormPdf();
   const retired = isRetiredFormTitle(invitation.formTitle);
+  const formDef = registry?.find((f) => f.id === invitation.formType);
+  const pdfDownloads = PDF_DOWNLOADS.map((pdf) => ({
+    ...pdf,
+    label: pdfDownloadLabel(pdf.kind, formDef, pdf.label),
+  }));
 
   if (variant === 'icon') {
     return (
       <div className="flex shrink-0 items-center gap-1">
-        {PDF_DOWNLOADS.map((pdf) => {
+        {pdfDownloads.map((pdf) => {
           const Icon = pdf.icon;
           return (
             <button
@@ -629,7 +648,7 @@ function PdfButtons({
 
   return (
     <div className="flex shrink-0 flex-wrap justify-end gap-2">
-      {PDF_DOWNLOADS.map((pdf) => (
+      {pdfDownloads.map((pdf) => (
         <button
           key={pdf.kind}
           type="button"

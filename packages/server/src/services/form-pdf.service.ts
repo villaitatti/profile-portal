@@ -6,7 +6,7 @@ const { Document, Page, Text, View, StyleSheet } = ReactPDF;
 
 export const FORM_PDF_KINDS = [
   { kind: 'memorandum', label: 'Memorandum' },
-  { kind: 'grants-resources', label: 'Grants & Resources' },
+  { kind: 'grants-resources', label: 'Grant Information' },
 ] as const satisfies readonly { kind: FormPdfKind; label: string }[];
 
 export interface FormPdfMetadata {
@@ -95,11 +95,22 @@ const LEGAL_ADDRESS_FIELD_NAMES = new Set([
 
 const PDF_SECTION_TITLES: Record<FormPdfKind, Set<string>> = {
   memorandum: new Set(['Personal Information', 'Legal Address', 'Family', 'Emergency Contact']),
-  'grants-resources': new Set(['Grants & Resources']),
+  'grants-resources': new Set(['Grants & Resources', 'Grant Information']),
 };
 
 function pdfKindLabel(kind: FormPdfKind): string {
   return FORM_PDF_KINDS.find((item) => item.kind === kind)?.label ?? kind;
+}
+
+export function getFormPdfKindLabel(formDef: FormDef, kind: FormPdfKind): string {
+  if (kind === 'grants-resources') {
+    const sectionTitle = formDef.sections.find((section) =>
+      PDF_SECTION_TITLES[kind].has(section.title)
+    )?.title;
+    if (sectionTitle) return sectionTitle;
+  }
+
+  return pdfKindLabel(kind);
 }
 
 function isFieldVisible(field: FormFieldDef, data: Record<string, unknown>): boolean {
@@ -438,9 +449,9 @@ export async function generateFormPdfAttachments(
   }
 
   return Promise.all(
-    pdfKinds.map(async ({ kind, label }) => ({
+    pdfKinds.map(async ({ kind }) => ({
       kind,
-      label,
+      label: getFormPdfKindLabel(formDef, kind),
       buffer: await generateFormPdf(formDef, data, { kind, metadata }),
     }))
   );
