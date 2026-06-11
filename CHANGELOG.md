@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.17.10] - 11 June 2026 - Fellow memorandum grant information
+
+### Changed
+- **Fellow memorandum v3 now shows updated grant instructions.** Appointees see the renamed Grant Information section with payment timing and employer-letter requirements, and multiline help text preserves line breaks.
+- **Grant PDFs use the right section label for each form version.** Active v3 submissions download and email as Grant Information, while retired v2 submissions keep Grants & Resources.
+
+### Fixed
+- **Retired v2 form definitions preserve their original grant prompt surface.** The v2 grant section no longer inherits the v3 grant copy, with regression coverage for split PDF labels.
+
 ## [0.17.9] - 11 June 2026 - Lint baseline
 
 ### Added
