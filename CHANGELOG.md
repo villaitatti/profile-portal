@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.17.8] - 11 June 2026 - Fellowship form dropdown refinements
+
+### Changed
+- **Short dropdowns now open as compact styled menus.** Title, appointee form filters, email filters, and form archive filters no longer use browser-default dropdowns or unnecessary search boxes.
+- **Long dropdowns stay searchable.** Country selectors keep the searchable combobox so appointees can still find countries quickly.
+- **Title options are reordered.** `Dr.` and `Prof.` now appear first, and `Prefer not to say` has been removed.
+- **Fellow memorandum status fields now align with the country field.** Social Security number, I Tatti status, and the conditional "If other" field now use half-width layout instead of spanning the full form.
+
 ## [0.17.7] - 10 June 2026 - Fellow memorandum v3 and split PDFs
 
 ### Added
