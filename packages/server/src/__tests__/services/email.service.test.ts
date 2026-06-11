@@ -264,7 +264,7 @@ describe('sendFormNotificationEmail', () => {
       academicYear: '2026-2027',
       pdfAttachments: [
         { label: 'Memorandum', buffer: memorandumPdf },
-        { label: 'Grants & Resources', buffer: grantsPdf },
+        { label: 'Grant Information', buffer: grantsPdf },
       ],
       responseData: {
         legalStreetAddress: 'Via di Vincigliata 26',
@@ -284,7 +284,7 @@ describe('sendFormNotificationEmail', () => {
     expect(rawMessage).toContain('To: forms@itatti.harvard.edu');
     expect(rawMessage.match(/Content-Type: application\/pdf/g)).toHaveLength(2);
     expect(rawMessage).toContain('Memorandum_I_Tatti_Fellowship_Memorandum_Maria_Bianchi.pdf');
-    expect(rawMessage).toContain('Memorandum_I_Tatti_Fellowship_Grants_Resources_Maria_Bianchi.pdf');
+    expect(rawMessage).toContain('Memorandum_I_Tatti_Fellowship_Grant_Information_Maria_Bianchi.pdf');
     expect(normalizedRawMessage).toContain(memorandumPdf.toString('base64'));
     expect(normalizedRawMessage).toContain(grantsPdf.toString('base64'));
   });

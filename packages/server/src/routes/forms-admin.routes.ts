@@ -8,6 +8,7 @@ import * as civicrmService from '../services/civicrm.service.js';
 import {
   FORM_PDF_KINDS,
   generateFormPdf,
+  getFormPdfKindLabel,
   type FormPdfMetadata,
 } from '../services/form-pdf.service.js';
 import { isDevMode } from '../env.js';
@@ -264,7 +265,7 @@ router.get('/response/:invitationId/pdf/:pdfKind', async (req, res) => {
     kind: pdfKind,
     metadata,
   });
-  const label = FORM_PDF_KINDS.find((item) => item.kind === pdfKind)?.label ?? pdfKind;
+  const label = getFormPdfKindLabel(formDef, pdfKind);
   const filename = `${sanitizeFilename(formDef.title)}_${sanitizeFilename(label)}_${invitation.contactId}.pdf`;
 
   res.setHeader('Content-Type', 'application/pdf');

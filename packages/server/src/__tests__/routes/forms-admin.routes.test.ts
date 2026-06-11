@@ -27,9 +27,12 @@ vi.mock('../../services/civicrm.service.js', () => ({
 vi.mock('../../services/form-pdf.service.js', () => ({
   FORM_PDF_KINDS: [
     { kind: 'memorandum', label: 'Memorandum' },
-    { kind: 'grants-resources', label: 'Grants & Resources' },
+    { kind: 'grants-resources', label: 'Grant Information' },
   ],
   generateFormPdf: vi.fn(),
+  getFormPdfKindLabel: vi.fn((_formDef, kind) =>
+    kind === 'grants-resources' ? 'Grant Information' : 'Memorandum'
+  ),
 }));
 
 vi.mock('../../lib/logger.js', () => ({
@@ -61,9 +64,12 @@ beforeEach(async () => {
   vi.doMock('../../services/form-pdf.service.js', () => ({
     FORM_PDF_KINDS: [
       { kind: 'memorandum', label: 'Memorandum' },
-      { kind: 'grants-resources', label: 'Grants & Resources' },
+      { kind: 'grants-resources', label: 'Grant Information' },
     ],
     generateFormPdf: mockGenerateFormPdf,
+    getFormPdfKindLabel: vi.fn((_formDef, kind) =>
+      kind === 'grants-resources' ? 'Grant Information' : 'Memorandum'
+    ),
   }));
   vi.doMock('../../lib/logger.js', () => ({
     logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },

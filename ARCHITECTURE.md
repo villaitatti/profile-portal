@@ -78,7 +78,7 @@ Form definitions live in `@itatti/shared` so the public renderer, admin archive,
 
 The current active Fellow memorandum is `fellow-memorandum-v3`. It uses reusable title/country option constants, section icons, layout metadata, split legal-address fields (`legalStreetAddress`, `legalSupplementalAddress`, `legalCity`, `legalPostalCode`, `legalStateProvince`, `legalCountry`), required mobile phone, select-driven status fields, and repeatable child rows. The original `fellow-memorandum` and `fellow-memorandum-v2` remain inactive so archived submissions and regenerated PDFs preserve their original prompt surface.
 
-Submitted responses remain JSON. Server-side Zod validation is built from the submitted invitation's `formType`; select and radio fields must match their declared options, and repeatable child rows must be complete once added. The notification worker also resolves the submitted `formType` before generating the two PDF attachments (Memorandum and Grants & Resources), which keeps email PDFs aligned with the form version the appointee actually submitted.
+Submitted responses remain JSON. Server-side Zod validation is built from the submitted invitation's `formType`; select and radio fields must match their declared options, and repeatable child rows must be complete once added. The notification worker also resolves the submitted `formType` before generating the two PDF attachments. The first attachment is Memorandum; the second uses the grant-section label from that form version, which keeps retired Grants & Resources PDFs and active Grant Information PDFs aligned with the form the appointee actually submitted.
 
 ## Security
 

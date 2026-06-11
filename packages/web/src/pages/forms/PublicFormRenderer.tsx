@@ -134,7 +134,7 @@ export function PublicFormRenderer({
                 {section.title}
               </h2>
               {section.description && (
-                <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
+                <p className="mt-1 max-w-3xl whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
                   {section.description}
                 </p>
               )}
@@ -285,7 +285,7 @@ function FieldRenderer({
             {field.required && <RequiredMark />}
           </legend>
           {field.helpText && (
-            <p id={helpId} className="mb-2 text-sm leading-5 text-muted-foreground">
+            <p id={helpId} className="mb-2 whitespace-pre-wrap text-sm leading-5 text-muted-foreground">
               {field.helpText}
             </p>
           )}
@@ -339,7 +339,7 @@ function FieldRenderer({
             </span>
           </label>
           {field.helpText && (
-            <p id={helpId} className="mt-1.5 text-sm leading-5 text-muted-foreground">
+            <p id={helpId} className="mt-1.5 whitespace-pre-wrap text-sm leading-5 text-muted-foreground">
               {field.helpText}
             </p>
           )}
@@ -357,7 +357,7 @@ function FieldRenderer({
           </label>
 
           {field.helpText && (
-            <p id={helpId} className="mb-1.5 text-sm leading-5 text-muted-foreground">
+            <p id={helpId} className="mb-1.5 whitespace-pre-wrap text-sm leading-5 text-muted-foreground">
               {field.helpText}
             </p>
           )}
@@ -489,7 +489,7 @@ function RepeatableGroupRenderer({
             {field.required && <RequiredMark />}
           </h4>
           {field.helpText && (
-            <p className="text-sm leading-5 text-muted-foreground">{field.helpText}</p>
+            <p className="whitespace-pre-wrap text-sm leading-5 text-muted-foreground">{field.helpText}</p>
           )}
         </div>
         <button
@@ -546,7 +546,7 @@ function RepeatableGroupRenderer({
                           {childField.required && <RequiredMark />}
                         </label>
                         {childField.helpText && (
-                          <p id={childHelpId} className="mb-1.5 text-sm leading-5 text-muted-foreground">
+                          <p id={childHelpId} className="mb-1.5 whitespace-pre-wrap text-sm leading-5 text-muted-foreground">
                             {childField.helpText}
                           </p>
                         )}

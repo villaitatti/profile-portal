@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   generateFormPdf,
   generateFormPdfAttachments,
+  getFormPdfKindLabel,
   getVisibleFields,
   getVisiblePdfSections,
 } from '../../services/form-pdf.service.js';
@@ -110,6 +111,39 @@ describe('form-pdf.service getVisibleFields — parity fixture', () => {
     });
   });
 
+  it('keeps retired v2 grants/resources PDF labels stable', async () => {
+    const formDef = getFormDef('fellow-memorandum-v2');
+    expect(formDef).toBeDefined();
+
+    expect(getFormPdfKindLabel(formDef!, 'grants-resources')).toBe('Grants & Resources');
+
+    const grantsSections = getVisiblePdfSections(formDef!, {}, 'grants-resources');
+    expect(grantsSections.map((section) => section.title)).toEqual(['Grants & Resources']);
+
+    const attachments = await generateFormPdfAttachments(
+      formDef!,
+      { resources: 'University leave letter attached.' },
+      {
+        appointeeName: 'Maria Bianchi',
+        academicYear: '2026-2027',
+        fellowshipType: null,
+        appointment: null,
+      }
+    );
+
+    expect(attachments.map(({ kind, label }) => ({ kind, label }))).toContainEqual({
+      kind: 'grants-resources',
+      label: 'Grants & Resources',
+    });
+  });
+
+  it('uses the active v3 grant information label for split PDFs', () => {
+    const formDef = getFormDef('fellow-memorandum-v3');
+    expect(formDef).toBeDefined();
+
+    expect(getFormPdfKindLabel(formDef!, 'grants-resources')).toBe('Grant Information');
+  });
+
   it('renders v3 supplemental address between street and city in the PDF address block', () => {
     const formDef = getFormDef('fellow-memorandum-v3');
     expect(formDef).toBeDefined();
@@ -188,7 +222,7 @@ describe('form-pdf.service getVisibleFields — parity fixture', () => {
       'Family',
       'Emergency Contact',
     ]);
-    expect(grantsSections.map((section) => section.title)).toEqual(['Grants & Resources']);
+    expect(grantsSections.map((section) => section.title)).toEqual(['Grant Information']);
   });
 
   it('does not filter sections for forms that do not opt into split PDFs', () => {
