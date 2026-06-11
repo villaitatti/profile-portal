@@ -8,6 +8,7 @@
     "build": "pnpm build:email-templates && tsup src/index.ts --format esm --config tsup.config.ts",
     "build:email-templates": "tsx scripts/build-email-templates.ts",
     "start": "node dist/index.js",
+    "lint": "eslint \"src/**/*.ts\" \"scripts/**/*.ts\" \"prisma/**/*.ts\" \"*.config.ts\"",
     "typecheck": "tsc --noEmit",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",

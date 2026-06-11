@@ -375,13 +375,14 @@ function SubmissionList({ items, selectedId, onSelect }: SubmissionListProps) {
         targetIndex = items.length - 1;
         break;
       case 'Enter':
-      case ' ':
+      case ' ': {
         e.preventDefault();
         onSelect(id);
         // Move focus to the detail pane heading on activation only.
         const heading = document.getElementById('submission-detail-heading');
         heading?.focus();
         return;
+      }
       default:
         return;
     }

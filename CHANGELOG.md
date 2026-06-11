@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.17.9] - 11 June 2026 - Lint baseline
+
+### Added
+- **Repository linting baseline.** `pnpm lint` now runs ESLint across the server, web, and shared packages with TypeScript parsing, React and hooks checks for the web app, and Node-friendly settings for server code.
+- **Lint is part of CI.** Pull requests now run the stable root lint command before typecheck and tests.
+
+### Changed
+- **Generated and build artifacts are excluded from linting.** ESLint ignores build output, coverage, `node_modules`, Prisma generated/migration output, and compiled email templates.
+- **Small lint-only cleanups.** Shared contact update types now use type aliases, stale lint suppressions were removed, and the intentional email header control-character regex is documented with a targeted suppression.
+
 ## [0.17.8] - 11 June 2026 - Fellowship form dropdown refinements
 
 ### Changed

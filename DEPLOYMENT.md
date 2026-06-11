@@ -49,7 +49,7 @@ The `docker-entrypoint.sh` runs `prisma migrate deploy` before starting the app,
 
 | Workflow | Runner | Trigger | Purpose |
 |----------|--------|---------|---------|
-| `CI` | GitHub-hosted | pull requests and pushes to `main` | Typecheck and test. |
+| `CI` | GitHub-hosted | pull requests and pushes to `main` | Lint, typecheck, and test. |
 | `Build image` | GitHub-hosted | pushes to `main`, version tags, manual | Build and push GHCR images. |
 | `Deploy dev` | Internal self-hosted runner | successful `Build image` from `main`, or manual image tag | Deploy dev automatically from accepted `main` code. |
 | `Deploy production` | Internal self-hosted runner | manual `workflow_dispatch` version tag | Create a DB backup, then deploy the selected release tag. |

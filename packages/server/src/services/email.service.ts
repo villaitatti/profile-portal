@@ -459,6 +459,7 @@ export interface FormNotificationEmailInput {
  * even if a future caller forgets to sanitise upstream.
  */
 function sanitizeHeaderValue(v: string): string {
+  // eslint-disable-next-line no-control-regex
   return v.replace(/[\r\n\t\x00-\x1f\x7f\u0085\u2028\u2029]/g, ' ').trim();
 }
 
@@ -469,7 +470,6 @@ function sanitizeHeaderValue(v: string): string {
  * every mail client instead of arriving as mojibake.
  */
 function encodeMimeWord(v: string): string {
-  // eslint-disable-next-line no-control-regex
   if (/^[\x20-\x7e]*$/.test(v)) return v;
   // RFC 2047 caps each encoded-word at 75 octets total, INCLUDING the
   // "=?UTF-8?B?...?=" wrapper (12 chars). So the base64 payload per token
