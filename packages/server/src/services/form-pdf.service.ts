@@ -341,7 +341,7 @@ function FormDocument({
   metadata?: FormPdfMetadata;
 }) {
   const sections = getVisiblePdfSections(formDef, data, kind);
-  const title = kind ? `${pdfKindLabel(kind)} - ${formDef.title}` : formDef.title;
+  const title = kind ? `${getFormPdfKindLabel(formDef, kind)} - ${formDef.title}` : formDef.title;
 
   return React.createElement(Document, null,
     React.createElement(Page, { size: 'A4', style: styles.page },

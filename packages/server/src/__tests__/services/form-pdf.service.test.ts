@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   generateFormPdf,
   generateFormPdfAttachments,
+  getFormPdfKindLabel,
   getVisibleFields,
   getVisiblePdfSections,
 } from '../../services/form-pdf.service.js';
@@ -114,6 +115,8 @@ describe('form-pdf.service getVisibleFields — parity fixture', () => {
     const formDef = getFormDef('fellow-memorandum-v2');
     expect(formDef).toBeDefined();
 
+    expect(getFormPdfKindLabel(formDef!, 'grants-resources')).toBe('Grants & Resources');
+
     const grantsSections = getVisiblePdfSections(formDef!, {}, 'grants-resources');
     expect(grantsSections.map((section) => section.title)).toEqual(['Grants & Resources']);
 
@@ -132,6 +135,13 @@ describe('form-pdf.service getVisibleFields — parity fixture', () => {
       kind: 'grants-resources',
       label: 'Grants & Resources',
     });
+  });
+
+  it('uses the active v3 grant information label for split PDFs', () => {
+    const formDef = getFormDef('fellow-memorandum-v3');
+    expect(formDef).toBeDefined();
+
+    expect(getFormPdfKindLabel(formDef!, 'grants-resources')).toBe('Grant Information');
   });
 
   it('renders v3 supplemental address between street and city in the PDF address block', () => {
