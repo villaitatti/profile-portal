@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { FormDef } from '@itatti/shared';
 import { COUNTRIES, TITLE_OPTIONS } from '@itatti/shared';
 import { PublicFormRenderer } from '@/pages/forms/PublicFormRenderer';
@@ -76,6 +77,24 @@ describe('PublicFormRenderer', () => {
     });
   });
 
+  it('uses compact non-search selects for short option lists', async () => {
+    const user = userEvent.setup();
+    render(
+      <PublicFormRenderer
+        formDef={addressForm}
+        onSubmit={vi.fn()}
+        isSubmitting={false}
+        isSuccess={false}
+      />
+    );
+
+    await user.click(screen.getByRole('combobox', { name: 'Title' }));
+
+    expect(screen.getByRole('option', { name: 'Dr.' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Prof.' })).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/search select title/i)).not.toBeInTheDocument();
+  });
+
   it('requires street, city, and country but not title, postal code, or state/province', () => {
     const onSubmit = vi.fn();
     render(
@@ -139,7 +158,8 @@ describe('PublicFormRenderer', () => {
     expect(screen.getByLabelText('If other, please indicate')).toBeInTheDocument();
   });
 
-  it('shows the status other field beneath a select with animation styling', () => {
+  it('shows the status other field beneath a select with animation styling', async () => {
+    const user = userEvent.setup();
     const conditionalForm: FormDef = {
       id: 'renderer-status-select-test',
       title: 'Renderer Status Select Test',
@@ -180,9 +200,8 @@ describe('PublicFormRenderer', () => {
 
     expect(screen.queryByLabelText('If other, please indicate')).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByRole('combobox', { name: /What will your status be/ }), {
-      target: { value: 'Other' },
-    });
+    await user.click(screen.getByRole('combobox', { name: /What will your status be/ }));
+    await user.click(screen.getByRole('option', { name: 'Other' }));
 
     const otherField = screen.getByLabelText('If other, please indicate');
     expect(otherField).toBeInTheDocument();

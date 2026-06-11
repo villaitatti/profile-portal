@@ -14,6 +14,7 @@ import {
   Users,
 } from 'lucide-react';
 import { SearchableCombobox } from '@/components/shared/SearchableCombobox';
+import { SelectDropdown } from '@/components/shared/SelectDropdown';
 import { cn } from '@/lib/utils';
 
 interface PublicFormRendererProps {
@@ -26,6 +27,7 @@ interface PublicFormRendererProps {
 
 type RepeatableItem = Record<string, string | boolean>;
 type FormValue = string | boolean | RepeatableItem[];
+const SEARCHABLE_SELECT_THRESHOLD = 20;
 
 export function PublicFormRenderer({
   formDef,
@@ -242,7 +244,8 @@ function FieldRenderer({
   const baseInputClass =
     'w-full rounded-md border border-input bg-background px-3.5 py-2.5 text-[0.95rem] ring-offset-background transition-colors placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50';
   const labelClass = 'mb-1.5 block text-sm font-semibold text-foreground';
-  const showSearchableSelect = field.type === 'select' && (field.options?.length ?? 0) > 20;
+  const isSearchableSelect =
+    field.type === 'select' && (field.options?.length ?? 0) > SEARCHABLE_SELECT_THRESHOLD;
 
   if (field.type === 'subheader') {
     return (
@@ -373,8 +376,9 @@ function FieldRenderer({
               aria-invalid={!!error}
               className={cn(baseInputClass, 'min-h-32 resize-y')}
             />
-          ) : showSearchableSelect ? (
+          ) : isSearchableSelect ? (
             <SearchableCombobox
+              id={fieldId}
               options={field.options?.map((opt) => ({ value: opt, label: opt })) ?? []}
               value={(value as string) || ''}
               displayValue={(value as string) || undefined}
@@ -393,26 +397,22 @@ function FieldRenderer({
               }
             />
           ) : field.type === 'select' ? (
-            <select
+            <SelectDropdown
               id={fieldId}
+              options={field.options?.map((opt) => ({ value: opt, label: opt })) ?? []}
               value={(value as string) || ''}
-              onChange={(e) => onChange(e.target.value)}
-              autoComplete={field.autoComplete}
-              required={field.required}
-              aria-describedby={describedBy}
-              aria-invalid={!!error}
-              className={cn(
-                baseInputClass,
-                error && 'border-destructive focus:border-destructive focus:ring-destructive/20'
-              )}
-            >
-              <option value="">{field.placeholder || 'Select...'}</option>
-              {field.options?.map((opt) => (
-                <option key={opt} value={opt}>
-                  {opt}
-                </option>
-              ))}
-            </select>
+              onSelect={(_, label) => onChange(label)}
+              placeholder={field.placeholder || 'Select...'}
+              ariaLabelledBy={labelId}
+              ariaDescribedBy={describedBy}
+              ariaInvalid={!!error}
+              ariaRequired={field.required}
+              className={
+                error
+                  ? 'border-destructive focus:border-destructive focus:ring-destructive/20'
+                  : undefined
+              }
+            />
           ) : (
             <input
               id={fieldId}
@@ -530,14 +530,18 @@ function RepeatableGroupRenderer({
                   .filter((childField) => childField.type !== 'subheader')
                   .map((childField) => {
                     const childId = `${groupId}-${index}-${childField.name}`;
+                    const childLabelId = `${childId}-label`;
                     const childError = errors[`${field.name}.${index}.${childField.name}`];
                     const childHelpId = childField.helpText ? `${childId}-help` : undefined;
                     const childErrorId = childError ? `${childId}-error` : undefined;
                     const describedBy = [childHelpId, childErrorId].filter(Boolean).join(' ') || undefined;
+                    const isSearchableSelect =
+                      childField.type === 'select' &&
+                      (childField.options?.length ?? 0) > SEARCHABLE_SELECT_THRESHOLD;
 
                     return (
                       <div key={childField.name} className={cn(fieldLayoutClass(childField), 'min-w-0')}>
-                        <label htmlFor={childId} className={labelClass}>
+                        <label id={childLabelId} htmlFor={childId} className={labelClass}>
                           {childField.label}
                           {childField.required && <RequiredMark />}
                         </label>
@@ -564,27 +568,47 @@ function RepeatableGroupRenderer({
                                 'border-destructive focus:border-destructive focus:ring-destructive/20'
                             )}
                           />
-                        ) : childField.type === 'select' ? (
-                          <select
+                        ) : isSearchableSelect ? (
+                          <SearchableCombobox
                             id={childId}
+                            options={
+                              childField.options?.map((opt) => ({ value: opt, label: opt })) ?? []
+                            }
                             value={String(item[childField.name] ?? '')}
-                            onChange={(e) => updateItem(index, childField.name, e.target.value)}
-                            required={childField.required}
-                            aria-describedby={describedBy}
-                            aria-invalid={!!childError}
-                            className={cn(
-                              baseInputClass,
-                              childError &&
-                                'border-destructive focus:border-destructive focus:ring-destructive/20'
-                            )}
-                          >
-                            <option value="">{childField.placeholder || 'Select...'}</option>
-                            {childField.options?.map((opt) => (
-                              <option key={opt} value={opt}>
-                                {opt}
-                              </option>
-                            ))}
-                          </select>
+                            displayValue={String(item[childField.name] ?? '') || undefined}
+                            onSelect={(_, label) => updateItem(index, childField.name, label)}
+                            onClear={() => updateItem(index, childField.name, '')}
+                            placeholder={childField.placeholder || 'Select...'}
+                            emptyMessage="No matching options."
+                            ariaLabelledBy={childLabelId}
+                            ariaDescribedBy={describedBy}
+                            ariaInvalid={!!childError}
+                            ariaRequired={childField.required}
+                            className={
+                              childError
+                                ? 'border-destructive focus:border-destructive focus:ring-destructive/20'
+                                : undefined
+                            }
+                          />
+                        ) : childField.type === 'select' ? (
+                          <SelectDropdown
+                            id={childId}
+                            options={
+                              childField.options?.map((opt) => ({ value: opt, label: opt })) ?? []
+                            }
+                            value={String(item[childField.name] ?? '')}
+                            onSelect={(_, label) => updateItem(index, childField.name, label)}
+                            placeholder={childField.placeholder || 'Select...'}
+                            ariaLabelledBy={childLabelId}
+                            ariaDescribedBy={describedBy}
+                            ariaInvalid={!!childError}
+                            ariaRequired={childField.required}
+                            className={
+                              childError
+                                ? 'border-destructive focus:border-destructive focus:ring-destructive/20'
+                                : undefined
+                            }
+                          />
                         ) : (
                           <input
                             id={childId}

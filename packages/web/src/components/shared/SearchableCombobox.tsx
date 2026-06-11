@@ -11,6 +11,7 @@ export interface ComboboxOption {
 }
 
 interface SearchableComboboxProps {
+  id?: string;
   options: ComboboxOption[];
   value: string;
   displayValue?: string;
@@ -30,6 +31,7 @@ interface SearchableComboboxProps {
 }
 
 export function SearchableCombobox({
+  id,
   options,
   value,
   displayValue,
@@ -83,6 +85,7 @@ export function SearchableCombobox({
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild disabled={disabled}>
         <button
+          id={id}
           type="button"
           role="combobox"
           aria-expanded={open}

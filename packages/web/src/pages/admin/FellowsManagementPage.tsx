@@ -9,6 +9,7 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { VitIdStatusBadge } from '@/components/shared/VitIdStatusBadge';
 import { AppointeeStatusBadge } from '@/components/shared/AppointeeStatusBadge';
 import { EmailPreviewModal } from '@/components/shared/EmailPreviewModal';
+import { SelectDropdown } from '@/components/shared/SelectDropdown';
 import {
   useFellowsDashboard,
   useSendBioEmail,
@@ -212,27 +213,24 @@ export function FellowsManagementPage() {
         <h2 className="text-[1.25rem] font-semibold tracking-tight text-foreground">
           {selectedYear} Appointees
         </h2>
-        <select
+        <SelectDropdown
+          ariaLabel="Academic year"
+          options={(academicYears.length > 0 ? academicYears : [currentYear]).map((year) => ({
+            value: year,
+            label: year,
+          }))}
           value={selectedYear}
-          onChange={(e) => {
-            setSelectedYear(e.target.value);
+          allowEmpty={false}
+          onSelect={(year) => {
+            setSelectedYear(year);
             setActiveTab('all');
             setSelectedStatuses([]);
             setSelectedVitIdStatuses([]);
             setSearchQuery('');
           }}
-          className="min-w-[150px] rounded-md border bg-background px-3.5 py-2.5 text-[0.95rem] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-        >
-          {academicYears.length > 0 ? (
-            academicYears.map((year) => (
-              <option key={year} value={year}>
-                {year}
-              </option>
-            ))
-          ) : (
-            <option value={currentYear}>{currentYear}</option>
-          )}
-        </select>
+          placeholder={currentYear}
+          className="min-w-[150px]"
+        />
       </div>
 
       {/* Appointment Type Tabs */}

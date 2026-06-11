@@ -37,17 +37,26 @@ describe('form registry active/retired behavior', () => {
         .flatMap((section) => section.fields)
         .find((field) => field.name === 'mobilePhone')
     ).toMatchObject({ required: true });
+    expect(
+      forms[0].sections
+        .flatMap((section) => section.fields)
+        .find((field) => field.name === 'hasUsSsn')
+    ).toMatchObject({ layout: 'half' });
+    expect(
+      forms[0].sections
+        .flatMap((section) => section.fields)
+        .find((field) => field.name === 'statusAtItatti')
+    ).toMatchObject({ layout: 'half' });
   });
 
   it('centralizes inclusive title dropdown options', () => {
     expect(TITLE_OPTIONS).toEqual([
+      'Dr.',
+      'Prof.',
       'Mr.',
       'Mrs.',
       'Ms.',
       'Mx.',
-      'Dr.',
-      'Prof.',
-      'Prefer not to say',
     ]);
   });
 });
