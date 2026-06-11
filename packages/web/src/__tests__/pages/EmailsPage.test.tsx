@@ -281,7 +281,8 @@ describe('EmailsPage — Sent emails tab — table rendering', () => {
 // ─── Sent Emails Tab — Filters ───────────────────────────────────────────────
 
 describe('EmailsPage — Sent emails tab — filters', () => {
-  it('filters by academic year', () => {
+  it('filters by academic year', async () => {
+    const user = userEvent.setup();
     const Wrapper = makeWrapper();
     render(
       <Wrapper>
@@ -289,9 +290,8 @@ describe('EmailsPage — Sent emails tab — filters', () => {
       </Wrapper>
     );
 
-    // Select 2024-2025 year filter
-    const yearSelect = screen.getByDisplayValue('All years');
-    fireEvent.change(yearSelect, { target: { value: '2024-2025' } });
+    await user.click(screen.getByRole('combobox', { name: /filter by academic year/i }));
+    await user.click(screen.getByRole('option', { name: '2024-2025' }));
 
     // Only Elena (2024-2025) should appear
     expect(screen.getByText('Elena Petrova')).toBeInTheDocument();
@@ -299,7 +299,8 @@ describe('EmailsPage — Sent emails tab — filters', () => {
     expect(screen.queryByText('James Chen')).not.toBeInTheDocument();
   });
 
-  it('filters by email type', () => {
+  it('filters by email type', async () => {
+    const user = userEvent.setup();
     const Wrapper = makeWrapper();
     render(
       <Wrapper>
@@ -307,9 +308,8 @@ describe('EmailsPage — Sent emails tab — filters', () => {
       </Wrapper>
     );
 
-    // Select VIT_ID_INVITATION
-    const typeSelect = screen.getByDisplayValue('All types');
-    fireEvent.change(typeSelect, { target: { value: 'VIT_ID_INVITATION' } });
+    await user.click(screen.getByRole('combobox', { name: /filter by email type/i }));
+    await user.click(screen.getByRole('option', { name: 'VIT ID Invitation' }));
 
     // Only James (VIT_ID_INVITATION) should appear
     expect(screen.getByText('James Chen')).toBeInTheDocument();

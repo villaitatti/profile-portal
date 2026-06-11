@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { useEmailEvents, useEmailEventPreview, useTemplatePreview } from '@/api/emails';
 import { apiUrl, useApiToken } from '@/api/client';
+import { SelectDropdown } from '@/components/shared/SelectDropdown';
 import type { EmailEvent, EmailEventsResponse } from '@/api/emails';
 import {
   Mail,
@@ -202,28 +203,34 @@ function SentEmailsTab() {
           className="rounded-md border border-input bg-background px-3 py-1.5 text-sm w-48"
         />
 
-        <select
+        <SelectDropdown
           id="email-year-filter"
-          aria-label="Filter by academic year"
+          ariaLabel="Filter by academic year"
+          options={[
+            { value: 'all', label: 'All years' },
+            ...academicYears.map((year) => ({ value: year, label: year })),
+          ]}
           value={yearFilter}
-          onChange={(e) => setYearFilter(e.target.value)}
-          className="rounded-md border border-input bg-background px-3 py-1.5 text-sm"
-        >
-          <option value="all">All years</option>
-          {academicYears.map((y) => <option key={y} value={y}>{y}</option>)}
-        </select>
+          allowEmpty={false}
+          onSelect={(year) => setYearFilter(year)}
+          placeholder="All years"
+          className="h-9 min-w-[130px] px-3 py-1.5 text-sm"
+        />
 
-        <select
+        <SelectDropdown
           id="email-type-filter"
-          aria-label="Filter by email type"
+          ariaLabel="Filter by email type"
+          options={[
+            { value: 'all', label: 'All types' },
+            { value: 'VIT_ID_INVITATION', label: 'VIT ID Invitation' },
+            { value: 'BIO_PROJECT_DESCRIPTION', label: 'Bio & Project' },
+          ]}
           value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value as TypeFilter | 'all')}
-          className="rounded-md border border-input bg-background px-3 py-1.5 text-sm"
-        >
-          <option value="all">All types</option>
-          <option value="VIT_ID_INVITATION">VIT ID Invitation</option>
-          <option value="BIO_PROJECT_DESCRIPTION">Bio & Project</option>
-        </select>
+          allowEmpty={false}
+          onSelect={(type) => setTypeFilter(type as TypeFilter | 'all')}
+          placeholder="All types"
+          className="h-9 min-w-[150px] px-3 py-1.5 text-sm"
+        />
 
         <div className="flex items-center gap-1.5" role="group" aria-label="Filter by status">
           {(['PENDING', 'SENDING', 'SENT', 'FAILED', 'SKIPPED'] as StatusFilter[]).map((s) => (

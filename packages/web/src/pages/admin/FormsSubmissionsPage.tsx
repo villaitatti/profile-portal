@@ -6,6 +6,7 @@ import { useDownloadFormPdf } from '@/hooks/useDownloadFormPdf';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { SelectDropdown } from '@/components/shared/SelectDropdown';
 import { FormsSectionNav } from '@/pages/admin/components/FormsSectionNav';
 import { getVisibleSections, isRetiredFormTitle } from '@/lib/form-render';
 import { cn } from '@/lib/utils';
@@ -276,47 +277,47 @@ function FilterBar({
   // even if the JSX structure later changes and the implicit wrap is lost.
   const uid = useId();
   const yearId = `${uid}-year`;
+  const yearLabelId = `${yearId}-label`;
   const formTypeId = `${uid}-formtype`;
+  const formTypeLabelId = `${formTypeId}-label`;
   const searchId = `${uid}-search`;
 
   return (
     <div className="flex flex-wrap items-end gap-4">
       <div className="flex flex-col gap-1 text-sm">
-        <label htmlFor={yearId} className="text-muted-foreground">
+        <label id={yearLabelId} htmlFor={yearId} className="text-muted-foreground">
           Academic year
         </label>
-        <select
+        <SelectDropdown
           id={yearId}
+          ariaLabelledBy={yearLabelId}
+          options={yearOptions.map((optionYear) => ({
+            value: optionYear,
+            label: optionYear,
+          }))}
           value={year}
-          onChange={(e) => onYearChange(e.target.value)}
-          className="h-10 rounded border bg-background px-2 text-sm"
-        >
-          <option value="">All years</option>
-          {yearOptions.map((y) => (
-            <option key={y} value={y}>
-              {y}
-            </option>
-          ))}
-        </select>
+          onSelect={(optionYear) => onYearChange(optionYear)}
+          placeholder="All years"
+          className="h-10 min-w-[140px] rounded border px-2 text-sm"
+        />
       </div>
 
       <div className="flex flex-col gap-1 text-sm">
-        <label htmlFor={formTypeId} className="text-muted-foreground">
+        <label id={formTypeLabelId} htmlFor={formTypeId} className="text-muted-foreground">
           Form
         </label>
-        <select
+        <SelectDropdown
           id={formTypeId}
+          ariaLabelledBy={formTypeLabelId}
+          options={formTypeOptions.map((type) => ({
+            value: type,
+            label: formTitleFor(type),
+          }))}
           value={formType}
-          onChange={(e) => onFormTypeChange(e.target.value)}
-          className="h-10 rounded border bg-background px-2 text-sm"
-        >
-          <option value="">All forms</option>
-          {formTypeOptions.map((t) => (
-            <option key={t} value={t}>
-              {formTitleFor(t)}
-            </option>
-          ))}
-        </select>
+          onSelect={(type) => onFormTypeChange(type)}
+          placeholder="All forms"
+          className="h-10 min-w-[180px] rounded border px-2 text-sm"
+        />
       </div>
 
       <div className="flex flex-col gap-1 text-sm flex-1 min-w-[200px]">
