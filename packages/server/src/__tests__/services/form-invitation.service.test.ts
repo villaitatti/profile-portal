@@ -63,15 +63,7 @@ describe('generateInvitation', () => {
       },
     } satisfies Partial<ServiceError>);
 
-    expect(mockPrisma.formInvitation.findUnique).toHaveBeenCalledWith({
-      where: {
-        fellowshipId_formType_academicYear: {
-          fellowshipId: 123,
-          formType: 'fellow-memorandum-v3',
-          academicYear: '2026-2027',
-        },
-      },
-    });
+    expect(mockPrisma.formInvitation.findUnique).not.toHaveBeenCalled();
     expect(mockPrisma.formInvitation.create).not.toHaveBeenCalled();
   });
 
@@ -93,19 +85,75 @@ describe('generateInvitation', () => {
       },
     });
 
-    expect(mockPrisma.formInvitation.findUnique).toHaveBeenCalledWith({
-      where: {
-        fellowshipId_formType_academicYear: {
-          fellowshipId: 123,
-          formType: 'fellow-memorandum-v3',
-          academicYear: '2026-2027',
-        },
-      },
-    });
+    expect(mockPrisma.formInvitation.findUnique).not.toHaveBeenCalled();
     expect(mockPrisma.formInvitation.create).not.toHaveBeenCalled();
   });
 
-  it('returns an existing invitation before enforcing a changed appointment mapping', async () => {
+  it('creates a standard term fellow invitation when appointment and raw fellowship value match', async () => {
+    mockPrisma.formInvitation.findUnique.mockResolvedValue(null);
+    mockPrisma.formInvitation.create.mockResolvedValue({
+      id: 'inv_term',
+      token: 'term-token',
+      formType: 'term-fellow-memorandum-v1',
+      status: 'pending',
+    } as any);
+
+    await expect(
+      generateInvitation({
+        fellowshipId: 123,
+        contactId: 456,
+        academicYear: '2026-2027',
+        formType: 'term-fellow-memorandum-v1',
+        appointmentType: 'Fellow (short Term)',
+        fellowshipType: 'berenson_fellow',
+        enforceAppointmentType: true,
+        triggeredBy: 'admin:test',
+      })
+    ).resolves.toMatchObject({
+      id: 'inv_term',
+      token: 'term-token',
+      formType: 'term-fellow-memorandum-v1',
+      created: true,
+    });
+
+    expect(mockPrisma.formInvitation.create).toHaveBeenCalledWith({
+      data: {
+        token: expect.any(String),
+        fellowshipId: 123,
+        contactId: 456,
+        academicYear: '2026-2027',
+        formType: 'term-fellow-memorandum-v1',
+      },
+    });
+  });
+
+  it('rejects a term form when the same appointment has a different raw fellowship value', async () => {
+    await expect(
+      generateInvitation({
+        fellowshipId: 123,
+        contactId: 456,
+        academicYear: '2026-2027',
+        formType: 'term-fellow-memorandum-v1',
+        appointmentType: 'Fellow (short Term)',
+        fellowshipType: 'i_tatti_dumbarton_oaks_joint_fellow',
+        enforceAppointmentType: true,
+        triggeredBy: 'admin:test',
+      })
+    ).rejects.toMatchObject({
+      name: 'ServiceError',
+      statusCode: 400,
+      details: {
+        code: 'no_form_configured',
+        appointmentType: 'Fellow (short Term)',
+        fellowshipType: 'i_tatti_dumbarton_oaks_joint_fellow',
+        formType: 'term-fellow-memorandum-v1',
+      },
+    } satisfies Partial<ServiceError>);
+
+    expect(mockPrisma.formInvitation.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects an existing invitation when the current appointment mapping does not match', async () => {
     mockPrisma.formInvitation.findUnique.mockResolvedValue({
       id: 'inv_existing',
       token: 'existing-token',
@@ -122,12 +170,17 @@ describe('generateInvitation', () => {
         appointmentType: 'Visiting Professor',
         triggeredBy: 'admin:test',
       })
-    ).resolves.toMatchObject({
-      id: 'inv_existing',
-      token: 'existing-token',
-      created: false,
+    ).rejects.toMatchObject({
+      name: 'ServiceError',
+      statusCode: 400,
+      details: {
+        code: 'no_form_configured',
+        appointmentType: 'Visiting Professor',
+        formType: 'fellow-memorandum-v3',
+      },
     });
 
+    expect(mockPrisma.formInvitation.findUnique).not.toHaveBeenCalled();
     expect(mockPrisma.formInvitation.create).not.toHaveBeenCalled();
   });
 

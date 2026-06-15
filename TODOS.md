@@ -157,8 +157,8 @@
 
 ### Add forms for other appointment types
 - **What:** Define FormDef entries for non-Fellow appointment types (short-term, visiting scholars, etc.).
-- **Why:** Angela has different forms for different fellowship types. Only Fellow is implemented in v1.
+- **Why:** Angela has different forms for different fellowship types. Full year Fellows and the first short-term Fellow variants are implemented; other appointment families still need templates.
 - **Pros:** Completes the migration off Google Forms for all appointment types.
 - **Cons:** Need to collect form specs from Angela for each type. May require new field types.
-- **Context:** Architecture supports this — add new entries to FORM_REGISTRY with different appointmentTypes arrays. Blocked on Angela providing the other form templates.
+- **Context:** Architecture supports this — add new entries to FORM_REGISTRY with appointment and, where needed, raw CiviCRM fellowship-type matching. Standard Term Fellow, Dumbarton Oaks, and Graduate Fellow forms are now covered; visiting scholars and other remaining appointment families still need Angela's form specs.
 - **Depends on:** Core appointee forms feature landing + Angela's form specs for other types.

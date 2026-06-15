@@ -53,7 +53,7 @@ import type {
   FormDef,
   FormInvitationSummaryEntry,
 } from '@itatti/shared';
-import { getFormsForAppointmentType } from '@itatti/shared';
+import { getFormsForFellowship } from '@itatti/shared';
 
 type FilterTab = 'all' | AppointmentCategory;
 
@@ -555,7 +555,7 @@ function todayInputValue(): string {
 }
 
 function getConfiguredForms(fellow: FellowDashboardEntry): FormDef[] {
-  return getFormsForAppointmentType(fellow.appointment || '');
+  return getFormsForFellowship(fellow.appointment || '', fellow.fellowship);
 }
 
 function getPrimaryConfiguredForm(fellow: FellowDashboardEntry): FormDef | null {

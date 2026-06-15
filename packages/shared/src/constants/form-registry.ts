@@ -7,6 +7,37 @@ const FORM_DESCRIPTION =
   'I understand that the information I provide is being collected for the purposes described in, and will be used in accordance with, I Tatti’s Privacy Policy (available at http://itatti.harvard.edu/privacy-policy)';
 
 const FELLOW_MEMORANDUM_PDF_KINDS: FormPdfKind[] = ['memorandum', 'grants-resources'];
+const TERM_FELLOW_APPOINTMENT = 'Fellow (short Term)';
+const TERM_FELLOW_FELLOWSHIP_TYPES = [
+  'berenson_fellow',
+  'wallace_fellow',
+  'digital_humanities_fellow',
+  'craig_hugh_smyth_fellow',
+  'david_&_julie_tobey_fellow',
+  'i_tatti_prado-joint-fellowship',
+  'warburg-i-tatti-joint',
+  'marlène_and_paolo_fresco_fellowship_in_african_studies',
+] as const;
+const DUMBARTON_OAKS_FELLOWSHIP_TYPES = ['i_tatti_dumbarton_oaks_joint_fellow'] as const;
+const GRADUATE_FELLOWSHIP_TYPES = ['graduate_visiting_fellow'] as const;
+
+const TERM_FELLOW_RESOURCES_HELP_TEXT = `Please describe all financial resources available to you during your fellowship semester.
+You must also provide an official letter from your employer (University, Museum, or other institution) confirming that:
+• You will be on sabbatical leave or leave of absence for the full duration of the fellowship semester.
+• the financial terms of your leave are clearly specified (e.g. whether you will receive full or partial salary).
+• If you continue to receive a salary, the letter must include the relevant administrative contact, as the base grant will be directed to your home institution.
+• You will be fully released from all duties and entirely free from any professional obligations, whether paid or unpaid, for the entire fellowship semester.
+Please note: Fellows may not hold any other fellowship or professional appointment concurrently.
+If you are in receipt of additional grants:
+• List them below
+• Send a copy of each award letter by email attachment`;
+const GRADUATE_RESOURCES_HELP_TEXT = `Please describe all financial resources available to you during your fellowship semester.
+Please note: Graduate Fellowships may not be held concurrently with other major fellowship awards. Fellows may not undertake any professional obligations outside I Tatti during the fellowship semester, including part-time activities.
+If you are in receipt of supplementary funding, including funds awarded by Harvard schools:
+• List them below
+• Send a copy of the relevant documentation by email attachment`;
+const TERM_FELLOW_ADDITIONAL_INFO_HELP_TEXT =
+  'Please indicate any special circumstances or difficulties that may arise as a result of your fellowship.';
 
 const legacyPersonalSection: FormSectionDef = {
   title: 'Personal Information',
@@ -575,6 +606,94 @@ If you are receiving any additional grants:
   ],
 };
 
+const standardTermGrantsSection: FormSectionDef = {
+  title: 'Grant Information',
+  description: `• The base grant is paid either directly to the Fellow or to the Fellow's home institution.
+• Any additional funding (e.g. housing subsidy, travel) is paid directly to the Fellow.
+• Base grant payments are disbursed as follows:
+  o End of September (fall semester Fellows)
+  o End of January (winter-spring semester Fellows)
+• Any additional funding is disbursed as follows:
+  o Beginning of October (fall semester Fellows)
+  o Beginning of February (winter-spring semester Fellows)`,
+  icon: 'landmark',
+  fields: [
+    {
+      name: 'resources',
+      label: 'Resources for the fellowship semester',
+      type: 'textarea',
+      required: true,
+      layout: 'full',
+      helpText: TERM_FELLOW_RESOURCES_HELP_TEXT,
+    },
+    {
+      name: 'additionalInfo',
+      label: 'Additional information',
+      type: 'textarea',
+      required: false,
+      layout: 'full',
+      helpText: TERM_FELLOW_ADDITIONAL_INFO_HELP_TEXT,
+    },
+  ],
+};
+
+const dumbartonOaksGrantsSection: FormSectionDef = {
+  title: 'Grant Information',
+  description: `• The base grant is paid either directly to the Fellow or to the Fellow's home institution.
+• Any additional funding (e.g. housing subsidy, travel) is paid directly to the Fellow.
+• Base grant is disbursed at the end of July
+• Any additional funding is disbursed at the beginning of October`,
+  icon: 'landmark',
+  fields: [
+    {
+      name: 'resources',
+      label: 'Resources for the fellowship semester',
+      type: 'textarea',
+      required: true,
+      layout: 'full',
+      helpText: TERM_FELLOW_RESOURCES_HELP_TEXT,
+    },
+    {
+      name: 'additionalInfo',
+      label: 'Additional information',
+      type: 'textarea',
+      required: false,
+      layout: 'full',
+      helpText: TERM_FELLOW_ADDITIONAL_INFO_HELP_TEXT,
+    },
+  ],
+};
+
+const graduateGrantsSection: FormSectionDef = {
+  title: 'Grant Information',
+  description: `Grants are paid directly to Fellows.
+• Base grant payments are disbursed as follows:
+  o End of September (fall semester Fellows)
+  o End of January (winter-spring semester Fellows)
+• Any additional funding is disbursed as follows:
+  o Beginning of October (fall semester Fellows)
+  o Beginning of February (winter-spring semester Fellows)`,
+  icon: 'landmark',
+  fields: [
+    {
+      name: 'resources',
+      label: 'Resources for the fellowship semester',
+      type: 'textarea',
+      required: true,
+      layout: 'full',
+      helpText: GRADUATE_RESOURCES_HELP_TEXT,
+    },
+    {
+      name: 'additionalInfo',
+      label: 'Additional information',
+      type: 'textarea',
+      required: false,
+      layout: 'full',
+      helpText: TERM_FELLOW_ADDITIONAL_INFO_HELP_TEXT,
+    },
+  ],
+};
+
 export const FORM_REGISTRY: FormDef[] = [
   {
     id: 'fellow-memorandum',
@@ -620,6 +739,54 @@ export const FORM_REGISTRY: FormDef[] = [
       grantsSectionV3,
     ],
   },
+  {
+    id: 'term-fellow-memorandum-v1',
+    title: 'Memorandum I Tatti Term Fellowship',
+    description: FORM_DESCRIPTION,
+    active: true,
+    pdfKinds: [...FELLOW_MEMORANDUM_PDF_KINDS],
+    appointmentTypes: [TERM_FELLOW_APPOINTMENT],
+    fellowshipTypes: [...TERM_FELLOW_FELLOWSHIP_TYPES],
+    sections: [
+      personalSectionV3,
+      legalAddressSectionV3,
+      familySectionV3,
+      emergencySection,
+      standardTermGrantsSection,
+    ],
+  },
+  {
+    id: 'dumbarton-oaks-fellow-memorandum-v1',
+    title: 'Memorandum I Tatti Dumbarton Oaks Fellowship',
+    description: FORM_DESCRIPTION,
+    active: true,
+    pdfKinds: [...FELLOW_MEMORANDUM_PDF_KINDS],
+    appointmentTypes: [TERM_FELLOW_APPOINTMENT],
+    fellowshipTypes: [...DUMBARTON_OAKS_FELLOWSHIP_TYPES],
+    sections: [
+      personalSectionV3,
+      legalAddressSectionV3,
+      familySectionV3,
+      emergencySection,
+      dumbartonOaksGrantsSection,
+    ],
+  },
+  {
+    id: 'graduate-fellow-memorandum-v1',
+    title: 'Memorandum I Tatti Graduate Fellowship',
+    description: FORM_DESCRIPTION,
+    active: true,
+    pdfKinds: [...FELLOW_MEMORANDUM_PDF_KINDS],
+    appointmentTypes: [TERM_FELLOW_APPOINTMENT],
+    fellowshipTypes: [...GRADUATE_FELLOWSHIP_TYPES],
+    sections: [
+      personalSectionV3,
+      legalAddressSectionV3,
+      familySectionV3,
+      emergencySection,
+      graduateGrantsSection,
+    ],
+  },
 ];
 
 export function getFormDef(formId: string): FormDef | undefined {
@@ -634,8 +801,54 @@ export function getActiveFormDefs(): FormDef[] {
   return FORM_REGISTRY.filter(isActiveFormDef);
 }
 
+function normalizeFormMatchValue(value: string | undefined): string {
+  return (value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/\p{Diacritic}/gu, '')
+    .replace(/&/g, ' and ')
+    .replace(/[_\-()]/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function matchesAppointmentType(formDef: FormDef, appointmentType: string): boolean {
+  const normalizedAppointment = normalizeFormMatchValue(appointmentType);
+  return (
+    normalizedAppointment.length > 0 &&
+    formDef.appointmentTypes.some(
+      (type) => normalizeFormMatchValue(type) === normalizedAppointment
+    )
+  );
+}
+
+function matchesFellowshipType(formDef: FormDef, fellowshipType?: string): boolean {
+  if (!formDef.fellowshipTypes || formDef.fellowshipTypes.length === 0) return true;
+
+  const normalizedFellowship = normalizeFormMatchValue(fellowshipType);
+  return (
+    normalizedFellowship.length > 0 &&
+    formDef.fellowshipTypes.some(
+      (type) => normalizeFormMatchValue(type) === normalizedFellowship
+    )
+  );
+}
+
 export function getFormsForAppointmentType(appointmentType: string): FormDef[] {
-  return getActiveFormDefs().filter((f) => f.appointmentTypes.includes(appointmentType));
+  return getActiveFormDefs().filter(
+    (f) => !f.fellowshipTypes?.length && matchesAppointmentType(f, appointmentType)
+  );
+}
+
+export function getFormsForFellowship(
+  appointmentType: string,
+  fellowshipType?: string
+): FormDef[] {
+  return getActiveFormDefs().filter(
+    (f) => matchesAppointmentType(f, appointmentType) && matchesFellowshipType(f, fellowshipType)
+  );
 }
 
 /**
