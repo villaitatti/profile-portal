@@ -51,6 +51,7 @@ export interface FormDef {
   active?: boolean;
   pdfKinds?: FormPdfKind[];
   appointmentTypes: string[];
+  fellowshipTypes?: string[];
   sections: FormSectionDef[];
 }
 

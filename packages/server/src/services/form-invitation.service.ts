@@ -5,6 +5,7 @@ import {
   buildRetiredFormTitle,
   getFormDef,
   getFormsForAppointmentType,
+  getFormsForFellowship,
   isActiveFormDef,
 } from '@itatti/shared';
 import { buildFormSchema } from '../lib/form-schema.js';
@@ -18,6 +19,7 @@ export interface GenerateInvitationArgs {
   academicYear: string;
   formType: string;
   appointmentType?: string;
+  fellowshipType?: string;
   enforceAppointmentType?: boolean;
   triggeredBy: string;
 }
@@ -44,6 +46,22 @@ export async function generateInvitation(
     });
   }
 
+  // Dev mode passes enforceAppointmentType: false because local CiviCRM is not
+  // populated. Production and direct service calls enforce the form mapping.
+  if (
+    args.enforceAppointmentType !== false &&
+    !getFormsForFellowship(args.appointmentType ?? '', args.fellowshipType).some(
+      (form) => form.id === formDef.id
+    )
+  ) {
+    throw new ServiceError('No form configured for this appointment type', 400, {
+      code: 'no_form_configured',
+      appointmentType: args.appointmentType ?? null,
+      fellowshipType: args.fellowshipType ?? null,
+      formType: args.formType,
+    });
+  }
+
   const existing = await prisma.formInvitation.findUnique({
     where: {
       fellowshipId_formType_academicYear: {
@@ -62,19 +80,6 @@ export async function generateInvitation(
       status: existing.status,
       created: false,
     };
-  }
-
-  // Dev mode passes enforceAppointmentType: false because local CiviCRM is not
-  // populated. Production and direct service calls enforce the form mapping.
-  if (
-    args.enforceAppointmentType !== false &&
-    (!args.appointmentType || !formDef.appointmentTypes.includes(args.appointmentType))
-  ) {
-    throw new ServiceError('No form configured for this appointment type', 400, {
-      code: 'no_form_configured',
-      appointmentType: args.appointmentType ?? null,
-      formType: args.formType,
-    });
   }
 
   const token = crypto.randomBytes(32).toString('base64url');
@@ -134,7 +139,7 @@ export async function submitForm(
 
   const data = parsed.data as FormResponseData;
 
-  const [updated, response] = await prisma.$transaction([
+  const [, response] = await prisma.$transaction([
     prisma.formInvitation.update({
       where: { id: invitation.id, status: 'pending' },
       data: { status: 'submitted', submittedAt: new Date() },
@@ -394,8 +399,13 @@ export async function listInvitations(
   return { items, facets: { academicYears, formTypes } };
 }
 
-export function getAvailableFormsForAppointmentType(appointmentType: string) {
-  return getFormsForAppointmentType(appointmentType);
+export function getAvailableFormsForAppointmentType(
+  appointmentType: string,
+  fellowshipType?: string
+) {
+  return fellowshipType
+    ? getFormsForFellowship(appointmentType, fellowshipType)
+    : getFormsForAppointmentType(appointmentType);
 }
 
 export class ServiceError extends Error {

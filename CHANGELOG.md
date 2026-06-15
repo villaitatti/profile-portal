@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.17.11] - 15 June 2026 - Term fellow forms
+
+### Added
+- **Term Fellow memorandum forms.** Short-term Fellow appointments now route to dedicated active forms for standard term fellowships, Dumbarton Oaks, and Graduate Fellows based on the raw CiviCRM `Fellowship` field values.
+- **Fellowship-type form matching.** Form definitions can declare raw `fellowshipTypes`, so the Manage Appointees form status and server-side link generation both validate the CiviCRM appointment and fellowship type before generating a link.
+
+### Changed
+- **Term Fellow grant instructions are fellowship-specific.** The three new term forms reuse the active Fellow memorandum personal, address, family, and emergency fields while showing the correct Grant Information, Resources, and Additional information text for each fellowship group.
+
 ## [0.17.10] - 11 June 2026 - Fellow memorandum grant information
 
 ### Changed

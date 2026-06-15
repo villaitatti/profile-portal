@@ -139,6 +139,7 @@ router.post('/generate', validate(generateSchema), async (req, res) => {
   const triggeredBy = `admin:${req.userId}`;
   try {
     let appointmentType: string | undefined;
+    let fellowshipType: string | undefined;
 
     if (!isDevMode) {
       const fellowship = await civicrmService.getFellowWithContact(
@@ -158,11 +159,13 @@ router.post('/generate', validate(generateSchema), async (req, res) => {
         return;
       }
       appointmentType = fellowship.appointment;
+      fellowshipType = fellowship.fellowship;
     }
 
     const result = await formService.generateInvitation({
       ...req.body,
       appointmentType,
+      fellowshipType,
       enforceAppointmentType: !isDevMode,
       triggeredBy,
     });

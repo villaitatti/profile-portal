@@ -225,6 +225,29 @@ describe('form-pdf.service getVisibleFields — parity fixture', () => {
     expect(grantsSections.map((section) => section.title)).toEqual(['Grant Information']);
   });
 
+  it('splits all active term fellow forms into memorandum and grant information PDFs', () => {
+    for (const formId of [
+      'term-fellow-memorandum-v1',
+      'dumbarton-oaks-fellow-memorandum-v1',
+      'graduate-fellow-memorandum-v1',
+    ]) {
+      const formDef = getFormDef(formId);
+      expect(formDef).toBeDefined();
+
+      const memorandumSections = getVisiblePdfSections(formDef!, {}, 'memorandum');
+      const grantsSections = getVisiblePdfSections(formDef!, {}, 'grants-resources');
+
+      expect(memorandumSections.map((section) => section.title)).toEqual([
+        'Personal Information',
+        'Legal Address',
+        'Family',
+        'Emergency Contact',
+      ]);
+      expect(grantsSections.map((section) => section.title)).toEqual(['Grant Information']);
+      expect(getFormPdfKindLabel(formDef!, 'grants-resources')).toBe('Grant Information');
+    }
+  });
+
   it('does not filter sections for forms that do not opt into split PDFs', () => {
     const formDef: FormDef = {
       id: 'generic-form',

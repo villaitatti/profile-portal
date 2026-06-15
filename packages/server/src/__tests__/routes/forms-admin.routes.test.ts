@@ -12,6 +12,7 @@ vi.mock('../../lib/prisma.js', () => ({
     formInvitation: {
       findMany: vi.fn(),
       findUnique: vi.fn(),
+      create: vi.fn(),
     },
     formResponse: {
       findUnique: vi.fn(),
@@ -122,6 +123,63 @@ describe('GET /api/admin/forms/response/:invitationId/pdf/:pdfKind', () => {
         },
       }
     );
+  });
+});
+
+describe('POST /api/admin/forms/generate — CiviCRM form matching', () => {
+  it('passes raw CiviCRM fellowship value into term form generation', async () => {
+    mockCivicrm.getFellowWithContact.mockResolvedValue({
+      contactId: 100,
+      firstName: 'Maria',
+      lastName: 'Bianchi',
+      email: 'maria@example.com',
+      fellowshipId: 10,
+      appointment: 'Fellow (short Term)',
+      fellowship: 'i_tatti_dumbarton_oaks_joint_fellow',
+      startDate: '2026-09-01',
+      endDate: '2027-06-01',
+      fellowshipAccepted: true,
+    } as any);
+    mockPrisma.formInvitation.findUnique.mockResolvedValue(null);
+    mockPrisma.formInvitation.create.mockResolvedValue({
+      id: 'inv_term',
+      token: 'term-token',
+      fellowshipId: 10,
+      contactId: 100,
+      academicYear: '2026-2027',
+      formType: 'dumbarton-oaks-fellow-memorandum-v1',
+      status: 'pending',
+      createdAt: new Date('2026-06-15T10:00:00Z'),
+      updatedAt: new Date('2026-06-15T10:00:00Z'),
+    } as any);
+
+    const res = await request(makeApp())
+      .post('/api/admin/forms/generate')
+      .send({
+        fellowshipId: 10,
+        contactId: 100,
+        academicYear: '2026-2027',
+        formType: 'dumbarton-oaks-fellow-memorandum-v1',
+      })
+      .expect(201);
+
+    expect(res.body).toMatchObject({
+      id: 'inv_term',
+      token: 'term-token',
+      formType: 'dumbarton-oaks-fellow-memorandum-v1',
+      status: 'pending',
+      created: true,
+    });
+    expect(mockCivicrm.getFellowWithContact).toHaveBeenCalledWith(10, 100);
+    expect(mockPrisma.formInvitation.create).toHaveBeenCalledWith({
+      data: {
+        token: expect.any(String),
+        fellowshipId: 10,
+        contactId: 100,
+        academicYear: '2026-2027',
+        formType: 'dumbarton-oaks-fellow-memorandum-v1',
+      },
+    });
   });
 });
 
