@@ -63,25 +63,28 @@ export interface VisiblePdfSection {
 }
 
 const styles = StyleSheet.create({
-  page: { padding: 40, fontSize: 11, fontFamily: 'Helvetica' },
-  title: { fontSize: 18, marginBottom: 12, fontFamily: 'Helvetica-Bold' },
+  page: { padding: 36, fontSize: 11, fontFamily: 'Helvetica' },
+  title: { fontSize: 16, marginBottom: 10, fontFamily: 'Helvetica-Bold' },
   metadata: {
     borderBottomWidth: 1,
     borderBottomColor: '#d7d2ca',
-    paddingBottom: 10,
-    marginBottom: 8,
+    paddingBottom: 8,
+    marginBottom: 6,
   },
   metadataRow: { flexDirection: 'row', marginBottom: 3 },
   metadataLabel: { width: 92, fontSize: 8.5, color: '#666', fontFamily: 'Helvetica-Bold' },
   metadataValue: { flex: 1, fontSize: 9.5 },
-  sectionTitle: { fontSize: 14, marginTop: 16, marginBottom: 8, fontFamily: 'Helvetica-Bold' },
-  fieldRow: { marginBottom: 6 },
+  sectionTitle: { fontSize: 12.5, marginTop: 12, marginBottom: 6, fontFamily: 'Helvetica-Bold' },
+  fieldRow: { marginBottom: 5 },
+  // Horizontal pair/triple of fields, kept on one line to compact the memorandum.
+  inlineRow: { flexDirection: 'row', marginBottom: 5, gap: 16 },
+  inlineCell: { flex: 1 },
   fieldLabel: { fontSize: 9, color: '#666', marginBottom: 2 },
   fieldValue: { fontSize: 11 },
   addressLine: { fontSize: 11, marginBottom: 2 },
   groupItem: { marginTop: 4, marginBottom: 6, paddingLeft: 8, borderLeftWidth: 1, borderLeftColor: '#d7d2ca' },
   groupItemTitle: { fontSize: 9.5, marginBottom: 3, fontFamily: 'Helvetica-Bold' },
-  footer: { position: 'absolute', bottom: 30, left: 40, right: 40, fontSize: 8, color: '#999', textAlign: 'center' },
+  footer: { position: 'absolute', bottom: 24, left: 36, right: 36, fontSize: 8, color: '#999', textAlign: 'center' },
 });
 
 const LEGAL_ADDRESS_FIELD_NAMES = new Set([
@@ -97,6 +100,62 @@ const PDF_SECTION_TITLES: Record<FormPdfKind, Set<string>> = {
   memorandum: new Set(['Personal Information', 'Legal Address', 'Family', 'Emergency Contact']),
   'grants-resources': new Set(['Grants & Resources', 'Grant Information']),
 };
+
+/**
+ * Groups of simple `field` rows that should render side-by-side on a single
+ * PDF line instead of stacked. This is a pure layout concern — the visible
+ * field model (and the cross-surface parity test) is untouched. Each group is
+ * an ordered set of field names; adjacent field rows whose names belong to the
+ * same group are merged into one inline row. Fields not in any group (or that
+ * fall between group members, e.g. the conditional `statusOther`) render on
+ * their own line as before. Defined to keep the Memorandum on one page.
+ */
+const INLINE_FIELD_GROUPS: string[][] = [
+  ['title', 'givenName', 'surname'],
+  ['hasUsSsn', 'statusAtItatti'],
+  ['nationality', 'secondNationality'],
+  ['emergencyName', 'emergencyRelationship'],
+  ['emergencyPhone', 'emergencyEmail'],
+];
+
+export interface InlinePdfRow {
+  kind: 'inline';
+  cells: VisibleFieldRow[];
+}
+
+export type RenderUnit = VisiblePdfRow | InlinePdfRow;
+
+function inlineGroupFor(name: string): string[] | undefined {
+  return INLINE_FIELD_GROUPS.find((group) => group.includes(name));
+}
+
+/**
+ * Walk a section's rows and merge consecutive simple-field rows that belong to
+ * the same {@link INLINE_FIELD_GROUPS} group into a single {@link InlinePdfRow}.
+ * Address/repeatable-group rows always stand alone.
+ */
+export function groupRowsForLayout(rows: VisiblePdfRow[]): RenderUnit[] {
+  const units: RenderUnit[] = [];
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
+    const group = row.kind === 'field' ? inlineGroupFor(row.name) : undefined;
+    if (row.kind !== 'field' || !group) {
+      units.push(row);
+      continue;
+    }
+
+    const cells: VisibleFieldRow[] = [row];
+    while (i + 1 < rows.length) {
+      const next = rows[i + 1];
+      if (next.kind !== 'field' || !group.includes(next.name)) break;
+      cells.push(next);
+      i += 1;
+    }
+
+    units.push(cells.length > 1 ? { kind: 'inline', cells } : row);
+  }
+  return units;
+}
 
 function pdfKindLabel(kind: FormPdfKind): string {
   return FORM_PDF_KINDS.find((item) => item.kind === kind)?.label ?? kind;
@@ -359,10 +418,14 @@ function FormDocument({
       ...sections.map((section, si) => {
         return React.createElement(View, { key: si },
           React.createElement(Text, { style: styles.sectionTitle }, section.title),
-          ...section.rows.map((row, ri) => renderPdfRow(row, ri)),
+          ...groupRowsForLayout(section.rows).map((unit, ri) => renderRenderUnit(unit, ri)),
         );
       }),
-      React.createElement(Text, { style: styles.footer },
+      // `fixed` paints the footer as a page overlay so it pins to the bottom of
+      // every page without being treated as flow content — otherwise a memorandum
+      // whose fields fill the page pushes this absolutely-positioned footer onto a
+      // near-empty second page.
+      React.createElement(Text, { style: styles.footer, fixed: true },
         `Generated by I Tatti Profile Portal - ${new Date().toISOString().split('T')[0]}`
       ),
     )
@@ -377,6 +440,20 @@ function metadataRows(metadata: FormPdfMetadata): [string, string | null][] {
   ];
   if (metadata.appointment) rows.push(['Appointment', metadata.appointment]);
   return rows;
+}
+
+function renderRenderUnit(unit: RenderUnit, key: number) {
+  if (unit.kind === 'inline') {
+    return React.createElement(View, { key, style: styles.inlineRow },
+      ...unit.cells.map((cell) =>
+        React.createElement(View, { key: cell.name, style: styles.inlineCell },
+          React.createElement(Text, { style: styles.fieldLabel }, cell.label),
+          React.createElement(Text, { style: styles.fieldValue }, cell.value),
+        )
+      )
+    );
+  }
+  return renderPdfRow(unit, key);
 }
 
 function renderPdfRow(row: VisiblePdfRow, key: number) {
