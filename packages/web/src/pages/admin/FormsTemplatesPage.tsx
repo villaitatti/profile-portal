@@ -182,8 +182,12 @@ function FormCard({ form }: { form: FormDef }) {
 
               {guidanceFields.length > 0 && (
                 <dl className="mt-3 space-y-3 rounded-md border border-border/60 bg-muted/40 p-3">
-                  {guidanceFields.map((field) => (
-                    <div key={field.name}>
+                  {guidanceFields.map((field, fieldIndex) => (
+                    // fieldsWithGuidance flattens repeatable-group children, so
+                    // two entries can share a name (a child reusing a top-level
+                    // name, or children across groups). Index-qualify the key so
+                    // reconciliation stays stable.
+                    <div key={`${field.name}-${fieldIndex}`}>
                       <dt className="text-xs font-medium text-foreground">{field.label}</dt>
                       <dd className="mt-0.5 whitespace-pre-wrap text-xs leading-5 text-muted-foreground">
                         {field.helpText}

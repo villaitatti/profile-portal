@@ -506,7 +506,10 @@ describe('form-pdf.service getVisibleFields — parity fixture', () => {
       }
     );
 
-    const pageCount = (pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) ?? []).length;
+    // Negative lookahead excludes the `/Type /Pages` tree root (and any other
+    // `/Page*` name key) without matching it as a page, and without consuming a
+    // trailing char the way `[^s]` would.
+    const pageCount = (pdf.toString('latin1').match(/\/Type\s*\/Page(?![A-Za-z])/g) ?? []).length;
     expect(pageCount).toBe(1);
   });
 
