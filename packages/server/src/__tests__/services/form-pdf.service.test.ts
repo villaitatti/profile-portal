@@ -5,7 +5,9 @@ import {
   getFormPdfKindLabel,
   getVisibleFields,
   getVisiblePdfSections,
+  groupRowsForLayout,
 } from '../../services/form-pdf.service.js';
+import type { VisiblePdfRow } from '../../services/form-pdf.service.js';
 import {
   getFormDef,
   parityFormDef,
@@ -317,6 +319,195 @@ describe('form-pdf.service getVisibleFields — parity fixture', () => {
     expect(attachments[0]).toMatchObject({ label: 'Submission' });
     expect(attachments[0].kind).toBeUndefined();
     expect(attachments[0].buffer.length).toBeGreaterThan(0);
+  });
+
+  it('groups title/given name/surname onto one inline PDF row', () => {
+    const field = (name: string): VisiblePdfRow => ({
+      kind: 'field',
+      name,
+      label: name,
+      value: 'x',
+    });
+
+    const units = groupRowsForLayout([
+      field('title'),
+      field('givenName'),
+      field('surname'),
+      field('email'),
+    ]);
+
+    expect(units[0]).toMatchObject({
+      kind: 'inline',
+      cells: [
+        { name: 'title' },
+        { name: 'givenName' },
+        { name: 'surname' },
+      ],
+    });
+    expect(units[1]).toMatchObject({ kind: 'field', name: 'email' });
+  });
+
+  it('pairs the emergency-contact fields onto inline rows', () => {
+    const field = (name: string): VisiblePdfRow => ({
+      kind: 'field',
+      name,
+      label: name,
+      value: 'x',
+    });
+
+    const units = groupRowsForLayout([
+      field('emergencyName'),
+      field('emergencyRelationship'),
+      field('emergencyPhone'),
+      field('emergencyEmail'),
+    ]);
+
+    expect(units).toHaveLength(2);
+    expect(units[0]).toMatchObject({
+      kind: 'inline',
+      cells: [{ name: 'emergencyName' }, { name: 'emergencyRelationship' }],
+    });
+    expect(units[1]).toMatchObject({
+      kind: 'inline',
+      cells: [{ name: 'emergencyPhone' }, { name: 'emergencyEmail' }],
+    });
+  });
+
+  it('pairs the SSN/status and nationality fields onto inline rows', () => {
+    const field = (name: string): VisiblePdfRow => ({
+      kind: 'field',
+      name,
+      label: name,
+      value: 'x',
+    });
+
+    const units = groupRowsForLayout([
+      field('hasUsSsn'),
+      field('statusAtItatti'),
+      field('nationality'),
+      field('secondNationality'),
+    ]);
+
+    expect(units).toHaveLength(2);
+    expect(units[0]).toMatchObject({
+      kind: 'inline',
+      cells: [{ name: 'hasUsSsn' }, { name: 'statusAtItatti' }],
+    });
+    expect(units[1]).toMatchObject({
+      kind: 'inline',
+      cells: [{ name: 'nationality' }, { name: 'secondNationality' }],
+    });
+  });
+
+  it('keeps a lone grouped field (e.g. status without its pair) on its own row', () => {
+    const units = groupRowsForLayout([
+      { kind: 'field', name: 'statusAtItatti', label: 'Status', value: 'Other' },
+      // statusOther sits between status and nationality and is not grouped, so
+      // it stays on its own line and does not break the next inline pair.
+      { kind: 'field', name: 'statusOther', label: 'If other', value: 'Visiting' },
+      { kind: 'field', name: 'nationality', label: 'Nationality', value: 'Italian' },
+    ]);
+
+    expect(units).toEqual([
+      { kind: 'field', name: 'statusAtItatti', label: 'Status', value: 'Other' },
+      { kind: 'field', name: 'statusOther', label: 'If other', value: 'Visiting' },
+      { kind: 'field', name: 'nationality', label: 'Nationality', value: 'Italian' },
+    ]);
+  });
+
+  it('never merges address or repeatable-group rows into an inline row', () => {
+    const units = groupRowsForLayout([
+      { kind: 'address', name: 'legalAddress', label: 'Legal address', value: 'Street', fields: [] },
+      {
+        kind: 'repeatableGroup',
+        name: 'children',
+        label: 'Children',
+        itemLabel: 'Child',
+        value: '—',
+        items: [],
+      },
+    ]);
+
+    expect(units.every((unit) => unit.kind !== 'inline')).toBe(true);
+  });
+
+  it('returns an empty list for no rows', () => {
+    expect(groupRowsForLayout([])).toEqual([]);
+  });
+
+  it('does not merge same-group members separated by an intervening field', () => {
+    const field = (name: string): VisiblePdfRow => ({
+      kind: 'field',
+      name,
+      label: name,
+      value: 'x',
+    });
+
+    // givenName and surname share a group, but an ungrouped field between them
+    // breaks the run — the while-loop stops, and surname falls back to a lone
+    // field rather than starting a degenerate one-cell inline row.
+    const units = groupRowsForLayout([
+      field('givenName'),
+      field('email'),
+      field('surname'),
+    ]);
+
+    expect(units).toHaveLength(3);
+    expect(units.every((unit) => unit.kind === 'field')).toBe(true);
+  });
+
+  it('keeps a full memorandum on a single page (fixed footer)', async () => {
+    // The footer is `fixed` so it overlays each page instead of being treated
+    // as flow content that pushes a near-empty second page. Guards against a
+    // revert of `fixed: true` (or spacing regressions) silently re-introducing
+    // the 2-page memorandum.
+    const formDef = getFormDef('fellow-memorandum-v3');
+    expect(formDef).toBeDefined();
+
+    const pdf = await generateFormPdf(
+      formDef!,
+      {
+        title: 'Dr.',
+        givenName: 'Maria Elena',
+        surname: 'Bianchi-Rossi',
+        email: 'maria.bianchi@university.edu',
+        mobilePhone: '+39 333 123 4567',
+        countryMovingFrom: 'Italy',
+        hasUsSsn: 'No',
+        statusAtItatti: 'On sabbatical leave from university',
+        nationality: 'Italian',
+        secondNationality: 'British',
+        dateOfBirth: '1980-05-14',
+        legalStreetAddress: 'Via di Vincigliata 26',
+        legalSupplementalAddress: 'Villa I Tatti, Department of Renaissance Studies',
+        legalCity: 'Florence',
+        legalPostalCode: '50135',
+        legalStateProvince: 'FI',
+        legalCountry: 'Italy',
+        partnerName: 'Giovanni Rossi',
+        partnerDatesOfStay: '1 September 2026 - 30 June 2027',
+        children: [
+          { fullName: 'Giulia Bianchi-Rossi', dateOfBirth: '2018-04-24', datesOfStay: 'September to December' },
+          { fullName: 'Marco Bianchi-Rossi', dateOfBirth: '2020-11-02', datesOfStay: 'September to June' },
+        ],
+        emergencyName: 'Luca Bianchi',
+        emergencyRelationship: 'Brother',
+        emergencyPhone: '+39 055 000 0000',
+        emergencyEmail: 'luca.bianchi@example.com',
+      },
+      {
+        kind: 'memorandum',
+        metadata: {
+          appointeeName: 'Maria Elena Bianchi-Rossi',
+          academicYear: '2026-2027',
+          fellowshipType: 'Fellow',
+          appointment: 'Research Fellow',
+        },
+      }
+    );
+
+    const pageCount = (pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) ?? []).length;
+    expect(pageCount).toBe(1);
   });
 
   it('renders split PDFs with metadata without throwing', async () => {
