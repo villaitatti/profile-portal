@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.17.12] - 17 June 2026 - One-page memorandum and form template browsing
+
+### Changed
+- **Memorandum PDF fits on one page.** Personal details now pair onto single lines (Title / Given name / Surname; US Social Security number / status at I Tatti; Nationality / second nationality; emergency contact name / relationship and phone / email), spacing is tighter, and the footer is pinned per page so a full memorandum no longer spills onto a near-empty second page.
+- **Form templates page groups by status.** The templates page now has Active and Retired tabs (Active shown by default), lists the newest version of each form family first, and shows each template's registry id so same-titled versions are easy to tell apart.
+
+### Added
+- **Form guidance is visible on the templates page.** Each template card now shows its section descriptions and field help text — including the Grant Information, Resources, and Additional information instructions — so staff can read the guidance an appointee sees without opening a live form.
+
 ## [0.17.11] - 15 June 2026 - Term fellow forms
 
 ### Added
