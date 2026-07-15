@@ -34,6 +34,18 @@ function fieldToZod(field: FormFieldDef): z.ZodTypeAny {
     case 'textarea':
       schema = z.string().max(field.maxLength ?? 5000).transform((v) => v.trim());
       break;
+    case 'date':
+      schema = z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date')
+        .refine((value) => {
+          const parsed = new Date(`${value}T12:00:00.000Z`);
+          return (
+            !Number.isNaN(parsed.getTime()) &&
+            parsed.toISOString().slice(0, 10) === value
+          );
+        }, 'Invalid calendar date');
+      break;
     default:
       schema = z.string().max(field.maxLength ?? 1000).transform((v) => v.trim());
       break;

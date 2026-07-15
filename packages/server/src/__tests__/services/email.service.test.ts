@@ -27,7 +27,7 @@ vi.mock('../../lib/logger.js', () => ({
 
 // Mock @aws-sdk/client-ses at the dynamic-import boundary. email.service lazily
 // imports SESClient and SendEmailCommand, so we mock both.
-const { sesSend, SendEmailCommandMock, SendRawEmailCommandMock, SESClientMock } = vi.hoisted(() => ({
+const { sesSend, SendEmailCommandMock, SendRawEmailCommandMock } = vi.hoisted(() => ({
   sesSend: vi.fn(),
   SendEmailCommandMock: vi.fn(function (this: any, input: any) {
     this.input = input;
@@ -35,7 +35,6 @@ const { sesSend, SendEmailCommandMock, SendRawEmailCommandMock, SESClientMock } 
   SendRawEmailCommandMock: vi.fn(function (this: any, input: any) {
     this.input = input;
   }),
-  SESClientMock: vi.fn(),
 }));
 
 vi.mock('@aws-sdk/client-ses', () => ({

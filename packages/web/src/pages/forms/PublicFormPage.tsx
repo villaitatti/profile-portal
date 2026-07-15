@@ -71,6 +71,18 @@ export function PublicFormPage() {
     );
   }
 
+  if (initialStatus === 'expired') {
+    return (
+      <div className="text-center py-20 max-w-md mx-auto">
+        <h1 className="text-2xl font-bold mb-2">Form Link Expired</h1>
+        <p className="text-muted-foreground">
+          For your privacy, this form link is no longer active. Please contact the I Tatti staff
+          member who sent it to request a new link.
+        </p>
+      </div>
+    );
+  }
+
   // Post-submit: the renderer owns the full-page success screen. Hide the
   // form's title + privacy-policy block above it so the appointee sees one
   // clean "Thank you" panel instead of a half-form, half-confirmation view.

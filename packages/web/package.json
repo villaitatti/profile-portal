@@ -7,13 +7,13 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "lint": "eslint \"src/**/*.{ts,tsx}\" \"*.config.ts\"",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" \"*.config.ts\" --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@auth0/auth0-react": "^2.2.0",
+    "@auth0/auth0-react": "^2.21.0",
     "@hookform/resolvers": "^3.9.0",
     "@itatti/shared": "workspace:*",
     "@radix-ui/react-avatar": "^1.1.0",
@@ -35,8 +35,8 @@
     "react-dom": "^19.0.0",
     "react-easy-crop": "^5.5.7",
     "react-hook-form": "^7.54.0",
-    "react-router": "^7.1.0",
-    "react-router-dom": "^7.1.0",
+    "react-router": "^7.18.1",
+    "react-router-dom": "^7.18.1",
     "sonner": "^1.7.0",
     "tailwind-merge": "^2.6.0",
     "zod": "^3.24.0",
@@ -53,7 +53,7 @@
     "jsdom": "^29.0.2",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.0",
-    "vite": "^6.0.0",
+    "vite": "^6.4.3",
     "vitest": "^4.1.2"
   }
 }

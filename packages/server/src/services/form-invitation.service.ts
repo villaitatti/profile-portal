@@ -12,6 +12,22 @@ import { buildFormSchema } from '../lib/form-schema.js';
 import { enqueueFormNotification } from '../workers/form-notification.worker.js';
 import { logger } from '../lib/logger.js';
 import type { FormResponseData } from '@itatti/shared';
+import { env } from '../env.js';
+
+const DEFAULT_INVITATION_TTL_DAYS = 180;
+
+function nextInvitationExpiry(now = new Date()): Date {
+  const expiresAt = new Date(now);
+  expiresAt.setUTCDate(
+    expiresAt.getUTCDate() +
+      (env.FORM_INVITATION_TTL_DAYS ?? DEFAULT_INVITATION_TTL_DAYS)
+  );
+  return expiresAt;
+}
+
+function isPendingInvitationExpired(invitation: { status: string; expiresAt: Date }): boolean {
+  return invitation.status === 'pending' && invitation.expiresAt.getTime() <= Date.now();
+}
 
 export interface GenerateInvitationArgs {
   fellowshipId: number;
@@ -91,6 +107,7 @@ export async function generateInvitation(
       contactId: args.contactId,
       academicYear: args.academicYear,
       formType: args.formType,
+      expiresAt: nextInvitationExpiry(),
     },
   });
 
@@ -126,6 +143,27 @@ export async function submitForm(
     throw new ServiceError('This form has already been submitted', 409);
   }
 
+  if (invitation.status === 'expired' || isPendingInvitationExpired(invitation)) {
+    if (invitation.status === 'pending') {
+      const result = await prisma.formInvitation.updateMany({
+        where: {
+          id: invitation.id,
+          status: 'pending',
+          expiresAt: { lte: new Date() },
+        },
+        data: { status: 'expired' },
+      });
+      if (result.count === 0) {
+        const current = await prisma.formInvitation.findUnique({ where: { token } });
+        if (!current) throw new ServiceError('Invalid form link', 404);
+        if (current.status === 'submitted') {
+          throw new ServiceError('This form has already been submitted', 409);
+        }
+      }
+    }
+    throw new ServiceError('This form link has expired', 410);
+  }
+
   const formDef = getFormDef(invitation.formType);
   if (!formDef) {
     throw new ServiceError('Form definition not found', 500);
@@ -139,20 +177,41 @@ export async function submitForm(
 
   const data = parsed.data as FormResponseData;
 
-  const [, response] = await prisma.$transaction([
-    prisma.formInvitation.update({
-      where: { id: invitation.id, status: 'pending' },
-      data: { status: 'submitted', submittedAt: new Date() },
-    }),
-    prisma.formResponse.create({
-      data: { invitationId: invitation.id, data },
-    }),
-  ]).catch((err) => {
-    if (err.code === 'P2025') {
+  let response;
+  try {
+    response = await prisma.$transaction(async (tx) => {
+      const submittedAt = new Date();
+      const claimed = await tx.formInvitation.updateMany({
+        where: {
+          id: invitation.id,
+          token,
+          status: 'pending',
+          expiresAt: { gt: submittedAt },
+        },
+        data: { status: 'submitted', submittedAt },
+      });
+      if (claimed.count !== 1) throw new InvitationClaimConflict();
+
+      return tx.formResponse.create({
+        data: { invitationId: invitation.id, data },
+      });
+    });
+  } catch (err) {
+    if (!(err instanceof InvitationClaimConflict)) throw err;
+
+    // A concurrent submit, expiry, or token rotation won after the first
+    // read. Resolve the current state only after the failed transaction has
+    // rolled back so an old token cannot claim a freshly reset invitation.
+    const current = await prisma.formInvitation.findUnique({ where: { token } });
+    if (!current) throw new ServiceError('Invalid form link', 404);
+    if (current.status === 'submitted') {
       throw new ServiceError('This form has already been submitted', 409);
     }
-    throw err;
-  });
+    if (current.status === 'expired' || isPendingInvitationExpired(current)) {
+      throw new ServiceError('This form link has expired', 410);
+    }
+    throw new ServiceError('This form is no longer available', 409);
+  }
 
   logger.info(
     { invitationId: invitation.id, responseId: response.id },
@@ -167,11 +226,27 @@ export async function submitForm(
 }
 
 export async function getInvitationByToken(token: string) {
-  const invitation = await prisma.formInvitation.findUnique({
-    where: { token },
-    include: { response: true },
-  });
+  let invitation = await prisma.formInvitation.findUnique({ where: { token } });
   if (!invitation) return null;
+
+  if (isPendingInvitationExpired(invitation)) {
+    const result = await prisma.formInvitation.updateMany({
+      where: {
+        id: invitation.id,
+        status: 'pending',
+        expiresAt: { lte: new Date() },
+      },
+      data: { status: 'expired' },
+    });
+    if (result.count > 0) {
+      invitation.status = 'expired';
+    } else {
+      // A concurrent submit or reset won the race. Re-read by bearer token so
+      // we never report an old link as expired after it was rotated or used.
+      invitation = await prisma.formInvitation.findUnique({ where: { token } });
+      if (!invitation) return null;
+    }
+  }
 
   const formDef = getFormDef(invitation.formType);
   return { invitation, formDef };
@@ -227,25 +302,32 @@ function parseNominationSentDate(nominationSentOn: string): Date {
 }
 
 export async function resetInvitation(invitationId: string, triggeredBy: string) {
-  const invitation = await prisma.formInvitation.findUnique({
-    where: { id: invitationId },
-    include: { response: true },
-  });
-
-  if (!invitation) {
-    throw new ServiceError('Invitation not found', 404);
-  }
-
   const newToken = crypto.randomBytes(32).toString('base64url');
 
   await prisma.$transaction(async (tx) => {
-    if (invitation.response) {
-      await tx.formResponse.delete({ where: { invitationId: invitation.id } });
+    const invitation = await tx.formInvitation.findUnique({ where: { id: invitationId } });
+    if (!invitation) throw new ServiceError('Invitation not found', 404);
+
+    // Always delete inside the same transaction as token rotation. A submit
+    // that wins before this transaction is cleaned up; one that races after
+    // rotation fails the old-token compare-and-swap in submitForm().
+    await tx.formResponse.deleteMany({ where: { invitationId } });
+    try {
+      await tx.formInvitation.update({
+        where: { id: invitationId, token: invitation.token },
+        data: {
+          token: newToken,
+          status: 'pending',
+          submittedAt: null,
+          expiresAt: nextInvitationExpiry(),
+        },
+      });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+        throw new ServiceError('Invitation was reset concurrently', 409);
+      }
+      throw err;
     }
-    await tx.formInvitation.update({
-      where: { id: invitation.id },
-      data: { token: newToken, status: 'pending', submittedAt: null },
-    });
   });
 
   logger.info(
@@ -407,6 +489,8 @@ export function getAvailableFormsForAppointmentType(
     ? getFormsForFellowship(appointmentType, fellowshipType)
     : getFormsForAppointmentType(appointmentType);
 }
+
+class InvitationClaimConflict extends Error {}
 
 export class ServiceError extends Error {
   constructor(

@@ -107,6 +107,18 @@ describe('POST /contact/addresses', () => {
     expect(res.status).toBe(201);
     expect(res.body.id).toBe(10);
   });
+
+  it('rejects invalid numeric identifiers before calling CiviCRM', async () => {
+    const app = makeApp('42');
+    const res = await request(app).post('/contact/addresses').send({
+      streetAddress: '1 Via Roma',
+      city: 'Rome',
+      countryId: 'not-a-number',
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('VALIDATION_ERROR');
+    expect(mockService.createAddress).not.toHaveBeenCalled();
+  });
 });
 
 describe('PUT /contact/addresses/:id', () => {
@@ -222,6 +234,19 @@ describe('GET /contact/phones', () => {
     const res = await request(app).get('/contact/phones');
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(1);
+  });
+});
+
+describe('phone body validation', () => {
+  it('rejects overlong phone values before calling CiviCRM', async () => {
+    const app = makeApp('42');
+    const res = await request(app).post('/contact/phones').send({
+      phone: `+39 ${'1'.repeat(60)}`,
+      phoneTypeId: 1,
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('VALIDATION_ERROR');
+    expect(mockService.createPhone).not.toHaveBeenCalled();
   });
 });
 

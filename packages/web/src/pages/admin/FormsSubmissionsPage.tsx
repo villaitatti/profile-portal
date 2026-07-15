@@ -74,8 +74,11 @@ export function FormsSubmissionsPage() {
     status: 'submitted',
   });
 
-  const items = data?.items ?? [];
-  const facets = data?.facets ?? { academicYears: [], formTypes: [] };
+  const items = useMemo(() => data?.items ?? [], [data?.items]);
+  const facets = useMemo(
+    () => data?.facets ?? { academicYears: [], formTypes: [] },
+    [data?.facets]
+  );
 
   // Default year resolution:
   //   - Explicit ?year=X wins outright.

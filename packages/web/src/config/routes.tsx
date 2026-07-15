@@ -14,34 +14,27 @@ function CallbackPage() {
   return <Navigate to="/dashboard" replace />;
 }
 
-// Pages
-import { ClaimPage } from '@/pages/claim/ClaimPage';
-import { DashboardPage } from '@/pages/dashboard/DashboardPage';
-import { ProfilePage } from '@/pages/profile/ProfilePage';
-import { AppCatalogPage } from '@/pages/admin/AppCatalogPage';
-import { AppFormPage } from '@/pages/admin/AppFormPage';
-import { FellowsManagementPage } from '@/pages/admin/FellowsManagementPage';
-import { HasVitIdPage } from '@/pages/admin/HasVitIdPage';
-import { AtlassianMappingsPage } from '@/pages/admin/AtlassianMappingsPage';
-import { AtlassianSyncPage } from '@/pages/admin/AtlassianSyncPage';
-import { ClaimLogPage } from '@/pages/admin/ClaimLogPage';
-import { AutomationsPage } from '@/pages/admin/AutomationsPage';
-import { AccessPermissionsPage } from '@/pages/admin/AccessPermissionsPage';
-import { EmailsPage } from '@/pages/admin/EmailsPage';
-import { FormsSubmissionsPage } from '@/pages/admin/FormsSubmissionsPage';
-import { FormsTemplatesPage } from '@/pages/admin/FormsTemplatesPage';
-import { PublicFormPage } from '@/pages/forms/PublicFormPage';
-
 export const router = createBrowserRouter([
   {
     element: <RootLayout />,
+    HydrateFallback: LoadingSpinner,
     children: [
       // Public routes
       {
         element: <PublicLayout />,
         children: [
-          { path: '/claim', element: <ClaimPage /> },
-          { path: '/forms/:token', element: <PublicFormPage /> },
+          {
+            path: '/claim',
+            lazy: async () => ({
+              Component: (await import('@/pages/claim/ClaimPage')).ClaimPage,
+            }),
+          },
+          {
+            path: '/forms/:token',
+            lazy: async () => ({
+              Component: (await import('@/pages/forms/PublicFormPage')).PublicFormPage,
+            }),
+          },
         ],
       },
 
@@ -55,8 +48,18 @@ export const router = createBrowserRouter([
           {
             element: <AuthenticatedLayout />,
             children: [
-              { path: '/dashboard', element: <DashboardPage /> },
-              { path: '/profile', element: <ProfilePage /> },
+              {
+                path: '/dashboard',
+                lazy: async () => ({
+                  Component: (await import('@/pages/dashboard/DashboardPage')).DashboardPage,
+                }),
+              },
+              {
+                path: '/profile',
+                lazy: async () => ({
+                  Component: (await import('@/pages/profile/ProfilePage')).ProfilePage,
+                }),
+              },
 
               // VIT ID Administration (fellows-admin OR staff-it)
               {
@@ -66,11 +69,36 @@ export const router = createBrowserRouter([
                   />
                 ),
                 children: [
-                  { path: '/admin/fellows', element: <FellowsManagementPage /> },
-                  { path: '/admin/has-vitid', element: <HasVitIdPage /> },
-                  { path: '/admin/emails', element: <EmailsPage /> },
-                  { path: '/admin/forms', element: <FormsSubmissionsPage /> },
-                  { path: '/admin/forms/templates', element: <FormsTemplatesPage /> },
+                  {
+                    path: '/admin/fellows',
+                    lazy: async () => ({
+                      Component: (await import('@/pages/admin/FellowsManagementPage')).FellowsManagementPage,
+                    }),
+                  },
+                  {
+                    path: '/admin/has-vitid',
+                    lazy: async () => ({
+                      Component: (await import('@/pages/admin/HasVitIdPage')).HasVitIdPage,
+                    }),
+                  },
+                  {
+                    path: '/admin/emails',
+                    lazy: async () => ({
+                      Component: (await import('@/pages/admin/EmailsPage')).EmailsPage,
+                    }),
+                  },
+                  {
+                    path: '/admin/forms',
+                    lazy: async () => ({
+                      Component: (await import('@/pages/admin/FormsSubmissionsPage')).FormsSubmissionsPage,
+                    }),
+                  },
+                  {
+                    path: '/admin/forms/templates',
+                    lazy: async () => ({
+                      Component: (await import('@/pages/admin/FormsTemplatesPage')).FormsTemplatesPage,
+                    }),
+                  },
                 ],
               },
 
@@ -78,14 +106,54 @@ export const router = createBrowserRouter([
               {
                 element: <RoleGuard requiredRoles={[KnownRoles.STAFF_IT]} />,
                 children: [
-                  { path: '/admin/claims', element: <ClaimLogPage /> },
-                  { path: '/admin/automations', element: <AutomationsPage /> },
-                  { path: '/admin/apps', element: <AppCatalogPage /> },
-                  { path: '/admin/apps/new', element: <AppFormPage /> },
-                  { path: '/admin/apps/:id/edit', element: <AppFormPage /> },
-                  { path: '/admin/permissions', element: <AccessPermissionsPage /> },
-                  { path: '/admin/atlassian/mappings', element: <AtlassianMappingsPage /> },
-                  { path: '/admin/atlassian/sync', element: <AtlassianSyncPage /> },
+                  {
+                    path: '/admin/claims',
+                    lazy: async () => ({
+                      Component: (await import('@/pages/admin/ClaimLogPage')).ClaimLogPage,
+                    }),
+                  },
+                  {
+                    path: '/admin/automations',
+                    lazy: async () => ({
+                      Component: (await import('@/pages/admin/AutomationsPage')).AutomationsPage,
+                    }),
+                  },
+                  {
+                    path: '/admin/apps',
+                    lazy: async () => ({
+                      Component: (await import('@/pages/admin/AppCatalogPage')).AppCatalogPage,
+                    }),
+                  },
+                  {
+                    path: '/admin/apps/new',
+                    lazy: async () => ({
+                      Component: (await import('@/pages/admin/AppFormPage')).AppFormPage,
+                    }),
+                  },
+                  {
+                    path: '/admin/apps/:id/edit',
+                    lazy: async () => ({
+                      Component: (await import('@/pages/admin/AppFormPage')).AppFormPage,
+                    }),
+                  },
+                  {
+                    path: '/admin/permissions',
+                    lazy: async () => ({
+                      Component: (await import('@/pages/admin/AccessPermissionsPage')).AccessPermissionsPage,
+                    }),
+                  },
+                  {
+                    path: '/admin/atlassian/mappings',
+                    lazy: async () => ({
+                      Component: (await import('@/pages/admin/AtlassianMappingsPage')).AtlassianMappingsPage,
+                    }),
+                  },
+                  {
+                    path: '/admin/atlassian/sync',
+                    lazy: async () => ({
+                      Component: (await import('@/pages/admin/AtlassianSyncPage')).AtlassianSyncPage,
+                    }),
+                  },
                 ],
               },
             ],

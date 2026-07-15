@@ -16,10 +16,13 @@ export function errorHandler(
   }
 
   const isDev = process.env.NODE_ENV === 'development';
+  const isClientError = status >= 400 && status < 500;
+  const defaultClientCode =
+    status === 401 ? 'UNAUTHORIZED' : status === 403 ? 'FORBIDDEN' : 'REQUEST_ERROR';
 
   res.status(status).json({
-    error: status === 401 ? 'Unauthorized' : 'Internal Server Error',
-    code: err.code || (status === 401 ? 'UNAUTHORIZED' : 'INTERNAL_ERROR'),
+    error: isClientError ? err.message : 'Internal Server Error',
+    code: err.code || (isClientError ? defaultClientCode : 'INTERNAL_ERROR'),
     ...(isDev && { message: err.message }),
   });
 }

@@ -178,6 +178,7 @@ describe('POST /api/admin/forms/generate — CiviCRM form matching', () => {
         contactId: 100,
         academicYear: '2026-2027',
         formType: 'dumbarton-oaks-fellow-memorandum-v1',
+        expiresAt: expect.any(Date),
       },
     });
   });

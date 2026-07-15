@@ -197,7 +197,7 @@ const sendBioEmailBodySchema = z.object({
   resend: z.boolean().optional().default(false),
 });
 
-router.post('/:contactId/send-bio-email', async (req, res, next) => {
+router.post('/:contactId/send-bio-email', async (req, res, _next) => {
   try {
     const contactIdRaw = req.params.contactId;
     const contactId = Number(contactIdRaw);
@@ -276,7 +276,7 @@ const sendVitIdEmailBodySchema = z.object({
   academicYear: academicYearSchema,
 });
 
-router.post('/:contactId/send-vit-id-email', async (req, res, next) => {
+router.post('/:contactId/send-vit-id-email', async (req, res, _next) => {
   try {
     const contactIdRaw = req.params.contactId;
     const contactId = Number(contactIdRaw);
@@ -359,7 +359,7 @@ const emailPreviewQuerySchema = z.object({
   academicYear: academicYearSchema,
 });
 
-router.get('/:contactId/email-preview', async (req, res, next) => {
+router.get('/:contactId/email-preview', async (req, res, _next) => {
   try {
     const contactIdRaw = req.params.contactId;
     const contactId = Number(contactIdRaw);

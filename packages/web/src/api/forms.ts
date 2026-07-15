@@ -7,15 +7,15 @@ export interface PublicFormData {
   formType: string;
   status: 'pending' | 'submitted' | 'expired';
   submittedAt: string | null;
+  expiresAt: string;
   formDef: FormDef;
-  response: FormResponseData | null;
 }
 
 export function usePublicForm(token: string) {
   return useQuery({
     queryKey: ['public-form', token],
     queryFn: async () => {
-      const res = await fetch(apiUrl(`/api/forms/${token}`));
+      const res = await fetch(apiUrl(`/api/forms/${token}`), { cache: 'no-store' });
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: 'Unknown error' }));
         throw new Error(body.error || 'Failed to load form');
@@ -23,6 +23,10 @@ export function usePublicForm(token: string) {
       return res.json() as Promise<PublicFormData>;
     },
     enabled: !!token,
+    // Missing and expired bearer links are terminal. The global retry would
+    // otherwise duplicate every 404/410 request and add noisy console errors
+    // on the public failure screen.
+    retry: false,
   });
 }
 

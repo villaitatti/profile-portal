@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  checks: read
   packages: read
 
 concurrency:
@@ -37,20 +38,41 @@ jobs:
       CREATE_BACKUP: "true"
       BACKUP_DIR: ${{ vars.BACKUP_DIR || '/opt/profile-portal/backups' }}
     steps:
-      - uses: actions/checkout@v5
+      # Start from trusted main so a tag cannot supply the verification script.
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
-          ref: ${{ inputs.version_tag }}
+          ref: main
+          fetch-depth: 0
           persist-credentials: false
 
-      - name: Validate production tag format
+      - name: Verify production tag provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          case "$IMAGE_TAG" in
-            v[0-9]*.[0-9]*.[0-9]*) ;;
-            *)
-              echo "version_tag must look like v1.1.0"
-              exit 1
-              ;;
-          esac
+          if [[ ! "$IMAGE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "version_tag must use the exact vMAJOR.MINOR.PATCH format"
+            exit 1
+          fi
+
+          git fetch --force origin "refs/tags/$IMAGE_TAG:refs/tags/$IMAGE_TAG" main
+          TAG_SHA=$(git rev-parse "refs/tags/$IMAGE_TAG^{commit}")
+          if ! git merge-base --is-ancestor "$TAG_SHA" origin/main; then
+            echo "Refusing to deploy a tag that is not on origin/main."
+            exit 1
+          fi
+
+          successful_checks=$(gh api \
+            "repos/$GITHUB_REPOSITORY/commits/$TAG_SHA/check-runs" \
+            --jq '[.check_runs[] | select(.name == "check" and .status == "completed" and .conclusion == "success")] | length')
+          if [[ "$successful_checks" -lt 1 ]]; then
+            echo "Refusing to deploy a tag without a successful CI check."
+            exit 1
+          fi
+
+          echo "TAG_SHA=$TAG_SHA" >> "$GITHUB_ENV"
+
+      - name: Check out verified release
+        run: git checkout --detach "$TAG_SHA"
 
       - name: Configure SSH
         run: |

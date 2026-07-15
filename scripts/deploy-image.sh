@@ -77,6 +77,55 @@ fi
 
 export COMPOSE_PROJECT_NAME IMAGE_NAME IMAGE_TAG
 
+previous_container_id="$(docker compose -f docker-compose.yml ps -q portal 2>/dev/null || true)"
+previous_image_id=""
+if [[ -n "$previous_container_id" ]]; then
+  previous_image_id="$(docker inspect --format '{{.Image}}' "$previous_container_id" 2>/dev/null || true)"
+fi
+
+rollback_portal() {
+  if [[ -z "$previous_image_id" ]]; then
+    echo "No previous portal image is available for automatic rollback." >&2
+    return 1
+  fi
+
+  local rollback_tag rollback_container_id rollback_health
+  rollback_tag="rollback-$(date -u +%Y%m%d-%H%M%S)"
+  echo "Rolling the portal application back to image $previous_image_id." >&2
+  docker tag "$previous_image_id" "$IMAGE_NAME:$rollback_tag"
+  IMAGE_TAG="$rollback_tag"
+  export IMAGE_TAG
+  docker compose -f docker-compose.yml up -d --no-deps portal
+
+  rollback_container_id="$(docker compose -f docker-compose.yml ps -q portal)"
+  for rollback_attempt in $(seq 1 40); do
+    rollback_health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$rollback_container_id")"
+    if [[ "$rollback_health" == "healthy" ]]; then
+      echo "Application rollback succeeded. Database changes were not reverted." >&2
+      docker compose -f docker-compose.yml ps
+      return 0
+    fi
+    if [[ "$rollback_health" == "unhealthy" ]]; then
+      break
+    fi
+    echo "Waiting for rollback healthcheck ($rollback_attempt/40): $rollback_health"
+    sleep 3
+  done
+
+  echo "Application rollback failed." >&2
+  docker compose -f docker-compose.yml logs --tail=120 portal
+  return 1
+}
+
+fail_deployment() {
+  local reason="$1"
+  echo "$reason" >&2
+  docker compose -f docker-compose.yml ps
+  docker compose -f docker-compose.yml logs --tail=120 portal
+  rollback_portal || true
+  exit 1
+}
+
 if [[ "$CREATE_BACKUP" == "true" ]]; then
   safe_tag="${IMAGE_TAG//[^A-Za-z0-9_.-]/_}"
   stamp="$(date -u +%Y%m%d-%H%M%S)"
@@ -91,9 +140,7 @@ docker compose -f docker-compose.yml up -d --remove-orphans
 
 container_id="$(docker compose -f docker-compose.yml ps -q portal)"
 if [[ -z "$container_id" ]]; then
-  echo "Portal container was not created." >&2
-  docker compose -f docker-compose.yml ps
-  exit 1
+  fail_deployment "Portal container was not created."
 fi
 
 for attempt in $(seq 1 40); do
@@ -103,16 +150,11 @@ for attempt in $(seq 1 40); do
     exit 0
   fi
   if [[ "$health" == "unhealthy" ]]; then
-    echo "Portal container became unhealthy." >&2
-    docker compose -f docker-compose.yml logs --tail=120 portal
-    exit 1
+    fail_deployment "Portal container became unhealthy."
   fi
   echo "Waiting for portal healthcheck ($attempt/40): $health"
   sleep 3
 done
 
-echo "Portal container did not become healthy in time." >&2
-docker compose -f docker-compose.yml ps
-docker compose -f docker-compose.yml logs --tail=120 portal
-exit 1
+fail_deployment "Portal container did not become healthy in time."
 REMOTE

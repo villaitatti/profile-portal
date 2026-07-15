@@ -2,6 +2,7 @@
   "name": "itatti-profile-portal",
   "version": "0.17.12",
   "private": true,
+  "packageManager": "pnpm@11.13.0",
   "scripts": {
     "dev": "pnpm --filter @itatti/server dev & pnpm --filter @itatti/web dev",
     "dev:server": "pnpm --filter @itatti/server dev",
@@ -18,17 +19,6 @@
   },
   "engines": {
     "node": ">=22"
-  },
-  "packageManager": "pnpm@10.32.1",
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "@prisma/client",
-      "@prisma/engines",
-      "prisma",
-      "browser-tabs-lock",
-      "sharp"
-    ]
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

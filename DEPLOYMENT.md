@@ -49,12 +49,29 @@ The `docker-entrypoint.sh` runs `prisma migrate deploy` before starting the app,
 
 | Workflow | Runner | Trigger | Purpose |
 |----------|--------|---------|---------|
-| `CI` | GitHub-hosted | pull requests and pushes to `main` | Lint, typecheck, and test. |
+| `CI` | GitHub-hosted | pull requests and pushes to `main` | Zero-warning lint, typecheck, tests, and a production build. |
 | `Build image` | GitHub-hosted | pushes to `main`, version tags, manual | Build and push GHCR images. |
 | `Deploy dev` | Internal self-hosted runner | successful `Build image` from `main`, or manual image tag | Deploy dev automatically from accepted `main` code. |
 | `Deploy production` | Internal self-hosted runner | manual `workflow_dispatch` version tag | Create a DB backup, then deploy the selected release tag. |
 
 Production deploys are intentionally manual and tag-based. Dev deploys are automatic from `main`.
+
+Production accepts only exact `vMAJOR.MINOR.PATCH` tags. The workflow resolves
+the tag to an immutable commit, verifies that the commit is on `main`, and
+requires a successful `CI / check` result before it checks out or deploys the
+release. GitHub Actions are pinned to immutable commit SHAs.
+
+### Production release gate
+
+Before approving the `production` environment deployment:
+
+1. Confirm CI and the version-tag image build both succeeded for the same commit.
+2. Confirm the latest database backup exists and can be read by `pg_restore`/`psql`.
+3. Confirm production `.env` does not enable `DEV_SKIP_EXTERNAL_SERVICES`,
+   `PUBLIC_DEV_SKIP_AUTH`, `VITE_DEV_SKIP_AUTH`, or an email redirect.
+4. Confirm `/api/health/ready` returns HTTP 200 in dev after the image is deployed.
+5. Run the public-form, staff administration, and fellow profile smoke tests.
+6. Record the previous image tag and the backup filename in the release notes.
 
 ### View logs
 
@@ -80,6 +97,12 @@ export IMAGE_TAG=sha-<commit-sha-or-version-tag>
 docker compose pull portal
 docker compose up -d --remove-orphans
 ```
+
+The deployment script automatically rolls the **portal application image** back
+when the new container fails its readiness check. It does not reverse database
+migrations. If a migration is incompatible with the previous application, use
+the migration-specific fix-forward path or restore the pre-deploy database
+backup together with the previous image.
 
 ## Environment Variables
 
@@ -125,6 +148,7 @@ The appointee email system covers both the **bio & project description** email (
 | `APPOINTEE_EMAIL_FROM_NAME_BIO` | `I Tatti - Bio & Project` (default) | `I Tatti - Bio & Project` (default) |
 | `FORM_NOTIFICATION_EMAIL` | VIT ID staff inbox (e.g. `angela@…`) | VIT ID staff inbox |
 | `FORM_NOTIFICATION_OVERRIDE_TO` | developer inbox (e.g. `andrea@…`) | **unset** |
+| `FORM_INVITATION_TTL_DAYS` | `180` (or a shorter test window) | `180` unless policy requires less |
 
 The server refuses to start if `APPOINTEE_EMAIL_REDIRECT_TO` is set under `NODE_ENV=production` without `APPOINTEE_EMAIL_ALLOW_REDIRECT=true`. This is an intentional guard against accidentally leaving the redirect on in real production.
 
@@ -148,6 +172,9 @@ These are exposed publicly by `GET /api/config`. They are not secrets. Use `PUBL
 | `PUBLIC_API_BASE_URL` | Backend API base URL; usually blank for same-origin production |
 | `PUBLIC_CIVICRM_URL` | CiviCRM URL for admin links |
 | `PUBLIC_DEV_SKIP_AUTH` | Enables mock auth for local/dev-only cases |
+
+Both server-side and browser-side development-auth switches are rejected when
+`NODE_ENV=production`. Production-like dev/staging hosts must use real Auth0.
 
 The old `VITE_*` values remain as local Vite fallback values only. They are no longer Docker build arguments and should not be used as the deployed configuration source.
 
@@ -253,6 +280,14 @@ docker compose exec db pg_dump -U portal profile_portal > backup_$(date +%Y%m%d)
 ```bash
 docker compose exec -T db psql -U portal profile_portal < backup_file.sql
 ```
+
+### Restore drill
+
+At least quarterly, restore the latest production-format backup into an isolated
+PostgreSQL instance, run `prisma migrate deploy`, start the exact production
+image, and verify `/api/health/ready`. Record the backup timestamp, image digest,
+restore duration, and tester. Never test a restore against the live production
+database or reuse production credentials in the isolated environment.
 
 ## Atlassian SCIM Sync
 

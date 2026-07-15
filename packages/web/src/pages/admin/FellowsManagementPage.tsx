@@ -641,7 +641,7 @@ function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEntry[]; 
       setSendError(null);
       setResendConfirmOpen(false);
     }
-  }, [activeSend?.fellow.civicrmId, activeSend?.kind]);
+  }, [activeSend]);
 
   // Reset to page 1 when the underlying data changes (filter/search/year)
   useEffect(() => setPage(1), [fellows]);

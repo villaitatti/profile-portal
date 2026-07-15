@@ -48,7 +48,7 @@ describe('AppointeeStatusBadge', () => {
   );
 
   it('distinguishes completed lifecycle steps from future steps in the popup', () => {
-    const { container } = render(<AppointeeStatusBadge status="accepted" />);
+    render(<AppointeeStatusBadge status="accepted" />);
 
     fireEvent.click(screen.getByLabelText('View appointee lifecycle stages'));
 

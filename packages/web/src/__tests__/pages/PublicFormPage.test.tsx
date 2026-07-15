@@ -70,8 +70,8 @@ describe('PublicFormPage — submission flow', () => {
         formType: 'fellow-memorandum',
         status: 'submitted',
         submittedAt: '2026-04-24T10:00:00.000Z',
+        expiresAt: '2026-10-24T10:00:00.000Z',
         formDef: minimalForm,
-        response: { fullName: 'Prior submission' },
       },
       isLoading: false,
       error: null,
@@ -97,8 +97,8 @@ describe('PublicFormPage — submission flow', () => {
         formType: 'fellow-memorandum',
         status: 'pending',
         submittedAt: null,
+        expiresAt: '2026-10-24T10:00:00.000Z',
         formDef: minimalForm,
-        response: null,
       },
       isLoading: false,
       error: null,
@@ -116,6 +116,32 @@ describe('PublicFormPage — submission flow', () => {
     expect(screen.getByRole('button', { name: /Submit/ })).toBeInTheDocument();
   });
 
+  it('does not render fields for an expired link', () => {
+    mockUsePublicForm.mockReturnValue({
+      data: {
+        id: 'inv_1',
+        formType: 'fellow-memorandum',
+        status: 'expired',
+        submittedAt: null,
+        expiresAt: '2026-07-01T00:00:00.000Z',
+        formDef: minimalForm,
+      },
+      isLoading: false,
+      error: null,
+    });
+    mockUseSubmitForm.mockReturnValue({
+      mutate: mockMutate,
+      isPending: false,
+      error: null,
+      isSuccess: false,
+    });
+
+    render(<PublicFormPage />, { wrapper: makeWrapper() });
+
+    expect(screen.getByRole('heading', { name: 'Form Link Expired' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Submit/ })).not.toBeInTheDocument();
+  });
+
   it('shows the "Thank you!" success screen after a just-completed submit — NOT "Already Submitted"', async () => {
     // Mount with pending status (appointee opens a fresh link).
     mockUsePublicForm.mockReturnValue({
@@ -124,8 +150,8 @@ describe('PublicFormPage — submission flow', () => {
         formType: 'fellow-memorandum',
         status: 'pending',
         submittedAt: null,
+        expiresAt: '2026-10-24T10:00:00.000Z',
         formDef: minimalForm,
-        response: null,
       },
       isLoading: false,
       error: null,
@@ -151,8 +177,8 @@ describe('PublicFormPage — submission flow', () => {
         formType: 'fellow-memorandum',
         status: 'submitted',
         submittedAt: '2026-05-07T10:00:00.000Z',
+        expiresAt: '2026-10-24T10:00:00.000Z',
         formDef: minimalForm,
-        response: { fullName: 'Maria Bianchi' },
       },
       isLoading: false,
       error: null,
@@ -206,8 +232,8 @@ describe('PublicFormPage — submission flow', () => {
             formType: 'fellow-memorandum',
             status: 'submitted',
             submittedAt: '2026-04-24T10:00:00.000Z',
+            expiresAt: '2026-10-24T10:00:00.000Z',
             formDef: minimalForm,
-            response: { fullName: 'Prior' },
           },
           isLoading: false,
           error: null,
@@ -219,8 +245,8 @@ describe('PublicFormPage — submission flow', () => {
           formType: 'fellow-memorandum',
           status: 'pending',
           submittedAt: null,
+          expiresAt: '2026-10-24T10:00:00.000Z',
           formDef: minimalForm,
-          response: null,
         },
         isLoading: false,
         error: null,
@@ -282,8 +308,8 @@ describe('PublicFormPage — submission flow', () => {
         formType: 'fellow-memorandum',
         status: 'pending',
         submittedAt: null,
+        expiresAt: '2026-10-24T10:00:00.000Z',
         formDef: minimalForm,
-        response: null,
       },
       isLoading: false,
       error: null,

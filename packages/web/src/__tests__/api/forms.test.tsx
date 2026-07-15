@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { useFormInvitations, useMarkNominationSent } from '@/api/forms';
+import { useFormInvitations, useMarkNominationSent, usePublicForm } from '@/api/forms';
 import { waitFor } from '@testing-library/react';
 import { apiFetch } from '@/api/client';
 
@@ -61,6 +61,24 @@ describe('useMarkNominationSent', () => {
     );
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['form-invitations'] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['fellows'] });
+  });
+});
+
+describe('usePublicForm', () => {
+  it('does not retry a missing or expired bearer link', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify({ error: 'Form not found' }), { status: 404 }));
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: 3, retryDelay: 0 } },
+    });
+
+    const { result } = renderHook(() => usePublicForm('missing-token'), {
+      wrapper: wrap(qc),
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 

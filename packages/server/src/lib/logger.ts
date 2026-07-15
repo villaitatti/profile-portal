@@ -9,6 +9,7 @@ export const logger = pino({
       'req.headers["cf-access-jwt-assertion"]',
       'req.headers["x-api-key"]',
       'req.headers["x-auth-token"]',
+      'req.url',
       'request.headers.authorization',
       'request.headers.cookie',
       'headers.authorization',

@@ -141,4 +141,29 @@ describe('fellow-memorandum-v3 validation', () => {
       schema.safeParse({ ...base, mobilePhone: '+39 333 0000', hasUsSsn: 'Maybe' }).success
     ).toBe(false);
   });
+
+  it('rejects impossible calendar dates submitted outside the browser date picker', () => {
+    const form = getFormDef('fellow-memorandum-v3')!;
+    const schema = buildFormSchema(form);
+    const base = {
+      givenName: 'Maria',
+      surname: 'Bianchi',
+      email: 'maria@example.com',
+      mobilePhone: '+39 333 0000',
+      countryMovingFrom: 'Italy',
+      hasUsSsn: 'No',
+      statusAtItatti: 'Independent Scholar',
+      nationality: 'Italian',
+      legalStreetAddress: 'Via di Vincigliata 26',
+      legalCity: 'Florence',
+      legalCountry: 'Italy',
+      emergencyName: 'Luca Bianchi',
+      emergencyPhone: '+39 055 0000',
+      emergencyEmail: 'luca@example.com',
+      resources: 'University leave letter attached.',
+    };
+
+    expect(schema.safeParse({ ...base, dateOfBirth: '2026-02-31' }).success).toBe(false);
+    expect(schema.safeParse({ ...base, dateOfBirth: '2026-02-28' }).success).toBe(true);
+  });
 });

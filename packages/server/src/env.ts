@@ -4,7 +4,6 @@ const devMode = process.env.DEV_SKIP_EXTERNAL_SERVICES === 'true';
 
 const requiredStr = devMode ? z.string().default('') : z.string().min(1);
 const requiredUrl = devMode ? z.string().default('http://localhost') : z.string().url();
-const requiredEmail = devMode ? z.string().default('dev@localhost') : z.string().email();
 
 // Parses a "true"/"false" env var, tolerating unset and empty-string values
 // (both treated as the default). `.default()` alone doesn't catch empty strings
@@ -142,6 +141,9 @@ const envSchema = z.object({
   // instead of FORM_NOTIFICATION_EMAIL, bypassing the dev-mode skip.
   // Allows testing the full email+PDF flow locally without touching production.
   FORM_NOTIFICATION_OVERRIDE_TO: z.string().email().optional().or(z.literal('')),
+  // Public form bearer links expire even if an invitation is never submitted.
+  // Resetting an invitation rotates the token and starts a fresh TTL.
+  FORM_INVITATION_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(180),
 });
 
 function loadEnv() {
@@ -153,6 +155,21 @@ function loadEnv() {
     console.error('Missing or invalid environment variables:\n' + missing.join('\n'));
     console.error('\nCopy .env.example to .env and fill in the values.');
     console.error('Or set DEV_SKIP_EXTERNAL_SERVICES=true for local UI testing.');
+    process.exit(1);
+  }
+
+  // Development auth replaces JWT verification with a fully privileged mock
+  // user. Never allow either side of that switch in a production process: a
+  // stale deployment variable would otherwise turn every protected endpoint
+  // into an unauthenticated staff-IT endpoint.
+  if (
+    result.data.NODE_ENV === 'production' &&
+    (devMode || result.data.PUBLIC_DEV_SKIP_AUTH || process.env.VITE_DEV_SKIP_AUTH === 'true')
+  ) {
+    console.error(
+      'Development authentication must not be enabled in production. Unset ' +
+        'DEV_SKIP_EXTERNAL_SERVICES, PUBLIC_DEV_SKIP_AUTH, and VITE_DEV_SKIP_AUTH.'
+    );
     process.exit(1);
   }
 

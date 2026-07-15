@@ -29,7 +29,6 @@ export default function App() {
         audience: auth0Config.audience,
         scope: 'openid profile email',
       }}
-      cacheLocation="localstorage"
     >
       {content}
     </Auth0Provider>
