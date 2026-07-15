@@ -18,14 +18,6 @@
 - **Context:** Flagged by Codex during `/ship` of the submissions archive. The existing try/catch handles "CiviCRM throws" but not "CiviCRM hangs forever." Applies equally to `emails-admin.routes.ts` which uses the same pattern.
 - **Blocked by:** Nothing. Ideal candidate for the existing shared-cache refactor (both routes use identical code).
 
-### Strict calendar validation on submitted date fields (submit-time)
-- **Priority:** P3
-- **What:** `buildFormSchema` in `packages/server/src/lib/form-schema.ts` treats `type: 'date'` form fields as generic strings. A public form submit can therefore persist an impossible calendar date like `"2026-02-31"`. The display side is already defensive (`formatDateOnly` rejects impossible dates and returns the raw string unchanged), so the archive shows `"2026-02-31"` literally instead of a rolled-over `"3 Mar 2026"`. But the bad data still lives in the DB and the PDF, and no one gets an error at submit time.
-- **Why:** Low-impact today because appointees use HTML `<input type="date">` pickers (which validate client-side). The gap opens via a raw POST, a misbehaving client, or a form library migration.
-- **How:** In `buildFormSchema`, for `type === 'date'` fields add a `z.string().refine(...)` that splits `YYYY-MM-DD` and verifies the calendar via a Date round-trip (same pattern as `formatDateOnly` in `form-pdf.service.ts` and `form-render.ts`). Consider extracting the round-trip into a shared helper in `@itatti/shared` so submit validation and display formatting share the same predicate.
-- **Context:** Flagged by Codex during `/ship` of the submissions archive. Display-side fix landed in the same PR; submit-side validation is the remaining gap.
-- **Blocked by:** Nothing.
-
 ### Worker unit-test infrastructure (pg-boss queues)
 - **Priority:** P3
 - **What:** The project has zero tests for any of the `packages/server/src/workers/*` files. That's how the pg-boss v10 `createQueue` regression (fixed in this PR) lived undetected for a full release cycle — a future refactor could silently remove the fix with no CI signal.
@@ -162,3 +154,14 @@
 - **Cons:** Need to collect form specs from Angela for each type. May require new field types.
 - **Context:** Architecture supports this — add new entries to FORM_REGISTRY with appointment and, where needed, raw CiviCRM fellowship-type matching. Standard Term Fellow, Dumbarton Oaks, and Graduate Fellow forms are now covered; visiting scholars and other remaining appointment families still need Angela's form specs.
 - **Depends on:** Core appointee forms feature landing + Angela's form specs for other types.
+
+## Completed
+
+### Strict calendar validation on submitted date fields (submit-time)
+- **Priority:** P3
+- **What:** `buildFormSchema` now rejects impossible calendar dates such as `"2026-02-31"` before public form data is stored.
+- **Why:** Raw API clients and future form implementations can no longer bypass the browser date picker's calendar validation and persist invalid dates into submissions and PDFs.
+- **Context:** Completed as part of the production-readiness hardening pass, with regression coverage for leap days, impossible dates, and malformed values.
+- **Blocked by:** Nothing.
+
+**Completed:** v0.17.13 (15 July 2026)

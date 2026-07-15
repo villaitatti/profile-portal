@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.17.13] - 15 July 2026 - Production readiness hardening
+
+### Added
+- **Public form links now have a finite lifetime.** Invitations expire after a configurable period, existing links receive a safe migration window, and expired links render a clear failure state instead of retaining indefinite access to submitted data.
+- **Production readiness reports real dependency health.** The readiness endpoint checks PostgreSQL, writable upload storage, and the background job queue before a container is considered ready.
+- **Production releases have a documented safety gate.** The deployment runbook now covers backup verification, restore drills, release evidence, readiness checks, and the boundary between application rollback and database recovery.
+
+### Changed
+- **Production authentication always fails closed.** Development authentication and external-service bypasses can no longer start under `NODE_ENV=production`, and browser access tokens are kept in memory rather than local storage.
+- **Public form submissions are private and race-safe.** Bearer-link responses no longer return stored submission data, requests are non-cacheable and rate-limited, tokens are redacted from logs, and submission/reset transitions atomically verify the current token and expiry.
+- **Deployments only accept trusted releases.** Release tags must use the exact three-level version format, belong to `main`, and have a successful CI check before image building or production deployment; failed readiness automatically restores the previous application image.
+- **Production containers carry less attack surface.** The runtime contains only server production dependencies, runs without npm/corepack/pnpm, invokes Prisma directly for migrations, and uses the patched pnpm 11 dependency policy during builds.
+- **Frontend routes load on demand.** Admin and public pages are split into route-level chunks, authentication redirects run after render, and the content security policy no longer permits inline scripts.
+
+### Fixed
+- **Authorization and audit attribution match the intended roles.** Application detail reads require staff IT access, automation actions retain the authenticated administrator identity, and profile contact updates validate identifiers, lengths, types, and calendar values before reaching external services.
+- **API failures preserve useful client errors without leaking server internals.** Actionable 4xx messages and codes pass through consistently while unexpected 5xx responses stay generic.
+- **Known dependency and runtime-image vulnerabilities are removed.** Direct and transitive packages were refreshed or overridden, CI now reviews dependency changes, and GitHub Actions are pinned to immutable commits.
+
 ## [0.17.12] - 17 June 2026 - One-page memorandum and form template browsing
 
 ### Changed
