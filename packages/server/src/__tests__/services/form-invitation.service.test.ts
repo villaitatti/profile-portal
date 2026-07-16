@@ -60,6 +60,41 @@ beforeEach(() => {
 });
 
 describe('generateInvitation', () => {
+  it('rotates an expired invitation instead of returning a dead bearer token', async () => {
+    const expired = {
+      id: 'inv_expired',
+      token: 'dead-token',
+      formType: 'fellow-memorandum-v3',
+      status: 'expired',
+      expiresAt: new Date('2026-01-01T00:00:00.000Z'),
+    };
+    mockPrisma.formInvitation.findUnique
+      .mockResolvedValueOnce(expired as any)
+      .mockResolvedValueOnce({ ...expired, token: 'fresh-token', status: 'pending' } as any);
+    mockPrisma.formInvitation.updateMany.mockResolvedValue({ count: 1 });
+
+    await expect(
+      generateInvitation({
+        fellowshipId: 123,
+        contactId: 456,
+        academicYear: '2026-2027',
+        formType: 'fellow-memorandum-v3',
+        enforceAppointmentType: false,
+        triggeredBy: 'admin:test',
+      })
+    ).resolves.toMatchObject({ token: 'fresh-token', status: 'pending', created: false });
+
+    expect(mockPrisma.formInvitation.updateMany).toHaveBeenCalledWith({
+      where: { id: 'inv_expired', token: 'dead-token', status: 'expired' },
+      data: {
+        token: expect.any(String),
+        status: 'pending',
+        submittedAt: null,
+        expiresAt: expect.any(Date),
+      },
+    });
+  });
+
   it('rejects a configured form when the appointment type is not mapped to it', async () => {
     await expect(
       generateInvitation({
@@ -239,9 +274,10 @@ describe('public invitation lifetime', () => {
     } as any);
     mockPrisma.formInvitation.updateMany.mockResolvedValue({ count: 1 });
 
-    const result = await getInvitationByToken('expired-token');
-
-    expect(result?.invitation.status).toBe('expired');
+    await expect(getInvitationByToken('expired-token')).rejects.toMatchObject({
+      statusCode: 410,
+      message: 'This form link has expired',
+    });
     expect(mockPrisma.formInvitation.updateMany).toHaveBeenCalledWith({
       where: {
         id: 'inv_expired',
@@ -269,6 +305,22 @@ describe('public invitation lifetime', () => {
     expect(mockPrisma.$transaction).not.toHaveBeenCalled();
   });
 
+  it('rejects an expired submitted bearer link without exposing submission metadata', async () => {
+    mockPrisma.formInvitation.findUnique.mockResolvedValue({
+      id: 'inv_submitted',
+      token: 'legacy-submitted-token',
+      formType: 'fellow-memorandum-v3',
+      status: 'submitted',
+      submittedAt: new Date('2025-01-01T00:00:00.000Z'),
+      expiresAt: new Date('2026-01-01T00:00:00.000Z'),
+    } as any);
+
+    await expect(getInvitationByToken('legacy-submitted-token')).rejects.toMatchObject({
+      statusCode: 410,
+      message: 'This form link has expired',
+    });
+  });
+
   it('atomically claims the same unexpired token before storing a response', async () => {
     mockPrisma.formInvitation.findUnique.mockResolvedValue({
       id: 'inv_pending',
@@ -293,11 +345,17 @@ describe('public invitation lifetime', () => {
         status: 'pending',
         expiresAt: { gt: expect.any(Date) },
       },
-      data: { status: 'submitted', submittedAt: expect.any(Date) },
+      data: {
+        status: 'submitted',
+        submittedAt: expect.any(Date),
+        token: expect.any(String),
+      },
     });
     expect(mockPrisma.formResponse.create).toHaveBeenCalledWith({
       data: { invitationId: 'inv_pending', data: { firstName: 'Maria' } },
     });
+    const claim = mockPrisma.formInvitation.updateMany.mock.calls[0]![0]!;
+    expect(claim.data.token).not.toBe('current-token');
   });
 
   it('rejects an old bearer token when a concurrent reset rotates it', async () => {
@@ -373,6 +431,9 @@ describe('resetInvitation', () => {
       },
     });
     expect(result.token).not.toBe('old-token');
+    expect(mockPrisma.formInvitation.update.mock.invocationCallOrder[0]).toBeLessThan(
+      mockPrisma.formResponse.deleteMany.mock.invocationCallOrder[0]
+    );
   });
 });
 
@@ -484,6 +545,11 @@ describe('listInvitations', () => {
       .mockResolvedValueOnce([] as any);
 
     await listInvitations({ status: 'submitted' });
+
+    expect(mockPrisma.formInvitation.updateMany).toHaveBeenCalledWith({
+      where: { status: 'pending', expiresAt: { lte: expect.any(Date) } },
+      data: { status: 'expired' },
+    });
 
     const itemsQueryArgs = mockPrisma.formInvitation.findMany.mock.calls[0]![0]!;
     expect(itemsQueryArgs.include).toEqual({

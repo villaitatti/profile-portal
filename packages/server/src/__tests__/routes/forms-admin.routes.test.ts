@@ -13,6 +13,7 @@ vi.mock('../../lib/prisma.js', () => ({
       findMany: vi.fn(),
       findUnique: vi.fn(),
       create: vi.fn(),
+      updateMany: vi.fn(),
     },
     formResponse: {
       findUnique: vi.fn(),
@@ -56,6 +57,7 @@ let formsAdminRoutes: express.Router;
 
 beforeEach(async () => {
   vi.resetAllMocks();
+  mockPrisma.formInvitation.updateMany.mockResolvedValue({ count: 0 });
   vi.resetModules();
   // Re-register mocks after resetModules (resetModules clears the registry
   // of all previously-imported modules including their mocks).

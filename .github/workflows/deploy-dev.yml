@@ -64,7 +64,3 @@ jobs:
           REGISTRY_USERNAME: ${{ github.actor }}
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: scripts/deploy-image.sh
-
-      - name: Check dev health endpoint
-        if: ${{ env.HEALTHCHECK_URL != '' }}
-        run: curl -fsS "$HEALTHCHECK_URL"

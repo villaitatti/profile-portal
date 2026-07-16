@@ -39,6 +39,7 @@ cd /opt/profile-portal
 export COMPOSE_PROJECT_NAME=profile-portal
 export IMAGE_NAME=ghcr.io/villaitatti/profile-portal
 export IMAGE_TAG=sha-<commit-sha>
+export IMAGE_REF="$IMAGE_NAME:$IMAGE_TAG"
 docker compose pull
 docker compose up -d --remove-orphans
 ```
@@ -56,10 +57,11 @@ The `docker-entrypoint.sh` runs `prisma migrate deploy` before starting the app,
 
 Production deploys are intentionally manual and tag-based. Dev deploys are automatic from `main`.
 
-Production accepts only exact `vMAJOR.MINOR.PATCH` tags. The workflow resolves
-the tag to an immutable commit, verifies that the commit is on `main`, and
-requires a successful `CI / check` result before it checks out or deploys the
-release. GitHub Actions are pinned to immutable commit SHAs.
+Production accepts only exact `vMAJOR.MINOR.PATCH` tags matching the repository
+`VERSION`. The workflow resolves the tag to an immutable commit, verifies that
+the commit is on `main`, requires a successful push run of the exact CI workflow,
+and deploys the immutable image digest whose OCI revision label matches that
+commit. GitHub Actions are pinned to immutable commit SHAs.
 
 ### Production release gate
 
@@ -94,15 +96,17 @@ cd /opt/profile-portal
 export COMPOSE_PROJECT_NAME=profile-portal
 export IMAGE_NAME=ghcr.io/villaitatti/profile-portal
 export IMAGE_TAG=sha-<commit-sha-or-version-tag>
+export IMAGE_REF="$IMAGE_NAME:$IMAGE_TAG"
 docker compose pull portal
 docker compose up -d --remove-orphans
 ```
 
 The deployment script automatically rolls the **portal application image** back
-when the new container fails its readiness check. It does not reverse database
-migrations. If a migration is incompatible with the previous application, use
-the migration-specific fix-forward path or restore the pre-deploy database
-backup together with the previous image.
+when the new container fails its internal readiness check or the configured
+externally reachable health endpoint cannot be reached. It does not reverse
+database migrations. If a migration is incompatible with the previous
+application, use the migration-specific fix-forward path or restore the
+pre-deploy database backup together with the previous image.
 
 ## Environment Variables
 
@@ -187,7 +191,7 @@ PostgreSQL 17 runs in a separate container defined in `docker-compose.yml`. Data
 Migrations are in `packages/server/prisma/migrations/`. They run automatically on container start via `docker-entrypoint.sh`. To run manually:
 
 ```bash
-docker compose exec portal npx prisma migrate deploy
+docker compose exec portal node packages/server/node_modules/prisma/build/index.js migrate deploy
 ```
 
 **Minimum PostgreSQL version: 12** — `20260423120000_add_vit_id_invitation_email_type` uses `ALTER TYPE ... ADD VALUE IF NOT EXISTS`, a syntax added in PG12. Production runs PG17 (docker-compose), so the floor only matters for operators standing up new dev/staging boxes from older images.

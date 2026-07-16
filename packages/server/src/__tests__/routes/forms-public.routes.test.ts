@@ -75,6 +75,19 @@ describe('public form routes', () => {
     expect(response.headers['cache-control']).toBe('no-store');
   });
 
+  it('returns 410 without invitation metadata for an expired bearer link', async () => {
+    mockFormService.getInvitationByToken.mockRejectedValue(
+      new formService.ServiceError('This form link has expired', 410)
+    );
+
+    const response = await request(makeApp()).get('/api/forms/expired-token').expect(410);
+
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.body).toEqual({ error: 'This form link has expired' });
+    expect(response.body).not.toHaveProperty('id');
+    expect(response.body).not.toHaveProperty('submittedAt');
+  });
+
   it('rate limits repeated submission attempts', async () => {
     mockFormService.submitForm.mockResolvedValue({ invitationId: 'inv_1', responseId: 'r_1' });
     const app = makeApp();

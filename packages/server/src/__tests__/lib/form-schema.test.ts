@@ -165,5 +165,7 @@ describe('fellow-memorandum-v3 validation', () => {
 
     expect(schema.safeParse({ ...base, dateOfBirth: '2026-02-31' }).success).toBe(false);
     expect(schema.safeParse({ ...base, dateOfBirth: '2026-02-28' }).success).toBe(true);
+    expect(schema.safeParse({ ...base, dateOfBirth: '2099-01-01' }).success).toBe(false);
+    expect(schema.safeParse({ ...base, dateOfBirth: '1899-12-31' }).success).toBe(false);
   });
 });

@@ -11,6 +11,16 @@ export interface PublicFormData {
   formDef: FormDef;
 }
 
+export class PublicFormRequestError extends Error {
+  constructor(
+    message: string,
+    public readonly status?: number
+  ) {
+    super(message);
+    this.name = 'PublicFormRequestError';
+  }
+}
+
 export function usePublicForm(token: string) {
   return useQuery({
     queryKey: ['public-form', token],
@@ -18,22 +28,29 @@ export function usePublicForm(token: string) {
       const res = await fetch(apiUrl(`/api/forms/${token}`), { cache: 'no-store' });
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(body.error || 'Failed to load form');
+        throw new PublicFormRequestError(body.error || 'Failed to load form', res.status);
       }
       return res.json() as Promise<PublicFormData>;
     },
     enabled: !!token,
-    // Missing and expired bearer links are terminal. The global retry would
-    // otherwise duplicate every 404/410 request and add noisy console errors
-    // on the public failure screen.
-    retry: false,
+    retry: (failureCount, error) => {
+      if (
+        error instanceof PublicFormRequestError &&
+        error.status !== undefined &&
+        error.status >= 400 &&
+        error.status < 500
+      ) {
+        return false;
+      }
+      return failureCount < 2;
+    },
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 4000),
   });
 }
 
 export function useSubmitForm(token: string) {
-  const queryClient = useQueryClient();
-
   return useMutation({
+    mutationKey: ['public-form-submit', token],
     mutationFn: async (data: Record<string, unknown>) => {
       const res = await fetch(apiUrl(`/api/forms/${token}`), {
         method: 'POST',
@@ -45,9 +62,6 @@ export function useSubmitForm(token: string) {
         throw new Error(body.error || 'Submission failed');
       }
       return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['public-form', token] });
     },
   });
 }

@@ -1,39 +1,13 @@
-import { useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { usePublicForm, useSubmitForm, type PublicFormData } from '@/api/forms';
+import { PublicFormRequestError, usePublicForm, useSubmitForm } from '@/api/forms';
 import { PublicFormRenderer } from './PublicFormRenderer';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { CheckCircle2 } from 'lucide-react';
 
 export function PublicFormPage() {
   const { token } = useParams<{ token: string }>();
-  const { data, isLoading, error } = usePublicForm(token || '');
+  const { data, isLoading, isFetching, error, refetch } = usePublicForm(token || '');
   const submitMutation = useSubmitForm(token || '');
-
-  // Snapshot the invitation's status the FIRST time the page loads this
-  // token. The submit mutation's onSuccess callback invalidates the
-  // ['public-form', token] query, which refetches and returns
-  // status: 'submitted'. Without this snapshot, the submitted-status
-  // branch below would preempt the renderer's "Thank you!" success screen
-  // the moment the POST resolves — so a user who just successfully
-  // submitted would see "Form Already Submitted" instead. The ref
-  // distinguishes "opened an already-used link" (show re-visit message)
-  // from "just submitted successfully" (show the renderer's success state).
-  //
-  // Keyed by token so an in-place navigation between two different form
-  // URLs (/forms/A → /forms/B) doesn't carry A's snapshot into B. Without
-  // the key, a submitted link opened first and then a fresh link opened
-  // second via SPA navigation would incorrectly show "Already Submitted"
-  // on the fresh one.
-  //
-  // Typed as the domain union (not string) so a rename/removal of a
-  // status value fails typecheck here instead of quietly comparing
-  // against a stale literal in the branch below.
-  const initialStatusRef = useRef<{ token: string; status: PublicFormData['status'] } | null>(null);
-  if (data && token && initialStatusRef.current?.token !== token) {
-    initialStatusRef.current = { token, status: data.status };
-  }
-  const initialStatus = initialStatusRef.current?.status ?? null;
 
   if (isLoading) {
     return (
@@ -44,21 +18,58 @@ export function PublicFormPage() {
   }
 
   if (error || !data) {
+    const status = error instanceof PublicFormRequestError ? error.status : undefined;
+    const isExpired = status === 410;
+    const isInvalid = status === 404;
+    const isRateLimited = status === 429;
     return (
-      <div className="text-center py-20">
-        <h1 className="text-2xl font-bold mb-2">Form Not Found</h1>
+      <div className="text-center py-20 max-w-md mx-auto">
+        <h1 className="text-2xl font-bold mb-2">
+          {isExpired
+            ? 'Form Link Expired'
+            : isInvalid
+              ? 'Form Not Found'
+              : isRateLimited
+                ? 'Too Many Requests'
+                : 'Form Temporarily Unavailable'}
+        </h1>
         <p className="text-muted-foreground">
-          This link may be invalid or expired. Please contact the I Tatti staff member who sent you this form.
+          {isExpired || isInvalid
+            ? 'This link is no longer active. Please contact the I Tatti staff member who sent you this form.'
+            : isRateLimited
+              ? 'Please wait a few minutes before trying this form link again.'
+              : 'We could not load the form right now. Please check your connection and try again.'}
         </p>
+        {!isExpired && !isInvalid && (
+          <button
+            type="button"
+            className="mt-6 rounded-md bg-primary px-4 py-2 text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            onClick={() => void refetch()}
+            disabled={isFetching}
+          >
+            {isFetching ? 'Trying again…' : 'Try again'}
+          </button>
+        )}
       </div>
     );
   }
 
-  // Only show "already submitted" when the link was ALREADY submitted
-  // BEFORE this page session started. Do NOT render this after a
-  // just-completed submit — that path is owned by PublicFormRenderer's
-  // isSuccess branch (the "Thank you!" screen).
-  if (initialStatus === 'submitted') {
+  // A local success always owns the confirmation screen. Server status remains
+  // authoritative for expiry or submission from another browser/tab.
+  if (submitMutation.isSuccess) {
+    return (
+      <div className="mx-auto max-w-5xl">
+        <PublicFormRenderer
+          formDef={data.formDef}
+          onSubmit={() => undefined}
+          isSubmitting={false}
+          isSuccess={true}
+        />
+      </div>
+    );
+  }
+
+  if (data.status === 'submitted') {
     return (
       <div className="text-center py-20 max-w-md mx-auto">
         <CheckCircle2 className="h-16 w-16 text-green-600 mx-auto mb-4" />
@@ -71,7 +82,7 @@ export function PublicFormPage() {
     );
   }
 
-  if (initialStatus === 'expired') {
+  if (data.status === 'expired') {
     return (
       <div className="text-center py-20 max-w-md mx-auto">
         <h1 className="text-2xl font-bold mb-2">Form Link Expired</h1>
@@ -79,24 +90,6 @@ export function PublicFormPage() {
           For your privacy, this form link is no longer active. Please contact the I Tatti staff
           member who sent it to request a new link.
         </p>
-      </div>
-    );
-  }
-
-  // Post-submit: the renderer owns the full-page success screen. Hide the
-  // form's title + privacy-policy block above it so the appointee sees one
-  // clean "Thank you" panel instead of a half-form, half-confirmation view.
-  // Only props relevant to the success screen are passed — the rest (onSubmit,
-  // isSubmitting, submitError) are only read when the renderer draws the form.
-  if (submitMutation.isSuccess) {
-    return (
-      <div className="mx-auto max-w-5xl">
-        <PublicFormRenderer
-          formDef={data.formDef}
-          onSubmit={() => undefined}
-          isSubmitting={false}
-          isSuccess={true}
-        />
       </div>
     );
   }

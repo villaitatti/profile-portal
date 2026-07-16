@@ -7,8 +7,8 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
-  checks: read
   packages: write
 
 concurrency:
@@ -45,11 +45,17 @@ jobs:
             exit 1
           fi
 
-          successful_checks=$(gh api \
-            "repos/$GITHUB_REPOSITORY/commits/$TAG_SHA/check-runs" \
-            --jq '[.check_runs[] | select(.name == "check" and .status == "completed" and .conclusion == "success")] | length')
-          if [[ "$successful_checks" -lt 1 ]]; then
-            echo "Refusing to build a release tag without a successful CI check."
+          expected_tag="v$(git show "$TAG_SHA:VERSION" | tr -d '\r\n[:space:]')"
+          if [[ "$GITHUB_REF_NAME" != "$expected_tag" ]]; then
+            echo "Release tag $GITHUB_REF_NAME does not match VERSION ($expected_tag)."
+            exit 1
+          fi
+
+          successful_ci=$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$TAG_SHA&event=push&status=success&per_page=100" \
+            --jq '.total_count')
+          if [[ "$successful_ci" -lt 1 ]]; then
+            echo "Refusing to build a release tag without a successful push run of CI."
             exit 1
           fi
 

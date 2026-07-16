@@ -9,13 +9,13 @@
 
 ### Changed
 - **Production authentication always fails closed.** Development authentication and external-service bypasses can no longer start under `NODE_ENV=production`, and browser access tokens are kept in memory rather than local storage.
-- **Public form submissions are private and race-safe.** Bearer-link responses no longer return stored submission data, requests are non-cacheable and rate-limited, tokens are redacted from logs, and submission/reset transitions atomically verify the current token and expiry.
-- **Deployments only accept trusted releases.** Release tags must use the exact three-level version format, belong to `main`, and have a successful CI check before image building or production deployment; failed readiness automatically restores the previous application image.
+- **Public form submissions are private and race-safe.** Bearer-link responses no longer return stored submission data, requests are non-cacheable and rate-limited, submitted tokens are revoked, expired links are materialized for staff views, tokens are redacted from logs, and submission/reset transitions safely serialize concurrent requests.
+- **Deployments only accept trusted releases.** Release tags must match `VERSION`, belong to `main`, and have a successful push run of the exact CI workflow; production deploys the image digest whose revision matches that commit, and internal or external readiness failure restores the previous application image.
 - **Production containers carry less attack surface.** The runtime contains only server production dependencies, runs without npm/corepack/pnpm, invokes Prisma directly for migrations, and uses the patched pnpm 11 dependency policy during builds.
-- **Frontend routes load on demand.** Admin and public pages are split into route-level chunks, authentication redirects run after render, and the content security policy no longer permits inline scripts.
+- **Frontend routes load on demand.** Admin and public pages are split into route-level chunks with a reload recovery screen, authentication preserves protected deep links and reports redirect failures, and the content security policy no longer permits inline scripts.
 
 ### Fixed
-- **Authorization and audit attribution match the intended roles.** Application detail reads require staff IT access, automation actions retain the authenticated administrator identity, and profile contact updates validate identifiers, lengths, types, and calendar values before reaching external services.
+- **Authorization and audit attribution match the intended roles.** Application detail reads require staff IT access, automation actions retain the authenticated administrator identity, and profile/contact/form updates validate identifiers, lengths, types, calendar values, and date-of-birth bounds before reaching external services.
 - **API failures preserve useful client errors without leaking server internals.** Actionable 4xx messages and codes pass through consistently while unexpected 5xx responses stay generic.
 - **Known dependency and runtime-image vulnerabilities are removed.** Direct and transitive packages were refreshed or overridden, CI now reviews dependency changes, and GitHub Actions are pinned to immutable commits.
 
