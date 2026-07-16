@@ -103,7 +103,10 @@ docker compose up -d --remove-orphans
 
 The deployment script automatically rolls the **portal application image** back
 when the new container fails its internal readiness check or the configured
-externally reachable health endpoint cannot be reached. It does not reverse
+externally reachable health endpoint cannot be reached. The external health
+endpoint is checked from the deploy runner, not from the VM: requests the VM
+sends to its own public hostname hairpin through the Cloudflare edge, where
+the WAF answers them with a managed challenge (403). It does not reverse
 database migrations. If a migration is incompatible with the previous
 application, use the migration-specific fix-forward path or restore the
 pre-deploy database backup together with the previous image.
