@@ -29,6 +29,33 @@ type RepeatableItem = Record<string, string | boolean>;
 type FormValue = string | boolean | RepeatableItem[];
 const SEARCHABLE_SELECT_THRESHOLD = 20;
 
+function todayInRome(): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Europe/Rome',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function resolveDateBound(bound: FormFieldDef['maxDate']): string | undefined {
+  return bound === 'today' ? todayInRome() : bound;
+}
+
+function dateConstraintError(field: FormFieldDef, value: unknown): string | null {
+  if (field.type !== 'date' || typeof value !== 'string' || value === '') return null;
+  if (field.minDate && value < field.minDate) {
+    return `Date must be on or after ${field.minDate}`;
+  }
+  const maximum = resolveDateBound(field.maxDate);
+  if (maximum && value > maximum) {
+    return field.maxDate === 'today' ? 'Date cannot be in the future' : `Date must be on or before ${maximum}`;
+  }
+  return null;
+}
+
 export function PublicFormRenderer({
   formDef,
   onSubmit,
@@ -85,12 +112,17 @@ export function PublicFormRenderer({
           rows.forEach((row, rowIndex) => {
             for (const childField of field.fields ?? []) {
               if (childField.type === 'subheader') continue;
-              if (!childField.required) continue;
               const childValue = row[childField.name];
-              if (childValue === undefined || childValue === '' || childValue === false) {
-                newErrors[`${field.name}.${rowIndex}.${childField.name}`] =
-                  'This field is required';
+              const errorKey = `${field.name}.${rowIndex}.${childField.name}`;
+              if (
+                childField.required &&
+                (childValue === undefined || childValue === '' || childValue === false)
+              ) {
+                newErrors[errorKey] = 'This field is required';
+                continue;
               }
+              const dateError = dateConstraintError(childField, childValue);
+              if (dateError) newErrors[errorKey] = dateError;
             }
           });
           continue;
@@ -107,6 +139,8 @@ export function PublicFormRenderer({
             newErrors[field.name] = 'Please enter a valid email address';
           }
         }
+        const dateError = dateConstraintError(field, values[field.name]);
+        if (dateError) newErrors[field.name] = dateError;
       }
     }
     setErrors(newErrors);
@@ -421,6 +455,8 @@ function FieldRenderer({
               onChange={(e) => onChange(e.target.value)}
               placeholder={field.placeholder}
               maxLength={field.maxLength}
+              min={field.type === 'date' ? field.minDate : undefined}
+              max={field.type === 'date' ? resolveDateBound(field.maxDate) : undefined}
               autoComplete={field.autoComplete}
               required={field.required}
               aria-describedby={describedBy}
@@ -623,6 +659,12 @@ function RepeatableGroupRenderer({
                             onChange={(e) => updateItem(index, childField.name, e.target.value)}
                             placeholder={childField.placeholder}
                             maxLength={childField.maxLength}
+                            min={childField.type === 'date' ? childField.minDate : undefined}
+                            max={
+                              childField.type === 'date'
+                                ? resolveDateBound(childField.maxDate)
+                                : undefined
+                            }
                             autoComplete={childField.autoComplete}
                             required={childField.required}
                             aria-describedby={describedBy}

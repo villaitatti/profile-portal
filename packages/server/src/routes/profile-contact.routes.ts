@@ -10,6 +10,53 @@ import type {
   CreateAddressInput,
   CreatePhoneInput,
 } from '@itatti/shared';
+import { z } from 'zod';
+import { validate } from '../middleware/validate.js';
+
+const optionalText = (max: number) => z.string().trim().max(max).optional();
+const positiveId = z.coerce.number().int().positive();
+const addressCreateSchema = z
+  .object({
+    streetAddress: z.string().trim().min(1).max(255),
+    supplementalAddress1: optionalText(255),
+    city: z.string().trim().min(1).max(120),
+    postalCode: optionalText(32),
+    stateProvinceId: positiveId.optional(),
+    countryId: positiveId,
+    locationTypeId: z.coerce.number().int().refine((value) => [1, 2, 4, 6].includes(value)).optional(),
+  })
+  .strict();
+const addressUpdateSchema = z
+  .object({
+    streetAddress: z.string().trim().min(1).max(255).optional(),
+    supplementalAddress1: optionalText(255),
+    city: z.string().trim().min(1).max(120).optional(),
+    postalCode: optionalText(32),
+    stateProvinceId: positiveId.optional(),
+    countryId: positiveId.optional(),
+    locationTypeId: z.coerce.number().int().refine((value) => [1, 2, 3, 4, 6].includes(value)).optional(),
+  })
+  .strict()
+  .refine((body) => Object.keys(body).length > 0, 'At least one field is required');
+const phoneValue = z
+  .string()
+  .trim()
+  .min(1)
+  .max(50)
+  .refine((value) => value.replace(/\D/g, '').length >= 7, 'Phone number must have at least 7 digits');
+const phoneCreateSchema = z
+  .object({
+    phone: phoneValue,
+    phoneTypeId: z.coerce.number().int().refine((value) => value === 1 || value === 2),
+  })
+  .strict();
+const phoneUpdateSchema = z
+  .object({
+    phone: phoneValue.optional(),
+    phoneTypeId: z.coerce.number().int().refine((value) => value === 1 || value === 2).optional(),
+  })
+  .strict()
+  .refine((body) => Object.keys(body).length > 0, 'At least one field is required');
 
 const router = Router();
 
@@ -71,7 +118,7 @@ router.get('/addresses', async (req, res) => {
   }
 });
 
-router.post('/addresses', async (req, res) => {
+router.post('/addresses', validate(addressCreateSchema), async (req, res) => {
   const contactId = getCivicrmId(req);
   if (!contactId) {
     res.status(400).json({ error: 'Missing CiviCRM contact ID', code: 'NO_CIVICRM_ID' });
@@ -124,7 +171,7 @@ router.post('/addresses', async (req, res) => {
   }
 });
 
-router.put('/addresses/:id', async (req, res) => {
+router.put('/addresses/:id', validate(addressUpdateSchema), async (req, res) => {
   const contactId = getCivicrmId(req);
   if (!contactId) {
     res.status(400).json({ error: 'Missing CiviCRM contact ID', code: 'NO_CIVICRM_ID' });
@@ -343,7 +390,7 @@ router.get('/phones', async (req, res) => {
   }
 });
 
-router.post('/phones', async (req, res) => {
+router.post('/phones', validate(phoneCreateSchema), async (req, res) => {
   const contactId = getCivicrmId(req);
   if (!contactId) {
     res.status(400).json({ error: 'Missing CiviCRM contact ID', code: 'NO_CIVICRM_ID' });
@@ -381,7 +428,7 @@ router.post('/phones', async (req, res) => {
   }
 });
 
-router.put('/phones/:id', async (req, res) => {
+router.put('/phones/:id', validate(phoneUpdateSchema), async (req, res) => {
   const contactId = getCivicrmId(req);
   if (!contactId) {
     res.status(400).json({ error: 'Missing CiviCRM contact ID', code: 'NO_CIVICRM_ID' });

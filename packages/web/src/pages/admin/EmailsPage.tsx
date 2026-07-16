@@ -9,7 +9,6 @@ import { apiUrl, useApiToken } from '@/api/client';
 import { SelectDropdown } from '@/components/shared/SelectDropdown';
 import type { EmailEvent, EmailEventsResponse } from '@/api/emails';
 import {
-  Mail,
   AlertCircle,
   X,
   Copy,

@@ -46,6 +46,48 @@ const addressForm: FormDef = {
 };
 
 describe('PublicFormRenderer', () => {
+  it('enforces date bounds in the input and before submission', () => {
+    const onSubmit = vi.fn();
+    const dateForm: FormDef = {
+      id: 'date-bounds-test',
+      title: 'Date Bounds Test',
+      appointmentTypes: ['Fellow'],
+      sections: [
+        {
+          title: 'Personal Information',
+          fields: [
+            {
+              name: 'dateOfBirth',
+              label: 'Date of birth',
+              type: 'date',
+              required: true,
+              minDate: '1900-01-01',
+              maxDate: 'today',
+            },
+          ],
+        },
+      ],
+    };
+
+    render(
+      <PublicFormRenderer
+        formDef={dateForm}
+        onSubmit={onSubmit}
+        isSubmitting={false}
+        isSuccess={false}
+      />
+    );
+
+    const input = screen.getByLabelText(/^Date of birth/);
+    expect(input).toHaveAttribute('min', '1900-01-01');
+    expect(input).toHaveAttribute('max', expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+    fireEvent.change(input, { target: { value: '2099-01-01' } });
+    fireEvent.click(screen.getByRole('button', { name: /submit form/i }));
+
+    expect(screen.getByText('Date cannot be in the future')).toBeInTheDocument();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
   it('allows optional title while submitting the split legal address', () => {
     const onSubmit = vi.fn();
     render(

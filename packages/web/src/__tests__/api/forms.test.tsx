@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { useFormInvitations, useMarkNominationSent } from '@/api/forms';
+import { useFormInvitations, useMarkNominationSent, usePublicForm, useSubmitForm } from '@/api/forms';
 import { waitFor } from '@testing-library/react';
 import { apiFetch } from '@/api/client';
 
@@ -61,6 +61,73 @@ describe('useMarkNominationSent', () => {
     );
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['form-invitations'] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['fellows'] });
+  });
+});
+
+describe('usePublicForm', () => {
+  it('does not retry a missing or expired bearer link', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify({ error: 'Form not found' }), { status: 404 }));
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: 3, retryDelay: 0 } },
+    });
+
+    const { result } = renderHook(() => usePublicForm('missing-token'), {
+      wrapper: wrap(qc),
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries transient server failures before succeeding', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Unavailable' }), { status: 503 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 'inv_1',
+            formType: 'fellow-memorandum',
+            status: 'pending',
+            submittedAt: null,
+            expiresAt: '2026-10-24T10:00:00.000Z',
+            formDef: { id: 'fellow-memorandum', title: 'Form', appointmentTypes: [], sections: [] },
+          }),
+          { status: 200 }
+        )
+      );
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retryDelay: 0 } },
+    });
+
+    const { result } = renderHook(() => usePublicForm('temporary-failure'), {
+      wrapper: wrap(qc),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true), { timeout: 4000 });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('useSubmitForm', () => {
+  it('resets successful mutation state when navigating to a different token', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ invitationId: 'inv_1', responseId: 'r_1' }), { status: 201 })
+    );
+    const { result, rerender } = renderHook(({ token }) => useSubmitForm(token), {
+      initialProps: { token: 'token-a' },
+      wrapper: wrap(),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ fullName: 'Maria' });
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    rerender({ token: 'token-b' });
+    await waitFor(() => expect(result.current.isSuccess).toBe(false));
   });
 });
 

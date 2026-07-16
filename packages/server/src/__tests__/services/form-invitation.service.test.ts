@@ -7,12 +7,14 @@ vi.mock('../../lib/prisma.js', () => ({
       findUnique: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
       findMany: vi.fn(),
     },
     formResponse: {
       create: vi.fn(),
       findUnique: vi.fn(),
       delete: vi.fn(),
+      deleteMany: vi.fn(),
     },
     $transaction: vi.fn(),
   },
@@ -20,6 +22,16 @@ vi.mock('../../lib/prisma.js', () => ({
 
 vi.mock('../../workers/form-notification.worker.js', () => ({
   enqueueFormNotification: vi.fn(),
+}));
+
+vi.mock('../../env.js', () => ({
+  env: { FORM_INVITATION_TTL_DAYS: 180 },
+}));
+
+vi.mock('../../lib/form-schema.js', () => ({
+  buildFormSchema: () => ({
+    safeParse: (data: Record<string, unknown>) => ({ success: true, data }),
+  }),
 }));
 
 vi.mock('../../lib/logger.js', () => ({
@@ -30,18 +42,59 @@ import {
   generateInvitation,
   listInvitations,
   markNominationSent,
+  getInvitationByToken,
+  resetInvitation,
+  submitForm,
   ServiceError,
   type NameLookup,
 } from '../../services/form-invitation.service.js';
 import { prisma } from '../../lib/prisma.js';
+import { enqueueFormNotification } from '../../workers/form-notification.worker.js';
 
 const mockPrisma = vi.mocked(prisma, true);
+const mockEnqueueFormNotification = vi.mocked(enqueueFormNotification);
 
 beforeEach(() => {
   vi.resetAllMocks();
+  mockEnqueueFormNotification.mockResolvedValue(null);
 });
 
 describe('generateInvitation', () => {
+  it('rotates an expired invitation instead of returning a dead bearer token', async () => {
+    const expired = {
+      id: 'inv_expired',
+      token: 'dead-token',
+      formType: 'fellow-memorandum-v3',
+      status: 'expired',
+      expiresAt: new Date('2026-01-01T00:00:00.000Z'),
+    };
+    mockPrisma.formInvitation.findUnique
+      .mockResolvedValueOnce(expired as any)
+      .mockResolvedValueOnce({ ...expired, token: 'fresh-token', status: 'pending' } as any);
+    mockPrisma.formInvitation.updateMany.mockResolvedValue({ count: 1 });
+
+    await expect(
+      generateInvitation({
+        fellowshipId: 123,
+        contactId: 456,
+        academicYear: '2026-2027',
+        formType: 'fellow-memorandum-v3',
+        enforceAppointmentType: false,
+        triggeredBy: 'admin:test',
+      })
+    ).resolves.toMatchObject({ token: 'fresh-token', status: 'pending', created: false });
+
+    expect(mockPrisma.formInvitation.updateMany).toHaveBeenCalledWith({
+      where: { id: 'inv_expired', token: 'dead-token', status: 'expired' },
+      data: {
+        token: expect.any(String),
+        status: 'pending',
+        submittedAt: null,
+        expiresAt: expect.any(Date),
+      },
+    });
+  });
+
   it('rejects a configured form when the appointment type is not mapped to it', async () => {
     await expect(
       generateInvitation({
@@ -123,6 +176,7 @@ describe('generateInvitation', () => {
         contactId: 456,
         academicYear: '2026-2027',
         formType: 'term-fellow-memorandum-v1',
+        expiresAt: expect.any(Date),
       },
     });
   });
@@ -206,6 +260,180 @@ describe('generateInvitation', () => {
 
     expect(mockPrisma.formInvitation.findUnique).not.toHaveBeenCalled();
     expect(mockPrisma.formInvitation.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('public invitation lifetime', () => {
+  it('marks a pending invitation expired when its bearer link is read after expiry', async () => {
+    mockPrisma.formInvitation.findUnique.mockResolvedValue({
+      id: 'inv_expired',
+      token: 'expired-token',
+      formType: 'fellow-memorandum-v3',
+      status: 'pending',
+      expiresAt: new Date('2026-01-01T00:00:00.000Z'),
+    } as any);
+    mockPrisma.formInvitation.updateMany.mockResolvedValue({ count: 1 });
+
+    await expect(getInvitationByToken('expired-token')).rejects.toMatchObject({
+      statusCode: 410,
+      message: 'This form link has expired',
+    });
+    expect(mockPrisma.formInvitation.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'inv_expired',
+        status: 'pending',
+        expiresAt: { lte: expect.any(Date) },
+      },
+      data: { status: 'expired' },
+    });
+  });
+
+  it('rejects submission through an expired bearer link before validating PII', async () => {
+    mockPrisma.formInvitation.findUnique.mockResolvedValue({
+      id: 'inv_expired',
+      token: 'expired-token',
+      formType: 'fellow-memorandum-v3',
+      status: 'pending',
+      expiresAt: new Date('2026-01-01T00:00:00.000Z'),
+    } as any);
+    mockPrisma.formInvitation.updateMany.mockResolvedValue({ count: 1 });
+
+    await expect(submitForm('expired-token', {})).rejects.toMatchObject({
+      statusCode: 410,
+      message: 'This form link has expired',
+    });
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects an expired submitted bearer link without exposing submission metadata', async () => {
+    mockPrisma.formInvitation.findUnique.mockResolvedValue({
+      id: 'inv_submitted',
+      token: 'legacy-submitted-token',
+      formType: 'fellow-memorandum-v3',
+      status: 'submitted',
+      submittedAt: new Date('2025-01-01T00:00:00.000Z'),
+      expiresAt: new Date('2026-01-01T00:00:00.000Z'),
+    } as any);
+
+    await expect(getInvitationByToken('legacy-submitted-token')).rejects.toMatchObject({
+      statusCode: 410,
+      message: 'This form link has expired',
+    });
+  });
+
+  it('atomically claims the same unexpired token before storing a response', async () => {
+    mockPrisma.formInvitation.findUnique.mockResolvedValue({
+      id: 'inv_pending',
+      token: 'current-token',
+      formType: 'fellow-memorandum-v3',
+      status: 'pending',
+      expiresAt: new Date('2099-01-01T00:00:00.000Z'),
+    } as any);
+    mockPrisma.formInvitation.updateMany.mockResolvedValue({ count: 1 });
+    mockPrisma.formResponse.create.mockResolvedValue({ id: 'response_1' } as any);
+    mockPrisma.$transaction.mockImplementation(async (callback: any) => callback(mockPrisma));
+
+    await expect(submitForm('current-token', { firstName: 'Maria' })).resolves.toEqual({
+      invitationId: 'inv_pending',
+      responseId: 'response_1',
+    });
+
+    expect(mockPrisma.formInvitation.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'inv_pending',
+        token: 'current-token',
+        status: 'pending',
+        expiresAt: { gt: expect.any(Date) },
+      },
+      data: {
+        status: 'submitted',
+        submittedAt: expect.any(Date),
+        token: expect.any(String),
+      },
+    });
+    expect(mockPrisma.formResponse.create).toHaveBeenCalledWith({
+      data: { invitationId: 'inv_pending', data: { firstName: 'Maria' } },
+    });
+    const claim = mockPrisma.formInvitation.updateMany.mock.calls[0]![0]!;
+    expect(claim.data.token).not.toBe('current-token');
+  });
+
+  it('rejects an old bearer token when a concurrent reset rotates it', async () => {
+    mockPrisma.formInvitation.findUnique
+      .mockResolvedValueOnce({
+        id: 'inv_reset',
+        token: 'old-token',
+        formType: 'fellow-memorandum-v3',
+        status: 'pending',
+        expiresAt: new Date('2099-01-01T00:00:00.000Z'),
+      } as any)
+      .mockResolvedValueOnce(null);
+    mockPrisma.formInvitation.updateMany.mockResolvedValue({ count: 0 });
+    mockPrisma.$transaction.mockImplementation(async (callback: any) => callback(mockPrisma));
+
+    await expect(submitForm('old-token', { firstName: 'Maria' })).rejects.toMatchObject({
+      statusCode: 404,
+      message: 'Invalid form link',
+    });
+    expect(mockPrisma.formResponse.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['submitted', new Date('2099-01-01T00:00:00.000Z'), 409, 'already been submitted'],
+    ['pending', new Date('2026-01-01T00:00:00.000Z'), 410, 'link has expired'],
+  ])(
+    'reports a concurrent %s transition after the atomic claim fails',
+    async (status, expiresAt, statusCode, message) => {
+      const initial = {
+        id: 'inv_raced',
+        token: 'raced-token',
+        formType: 'fellow-memorandum-v3',
+        status: 'pending',
+        expiresAt: new Date('2099-01-01T00:00:00.000Z'),
+      };
+      mockPrisma.formInvitation.findUnique
+        .mockResolvedValueOnce(initial as any)
+        .mockResolvedValueOnce({ ...initial, status, expiresAt } as any);
+      mockPrisma.formInvitation.updateMany.mockResolvedValue({ count: 0 });
+      mockPrisma.$transaction.mockImplementation(async (callback: any) => callback(mockPrisma));
+
+      await expect(submitForm('raced-token', {})).rejects.toMatchObject({
+        statusCode,
+        message: expect.stringContaining(message),
+      });
+      expect(mockPrisma.formResponse.create).not.toHaveBeenCalled();
+    }
+  );
+});
+
+describe('resetInvitation', () => {
+  it('deletes any response and rotates the observed token in one transaction', async () => {
+    mockPrisma.formInvitation.findUnique.mockResolvedValue({
+      id: 'inv_reset',
+      token: 'old-token',
+    } as any);
+    mockPrisma.formResponse.deleteMany.mockResolvedValue({ count: 1 });
+    mockPrisma.formInvitation.update.mockResolvedValue({ id: 'inv_reset' } as any);
+    mockPrisma.$transaction.mockImplementation(async (callback: any) => callback(mockPrisma));
+
+    const result = await resetInvitation('inv_reset', 'admin:test');
+
+    expect(mockPrisma.formResponse.deleteMany).toHaveBeenCalledWith({
+      where: { invitationId: 'inv_reset' },
+    });
+    expect(mockPrisma.formInvitation.update).toHaveBeenCalledWith({
+      where: { id: 'inv_reset', token: 'old-token' },
+      data: {
+        token: expect.any(String),
+        status: 'pending',
+        submittedAt: null,
+        expiresAt: expect.any(Date),
+      },
+    });
+    expect(result.token).not.toBe('old-token');
+    expect(mockPrisma.formInvitation.update.mock.invocationCallOrder[0]).toBeLessThan(
+      mockPrisma.formResponse.deleteMany.mock.invocationCallOrder[0]
+    );
   });
 });
 
@@ -317,6 +545,11 @@ describe('listInvitations', () => {
       .mockResolvedValueOnce([] as any);
 
     await listInvitations({ status: 'submitted' });
+
+    expect(mockPrisma.formInvitation.updateMany).toHaveBeenCalledWith({
+      where: { status: 'pending', expiresAt: { lte: expect.any(Date) } },
+      data: { status: 'expired' },
+    });
 
     const itemsQueryArgs = mockPrisma.formInvitation.findMany.mock.calls[0]![0]!;
     expect(itemsQueryArgs.include).toEqual({

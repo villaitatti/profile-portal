@@ -7,6 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   packages: write
 
@@ -24,7 +25,39 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
+          fetch-depth: 0
           persist-credentials: false
+
+      - name: Verify release tag provenance
+        if: ${{ github.ref_type == 'tag' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release tags must use the exact vMAJOR.MINOR.PATCH format."
+            exit 1
+          fi
+
+          TAG_SHA=$(git rev-parse "refs/tags/$GITHUB_REF_NAME^{commit}")
+          git fetch --force origin main
+          if ! git merge-base --is-ancestor "$TAG_SHA" origin/main; then
+            echo "Refusing to build a release tag that is not on origin/main."
+            exit 1
+          fi
+
+          expected_tag="v$(git show "$TAG_SHA:VERSION" | tr -d '\r\n[:space:]')"
+          if [[ "$GITHUB_REF_NAME" != "$expected_tag" ]]; then
+            echo "Release tag $GITHUB_REF_NAME does not match VERSION ($expected_tag)."
+            exit 1
+          fi
+
+          successful_ci=$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$TAG_SHA&event=push&status=success&per_page=100" \
+            --jq '.total_count')
+          if [[ "$successful_ci" -lt 1 ]]; then
+            echo "Refusing to build a release tag without a successful push run of CI."
+            exit 1
+          fi
 
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 

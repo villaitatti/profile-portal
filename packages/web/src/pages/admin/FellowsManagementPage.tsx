@@ -641,7 +641,7 @@ function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEntry[]; 
       setSendError(null);
       setResendConfirmOpen(false);
     }
-  }, [activeSend?.fellow.civicrmId, activeSend?.kind]);
+  }, [activeSend]);
 
   // Reset to page 1 when the underlying data changes (filter/search/year)
   useEffect(() => setPage(1), [fellows]);
@@ -1220,6 +1220,26 @@ function FormLinkMenuItem({ fellow }: { fellow: FellowDashboardEntry }) {
             </span>
           )}
         </span>
+      </DropdownMenu.Item>
+    );
+  }
+
+  if (existingInvitation?.status === 'expired') {
+    return (
+      <DropdownMenu.Item
+        disabled={generateMutation.isPending}
+        onSelect={(event) => {
+          event.preventDefault();
+          void handleGenerate();
+        }}
+        className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-foreground outline-none transition-colors focus:bg-muted data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
+      >
+        {generateMutation.isPending ? (
+          <Loader2 className="h-4 w-4 animate-spin text-indigo-700" />
+        ) : (
+          <Repeat2 className="h-4 w-4 text-indigo-700" />
+        )}
+        <span>Generate new form link</span>
       </DropdownMenu.Item>
     );
   }

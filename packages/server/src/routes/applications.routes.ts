@@ -26,8 +26,10 @@ router.get('/', async (req, res) => {
   res.json(apps);
 });
 
-// Get single application
-router.get('/:id', async (req, res) => {
+// Get a single application for editing. Regular users consume the role-filtered
+// collection endpoint; allowing them to address records by numeric id would
+// expose inactive and role-restricted application metadata.
+router.get('/:id', requireRole(KnownRoles.STAFF_IT), async (req, res) => {
   const app = await service.getApplication(Number(req.params.id));
   if (!app) {
     res.status(404).json({ error: 'Not found', code: 'NOT_FOUND' });

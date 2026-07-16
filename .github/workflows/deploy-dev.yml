@@ -44,7 +44,7 @@ jobs:
       HEALTHCHECK_URL: ${{ vars.HEALTHCHECK_URL }}
       COMPOSE_PROJECT_NAME: profile-portal
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           persist-credentials: false
@@ -64,7 +64,3 @@ jobs:
           REGISTRY_USERNAME: ${{ github.actor }}
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: scripts/deploy-image.sh
-
-      - name: Check dev health endpoint
-        if: ${{ env.HEALTHCHECK_URL != '' }}
-        run: curl -fsS "$HEALTHCHECK_URL"

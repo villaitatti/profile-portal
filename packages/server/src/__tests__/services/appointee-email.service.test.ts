@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Prisma } from '@prisma/client';
 
 vi.mock('../../lib/prisma.js', () => ({
@@ -92,6 +92,8 @@ const mockEmail = vi.mocked(emailService);
 // mockRejectedValue stubs do not leak into subsequent tests via the shared
 // mocked modules above. The defaults are re-installed here on every iteration.
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-06-15T12:00:00.000Z'));
   vi.resetAllMocks();
   mockAuth0.findUserByEmail.mockResolvedValue({
     user_id: 'auth0|default',
@@ -109,6 +111,10 @@ beforeEach(() => {
   // Empty map = ladder sees primaryEmail=null (tier 1 skipped). Tier 2 is
   // the one that resolves the default match via the civicrmId above.
   mockCivicrm.getEmailsForContacts.mockResolvedValue(new Map());
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('currentAndNextAcademicYears', () => {

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 import { join } from 'path';
-import { mkdirSync, rmSync, existsSync, writeFileSync } from 'fs';
+import { mkdirSync, rmSync, writeFileSync } from 'fs';
 
 vi.mock('../../middleware/rbac.js', () => ({
   requireRole: (..._roles: string[]) =>

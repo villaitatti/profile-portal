@@ -10,16 +10,19 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
       - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version-file: .nvmrc
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
+
+      - name: Audit production dependencies
+        run: pnpm audit --prod --audit-level=moderate
 
       - name: Generate Prisma client
         run: pnpm db:generate
@@ -52,3 +55,6 @@ jobs:
         # tests previously didn't gate merges; codex review 2026-04-23 flagged
         # this as a tight-feedback-loop gap. Fixed here.
         run: pnpm -r test
+
+      - name: Production build
+        run: pnpm build

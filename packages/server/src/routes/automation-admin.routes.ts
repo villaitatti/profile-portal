@@ -1,17 +1,22 @@
 import { Router } from 'express';
-import type { Request, Response, NextFunction } from 'express';
+import type { Request, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
 import * as automationService from '../services/automation.service.js';
+import { AUTH0_NAMESPACE } from '@itatti/shared';
 
 const router = Router();
 
 function getTriggeredBy(req: Request, res: Response): string | null {
-  const email = (req as any).user?.email || (req as any).user?.sub;
-  if (!email) {
+  const auth = req.auth as Record<string, unknown> | undefined;
+  const identity =
+    (auth?.[`${AUTH0_NAMESPACE}/email`] as string | undefined) ||
+    (auth?.email as string | undefined) ||
+    req.userId;
+  if (!identity) {
     res.status(401).json({ error: 'Could not identify admin user' });
     return null;
   }
-  return `admin:${email}`;
+  return `admin:${identity}`;
 }
 
 // List automation run history

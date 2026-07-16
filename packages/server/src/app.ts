@@ -6,6 +6,7 @@ import { logger } from './lib/logger.js';
 import { errorHandler } from './middleware/error.js';
 import { registerRoutes } from './routes/index.js';
 import { env } from './env.js';
+import { sanitizeRequestUrl } from './lib/request-url.js';
 
 const app = express();
 const auth0Domain = env.PUBLIC_AUTH0_DOMAIN || process.env.VITE_AUTH0_DOMAIN || env.AUTH0_DOMAIN || 'harvard.eu.auth0.com';
@@ -18,16 +19,22 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://challenges.cloudflare.com"],
+      scriptSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://use.typekit.net", "https://p.typekit.net"],
       fontSrc: ["'self'", "https://use.typekit.net", "https://p.typekit.net"],
       imgSrc: ["'self'", "data:", "https:"],
       connectSrc: ["'self'", `https://${auth0Domain}`],
-      frameSrc: ["'self'", "https://challenges.cloudflare.com", `https://${auth0Domain}`],
+      frameSrc: ["'self'", `https://${auth0Domain}`],
     },
   },
 }));
-app.use(pinoHttp({ logger, autoLogging: { ignore: (req) => req.url === '/api/health' } }));
+app.use(
+  pinoHttp({
+    logger,
+    autoLogging: { ignore: (req) => req.url === '/api/health' },
+    customProps: (req) => ({ safePath: sanitizeRequestUrl(req.url) }),
+  })
+);
 app.use(
   cors({
     origin: process.env.NODE_ENV === 'production'

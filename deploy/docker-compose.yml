@@ -6,7 +6,7 @@ x-logging: &default-logging
 
 services:
   portal:
-    image: ${IMAGE_NAME:?Set IMAGE_NAME}:${IMAGE_TAG:?Set IMAGE_TAG}
+    image: ${IMAGE_REF:-${IMAGE_NAME:?Set IMAGE_NAME}:${IMAGE_TAG:?Set IMAGE_TAG}}
     env_file: .env
     environment:
       DATABASE_URL: postgresql://portal:${DB_PASSWORD}@db:5432/profile_portal
@@ -20,7 +20,7 @@ services:
       - itatti-tunnel
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/health || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/health/ready || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 5

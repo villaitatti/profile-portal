@@ -14,6 +14,11 @@ export const QUEUE_NAMES = {
 //    can retry a fresh boot instead of receiving a broken half-initialized
 //    client forever.
 let bossPromise: Promise<PgBoss> | null = null;
+let bossReady = false;
+
+export function isJobQueueReady(): boolean {
+  return bossReady;
+}
 
 export async function getJobQueue(): Promise<PgBoss> {
   if (bossPromise) return bossPromise;
@@ -53,6 +58,7 @@ export async function getJobQueue(): Promise<PgBoss> {
     await Promise.all(
       Object.values(QUEUE_NAMES).map((name) => b.createQueue(name))
     );
+    bossReady = true;
 
     logger.info({ queues: Object.values(QUEUE_NAMES) }, 'pg-boss started');
 
@@ -63,6 +69,7 @@ export async function getJobQueue(): Promise<PgBoss> {
     // DB blip caused the first attempt to fail). Without this, the promise
     // rejection would stay cached and every future caller would re-reject.
     bossPromise = null;
+    bossReady = false;
     throw err;
   });
 
@@ -85,5 +92,6 @@ export async function stopJobQueue(): Promise<void> {
     logger.warn({ err }, 'pg-boss stop: nothing to stop (init failed)');
   } finally {
     bossPromise = null;
+    bossReady = false;
   }
 }

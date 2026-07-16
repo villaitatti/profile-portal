@@ -77,7 +77,14 @@ const legacyPersonalSection: FormSectionDef = {
     },
     { name: 'nationality', label: 'Nationality', type: 'text', required: true },
     { name: 'secondNationality', label: 'Second Nationality', type: 'text', required: false },
-    { name: 'dateOfBirth', label: 'Date of birth', type: 'date', required: false },
+    {
+      name: 'dateOfBirth',
+      label: 'Date of birth',
+      type: 'date',
+      required: false,
+      minDate: '1900-01-01',
+      maxDate: 'today',
+    },
   ],
 };
 
@@ -229,6 +236,8 @@ const personalSection: FormSectionDef = {
       required: false,
       layout: 'third',
       autoComplete: 'bday',
+      minDate: '1900-01-01',
+      maxDate: 'today',
     },
   ],
 };
@@ -330,6 +339,8 @@ const personalSectionV3: FormSectionDef = {
       required: false,
       layout: 'third',
       autoComplete: 'bday',
+      minDate: '1900-01-01',
+      maxDate: 'today',
     },
   ],
 };
@@ -490,7 +501,15 @@ const familySectionV3: FormSectionDef = {
       itemLabel: 'Child',
       fields: [
         { name: 'fullName', label: 'Full name', type: 'text', required: true, layout: 'full' },
-        { name: 'dateOfBirth', label: 'Date of birth', type: 'date', required: true, layout: 'third' },
+        {
+          name: 'dateOfBirth',
+          label: 'Date of birth',
+          type: 'date',
+          required: true,
+          layout: 'third',
+          minDate: '1900-01-01',
+          maxDate: 'today',
+        },
         { name: 'datesOfStay', label: 'Dates of stay', type: 'text', required: true, layout: 'two-thirds' },
       ],
     },

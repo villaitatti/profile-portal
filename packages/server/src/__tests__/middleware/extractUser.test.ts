@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { Request, Response, NextFunction } from 'express';
+import type { Request, Response } from 'express';
 
 // Mock env before importing auth.ts (which imports env.ts at module level)
 vi.mock('../../env.js', () => ({

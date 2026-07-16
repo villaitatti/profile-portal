@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
@@ -12,11 +12,17 @@ const { mockUsePublicForm, mockUseSubmitForm, mockMutate } = vi.hoisted(() => ({
 }));
 
 vi.mock('@/api/forms', () => ({
+  PublicFormRequestError: class PublicFormRequestError extends Error {
+    constructor(message: string, public status?: number) {
+      super(message);
+    }
+  },
   usePublicForm: mockUsePublicForm,
   useSubmitForm: mockUseSubmitForm,
 }));
 
 import { PublicFormPage } from '@/pages/forms/PublicFormPage';
+import { PublicFormRequestError } from '@/api/forms';
 import type { FormDef } from '@itatti/shared';
 
 const minimalForm: FormDef = {
@@ -53,15 +59,9 @@ beforeEach(() => {
 describe('PublicFormPage — submission flow', () => {
   // Regression: form-submission-already-submitted.
   //
-  // Before the fix, a successful submit triggered `invalidateQueries` which
-  // refetched the token's data and returned `status: 'submitted'`. The page
-  // short-circuited to "Form Already Submitted" before the renderer's
-  // `isSuccess` "Thank you!" screen could show. Appointee saw what looked
-  // like an error after a perfectly fine submission.
-  //
-  // The fix snapshots the first-observed status in a ref. Only the
-  // initial-status path shows "Already Submitted"; the post-submit path
-  // falls through to the renderer which shows its own success state.
+  // A successful local mutation owns the Thank You screen. Server status stays
+  // authoritative for links submitted elsewhere or expired while the page is
+  // open, so a refetch can safely replace a stale form.
 
   it('shows "Form Already Submitted" when the link was ALREADY used before this session', () => {
     mockUsePublicForm.mockReturnValue({
@@ -70,8 +70,8 @@ describe('PublicFormPage — submission flow', () => {
         formType: 'fellow-memorandum',
         status: 'submitted',
         submittedAt: '2026-04-24T10:00:00.000Z',
+        expiresAt: '2026-10-24T10:00:00.000Z',
         formDef: minimalForm,
-        response: { fullName: 'Prior submission' },
       },
       isLoading: false,
       error: null,
@@ -90,6 +90,37 @@ describe('PublicFormPage — submission flow', () => {
     expect(screen.queryByText(/Your form has been submitted successfully/)).not.toBeInTheDocument();
   });
 
+  it.each([
+    [404, 'Form Not Found', false],
+    [410, 'Form Link Expired', false],
+    [429, 'Too Many Requests', true],
+    [503, 'Form Temporarily Unavailable', true],
+  ])('renders the correct load failure for HTTP %s', (status, heading, canRetry) => {
+    const refetch = vi.fn();
+    mockUsePublicForm.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isFetching: false,
+      error: new PublicFormRequestError('load failed', status),
+      refetch,
+    });
+    mockUseSubmitForm.mockReturnValue({
+      mutate: mockMutate,
+      isPending: false,
+      error: null,
+      isSuccess: false,
+    });
+
+    render(<PublicFormPage />, { wrapper: makeWrapper() });
+
+    expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Try again' }) !== null).toBe(canRetry);
+    if (canRetry) {
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+      expect(refetch).toHaveBeenCalledOnce();
+    }
+  });
+
   it('shows the form when the link is pending (fresh link)', () => {
     mockUsePublicForm.mockReturnValue({
       data: {
@@ -97,8 +128,8 @@ describe('PublicFormPage — submission flow', () => {
         formType: 'fellow-memorandum',
         status: 'pending',
         submittedAt: null,
+        expiresAt: '2026-10-24T10:00:00.000Z',
         formDef: minimalForm,
-        response: null,
       },
       isLoading: false,
       error: null,
@@ -116,6 +147,77 @@ describe('PublicFormPage — submission flow', () => {
     expect(screen.getByRole('button', { name: /Submit/ })).toBeInTheDocument();
   });
 
+  it('does not render fields for an expired link', () => {
+    mockUsePublicForm.mockReturnValue({
+      data: {
+        id: 'inv_1',
+        formType: 'fellow-memorandum',
+        status: 'expired',
+        submittedAt: null,
+        expiresAt: '2026-07-01T00:00:00.000Z',
+        formDef: minimalForm,
+      },
+      isLoading: false,
+      error: null,
+    });
+    mockUseSubmitForm.mockReturnValue({
+      mutate: mockMutate,
+      isPending: false,
+      error: null,
+      isSuccess: false,
+    });
+
+    render(<PublicFormPage />, { wrapper: makeWrapper() });
+
+    expect(screen.getByRole('heading', { name: 'Form Link Expired' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Submit/ })).not.toBeInTheDocument();
+  });
+
+  it('stops showing a stale form when a refetch changes pending to expired', () => {
+    mockUsePublicForm.mockReturnValue({
+      data: {
+        id: 'inv_1',
+        formType: 'fellow-memorandum',
+        status: 'pending',
+        submittedAt: null,
+        expiresAt: '2026-10-24T10:00:00.000Z',
+        formDef: minimalForm,
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    mockUseSubmitForm.mockReturnValue({
+      mutate: mockMutate,
+      isPending: false,
+      error: null,
+      isSuccess: false,
+    });
+
+    const { rerender } = render(<PublicFormPage />, { wrapper: makeWrapper() });
+    expect(screen.getByRole('button', { name: /Submit/ })).toBeInTheDocument();
+
+    mockUsePublicForm.mockReturnValue({
+      data: {
+        id: 'inv_1',
+        formType: 'fellow-memorandum',
+        status: 'expired',
+        submittedAt: null,
+        expiresAt: '2026-07-01T00:00:00.000Z',
+        formDef: minimalForm,
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+
+    rerender(<PublicFormPage />);
+    expect(screen.getByRole('heading', { name: 'Form Link Expired' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Submit/ })).not.toBeInTheDocument();
+  });
+
   it('shows the "Thank you!" success screen after a just-completed submit — NOT "Already Submitted"', async () => {
     // Mount with pending status (appointee opens a fresh link).
     mockUsePublicForm.mockReturnValue({
@@ -124,8 +226,8 @@ describe('PublicFormPage — submission flow', () => {
         formType: 'fellow-memorandum',
         status: 'pending',
         submittedAt: null,
+        expiresAt: '2026-10-24T10:00:00.000Z',
         formDef: minimalForm,
-        response: null,
       },
       isLoading: false,
       error: null,
@@ -151,8 +253,8 @@ describe('PublicFormPage — submission flow', () => {
         formType: 'fellow-memorandum',
         status: 'submitted',
         submittedAt: '2026-05-07T10:00:00.000Z',
+        expiresAt: '2026-10-24T10:00:00.000Z',
         formDef: minimalForm,
-        response: { fullName: 'Maria Bianchi' },
       },
       isLoading: false,
       error: null,
@@ -184,20 +286,7 @@ describe('PublicFormPage — submission flow', () => {
     expect(screen.getByText(/You may now close this window/)).toBeInTheDocument();
   });
 
-  it('resets the initial-status snapshot when the token changes (SPA nav between forms)', async () => {
-    // Regression for the adversarial review finding: React Router reuses
-    // the same component instance when only the :token param changes
-    // (same route pattern). Without keying the ref by token, the snapshot
-    // from the first token carries over into the second. This test drives
-    // an in-router navigate() so the MemoryRouter stays mounted and only
-    // useParams() changes — genuinely exercising the ref-reset logic.
-    // Keying the router on the token (as a prior version of this test
-    // did) would force a full remount and bypass the logic entirely,
-    // which is exactly what we want to avoid here.
-    // The hook is called from PublicFormPage with the token it got from
-    // useParams. We mock the hook to branch on its argument so the mock
-    // follows the URL the router sees, not a side-channel like window
-    // location (which MemoryRouter doesn't touch).
+  it('renders the current token state when navigating between form links', async () => {
     mockUsePublicForm.mockImplementation((token: string) => {
       if (token === 'tokA') {
         return {
@@ -206,8 +295,8 @@ describe('PublicFormPage — submission flow', () => {
             formType: 'fellow-memorandum',
             status: 'submitted',
             submittedAt: '2026-04-24T10:00:00.000Z',
+            expiresAt: '2026-10-24T10:00:00.000Z',
             formDef: minimalForm,
-            response: { fullName: 'Prior' },
           },
           isLoading: false,
           error: null,
@@ -219,8 +308,8 @@ describe('PublicFormPage — submission flow', () => {
           formType: 'fellow-memorandum',
           status: 'pending',
           submittedAt: null,
+          expiresAt: '2026-10-24T10:00:00.000Z',
           formDef: minimalForm,
-          response: null,
         },
         isLoading: false,
         error: null,
@@ -264,9 +353,7 @@ describe('PublicFormPage — submission flow', () => {
     // tokA is submitted → expect the re-visit message.
     expect(screen.getByText(/Form Already Submitted/)).toBeInTheDocument();
 
-    // Navigate to tokB (pending) via useNavigate — the router instance
-    // stays, only the :token param changes. The token-keyed ref MUST
-    // reset so the fresh form renders.
+    // Navigate to tokB (pending) without remounting the router.
     await userEvent.setup().click(screen.getByRole('button', { name: 'nav' }));
 
     await waitFor(() => {
@@ -282,8 +369,8 @@ describe('PublicFormPage — submission flow', () => {
         formType: 'fellow-memorandum',
         status: 'pending',
         submittedAt: null,
+        expiresAt: '2026-10-24T10:00:00.000Z',
         formDef: minimalForm,
-        response: null,
       },
       isLoading: false,
       error: null,

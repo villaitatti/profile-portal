@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { requireRole } from '../../middleware/rbac.js';
-import type { Request, Response, NextFunction } from 'express';
+import type { Request, Response } from 'express';
 
 function mockReq(userRoles: string[] = []): Partial<Request> {
   return { userRoles };

@@ -9,6 +9,7 @@ on:
         type: string
 
 permissions:
+  actions: read
   contents: read
   packages: read
 
@@ -37,20 +38,71 @@ jobs:
       CREATE_BACKUP: "true"
       BACKUP_DIR: ${{ vars.BACKUP_DIR || '/opt/profile-portal/backups' }}
     steps:
-      - uses: actions/checkout@v5
+      # Start from trusted main so a tag cannot supply the verification script.
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
-          ref: ${{ inputs.version_tag }}
+          ref: main
+          fetch-depth: 0
           persist-credentials: false
 
-      - name: Validate production tag format
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify production tag provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          case "$IMAGE_TAG" in
-            v[0-9]*.[0-9]*.[0-9]*) ;;
-            *)
-              echo "version_tag must look like v1.1.0"
-              exit 1
-              ;;
-          esac
+          if [[ ! "$IMAGE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "version_tag must use the exact vMAJOR.MINOR.PATCH format"
+            exit 1
+          fi
+
+          git fetch --force origin "refs/tags/$IMAGE_TAG:refs/tags/$IMAGE_TAG" main
+          TAG_SHA=$(git rev-parse "refs/tags/$IMAGE_TAG^{commit}")
+          if ! git merge-base --is-ancestor "$TAG_SHA" origin/main; then
+            echo "Refusing to deploy a tag that is not on origin/main."
+            exit 1
+          fi
+
+          expected_tag="v$(git show "$TAG_SHA:VERSION" | tr -d '\r\n[:space:]')"
+          if [[ "$IMAGE_TAG" != "$expected_tag" ]]; then
+            echo "Release tag $IMAGE_TAG does not match VERSION ($expected_tag)."
+            exit 1
+          fi
+
+          successful_ci=$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$TAG_SHA&event=push&status=success&per_page=100" \
+            --jq '.total_count')
+          if [[ "$successful_ci" -lt 1 ]]; then
+            echo "Refusing to deploy a tag without a successful push run of CI."
+            exit 1
+          fi
+
+          docker pull "$IMAGE_NAME:$IMAGE_TAG"
+          image_revision=$(docker image inspect "$IMAGE_NAME:$IMAGE_TAG" \
+            --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')
+          if [[ "$image_revision" != "$TAG_SHA" ]]; then
+            echo "Image revision $image_revision does not match verified tag commit $TAG_SHA."
+            exit 1
+          fi
+          image_ref=""
+          while IFS= read -r digest; do
+            if [[ "$digest" == "$IMAGE_NAME@sha256:"* ]]; then
+              image_ref="$digest"
+              break
+            fi
+          done < <(docker image inspect "$IMAGE_NAME:$IMAGE_TAG" \
+            --format '{{ range .RepoDigests }}{{ println . }}{{ end }}')
+          if [[ -z "$image_ref" ]]; then
+            echo "Could not resolve an immutable digest for $IMAGE_NAME:$IMAGE_TAG."
+            exit 1
+          fi
+
+          echo "TAG_SHA=$TAG_SHA" >> "$GITHUB_ENV"
+          echo "IMAGE_REF=$image_ref" >> "$GITHUB_ENV"
 
       - name: Configure SSH
         run: |
@@ -67,7 +119,3 @@ jobs:
           REGISTRY_USERNAME: ${{ github.actor }}
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: scripts/deploy-image.sh
-
-      - name: Check production health endpoint
-        if: ${{ env.HEALTHCHECK_URL != '' }}
-        run: curl -fsS "$HEALTHCHECK_URL"

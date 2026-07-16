@@ -29,6 +29,8 @@ export interface FormFieldDef {
   placeholder?: string;
   helpText?: string;
   maxLength?: number;
+  minDate?: string;
+  maxDate?: string | 'today';
   layout?: FormFieldLayout;
   autoComplete?: string;
   conditionalOn?: { field: string; value: string };

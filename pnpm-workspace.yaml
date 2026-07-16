@@ -1,2 +1,26 @@
 packages:
   - "packages/*"
+
+overrides:
+  "@babel/core": "7.29.6"
+  defu: "6.1.5"
+  effect: "3.20.0"
+  "esbuild@0.27.4": "0.28.1"
+  form-data: "4.0.6"
+  js-yaml: "4.2.0"
+  lodash: "4.18.1"
+  path-to-regexp: "0.1.13"
+  picomatch: "4.0.4"
+  postcss: "8.5.10"
+  qs: "6.15.2"
+  "cheerio>undici": "6.27.0"
+  "jsdom>undici": "7.28.0"
+  "uuid@9.0.1": "11.1.1"
+
+allowBuilds:
+  "@prisma/client": true
+  "@prisma/engines": true
+  browser-tabs-lock: true
+  esbuild: true
+  prisma: true
+  sharp: true
