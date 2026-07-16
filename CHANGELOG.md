@@ -17,7 +17,7 @@
 ### Fixed
 - **Authorization and audit attribution match the intended roles.** Application detail reads require staff IT access, automation actions retain the authenticated administrator identity, and profile/contact/form updates validate identifiers, lengths, types, calendar values, and date-of-birth bounds before reaching external services.
 - **API failures preserve useful client errors without leaking server internals.** Actionable 4xx messages and codes pass through consistently while unexpected 5xx responses stay generic.
-- **Known dependency and runtime-image vulnerabilities are removed.** Direct and transitive packages were refreshed or overridden, CI now reviews dependency changes, and GitHub Actions are pinned to immutable commits.
+- **Known dependency and runtime-image vulnerabilities are removed.** Direct and transitive packages were refreshed or overridden, CI now audits the complete production dependency graph, and GitHub Actions are pinned to immutable commits.
 
 ## [0.17.12] - 17 June 2026 - One-page memorandum and form template browsing
 
