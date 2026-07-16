@@ -218,11 +218,12 @@ printf '%s\n%s\n' "$remote_lib" "$remote_deploy" | \
 if [[ -n "$HEALTHCHECK_URL" ]]; then
   external_ready=false
   for external_attempt in $(seq 1 10); do
-    if curl -fsS --max-time 10 "$HEALTHCHECK_URL" >/dev/null; then
+    external_status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$HEALTHCHECK_URL" || true)"
+    if [[ "$external_status" == "200" ]]; then
       external_ready=true
       break
     fi
-    echo "Waiting for external healthcheck ($external_attempt/10)"
+    echo "Waiting for external healthcheck ($external_attempt/10): HTTP ${external_status:-000}"
     sleep 3
   done
   if [[ "$external_ready" != "true" ]]; then
