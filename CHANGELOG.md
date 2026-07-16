@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.17.14] - 16 July 2026 - Deploy external healthcheck fix
+
+### Fixed
+- **Dev/production deploys no longer fail on the Cloudflare WAF.** The post-deploy external healthcheck introduced in 0.17.13 ran on the VM itself, whose requests to its own public hostname hairpin through the Cloudflare edge and receive a managed challenge (403), causing every deploy to roll back. The external check now runs from the deploy runner (as before 0.17.13), while a failed check still triggers the automatic application rollback on the VM.
+
 ## [0.17.13] - 15 July 2026 - Production readiness hardening
 
 ### Added

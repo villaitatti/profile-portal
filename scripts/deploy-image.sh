@@ -49,7 +49,7 @@ remote_image_tag="$(quote "$IMAGE_TAG")"
 remote_image_ref="$(quote "$IMAGE_REF")"
 remote_create_backup="$(quote "$CREATE_BACKUP")"
 remote_backup_dir="$(quote "$BACKUP_DIR")"
-remote_healthcheck_url="$(quote "$HEALTHCHECK_URL")"
+remote_env_prefix="DEPLOY_PATH=$remote_path COMPOSE_PROJECT_NAME=$remote_project_name IMAGE_NAME=$remote_image_name IMAGE_TAG=$remote_image_tag IMAGE_REF=$remote_image_ref CREATE_BACKUP=$remote_create_backup BACKUP_DIR=$remote_backup_dir"
 
 echo "Preparing $TARGET:$DEPLOY_PATH"
 ssh "${ssh_opts[@]}" "$TARGET" "mkdir -p $remote_path"
@@ -67,36 +67,26 @@ if [[ -n "${REGISTRY_TOKEN:-}" ]]; then
     "docker login ghcr.io -u $(quote "$REGISTRY_USERNAME") --password-stdin >/dev/null"
 fi
 
-echo "Deploying $IMAGE_REF"
-ssh "${ssh_opts[@]}" "$TARGET" \
-  "DEPLOY_PATH=$remote_path COMPOSE_PROJECT_NAME=$remote_project_name IMAGE_NAME=$remote_image_name IMAGE_TAG=$remote_image_tag IMAGE_REF=$remote_image_ref CREATE_BACKUP=$remote_create_backup BACKUP_DIR=$remote_backup_dir HEALTHCHECK_URL=$remote_healthcheck_url bash -s" <<'REMOTE'
+# Shared preamble for every remote invocation: environment setup plus the
+# rollback function, so the post-deploy external healthcheck (which runs on
+# this machine, not the VM) can trigger the same rollback in a later SSH call.
+remote_lib="$(cat <<'REMOTE_LIB'
 set -euo pipefail
 
 cd "$DEPLOY_PATH"
 
-if [[ ! -f .env ]]; then
-  echo "Missing $DEPLOY_PATH/.env. Create it on the server before deploying." >&2
-  exit 1
-fi
-
 export COMPOSE_PROJECT_NAME IMAGE_NAME IMAGE_TAG IMAGE_REF
 
-previous_container_id="$(docker compose -f docker-compose.yml ps -q portal 2>/dev/null || true)"
-previous_image_id=""
-if [[ -n "$previous_container_id" ]]; then
-  previous_image_id="$(docker inspect --format '{{.Image}}' "$previous_container_id" 2>/dev/null || true)"
-fi
-
 rollback_portal() {
-  if [[ -z "$previous_image_id" ]]; then
+  if [[ -z "${PREVIOUS_IMAGE_ID:-}" ]]; then
     echo "No previous portal image is available for automatic rollback." >&2
     return 1
   fi
 
   local rollback_tag rollback_container_id rollback_health
   rollback_tag="rollback-$(date -u +%Y%m%d-%H%M%S)"
-  echo "Rolling the portal application back to image $previous_image_id." >&2
-  if ! docker tag "$previous_image_id" "$IMAGE_NAME:$rollback_tag"; then
+  echo "Rolling the portal application back to image $PREVIOUS_IMAGE_ID." >&2
+  if ! docker tag "$PREVIOUS_IMAGE_ID" "$IMAGE_NAME:$rollback_tag"; then
     echo "Could not tag the previous portal image for rollback." >&2
     return 1
   fi
@@ -136,6 +126,23 @@ rollback_portal() {
   docker compose -f docker-compose.yml logs --tail=120 portal || true
   return 1
 }
+REMOTE_LIB
+)"
+
+remote_deploy="$(cat <<'REMOTE_DEPLOY'
+if [[ ! -f .env ]]; then
+  echo "Missing $DEPLOY_PATH/.env. Create it on the server before deploying." >&2
+  exit 1
+fi
+
+previous_container_id="$(docker compose -f docker-compose.yml ps -q portal 2>/dev/null || true)"
+PREVIOUS_IMAGE_ID=""
+if [[ -n "$previous_container_id" ]]; then
+  PREVIOUS_IMAGE_ID="$(docker inspect --format '{{.Image}}' "$previous_container_id" 2>/dev/null || true)"
+fi
+# Persisted so a rollback requested after this deploy (for example when the
+# external healthcheck run from the deploy runner fails) targets this image.
+printf '%s\n' "$PREVIOUS_IMAGE_ID" > .previous-portal-image
 
 fail_deployment() {
   local reason="$1"
@@ -174,20 +181,6 @@ for attempt in $(seq 1 40); do
     fail_deployment "Could not inspect portal health."
   fi
   if [[ "$health" == "healthy" ]]; then
-    if [[ -n "$HEALTHCHECK_URL" ]]; then
-      external_ready=false
-      for external_attempt in $(seq 1 10); do
-        if curl -fsS --max-time 10 "$HEALTHCHECK_URL" >/dev/null; then
-          external_ready=true
-          break
-        fi
-        echo "Waiting for external healthcheck ($external_attempt/10)"
-        sleep 3
-      done
-      if [[ "$external_ready" != "true" ]]; then
-        fail_deployment "External production healthcheck failed: $HEALTHCHECK_URL"
-      fi
-    fi
     if ! docker compose -f docker-compose.yml ps; then
       fail_deployment "Could not verify the final Docker Compose state."
     fi
@@ -201,4 +194,43 @@ for attempt in $(seq 1 40); do
 done
 
 fail_deployment "Portal container did not become healthy in time."
-REMOTE
+REMOTE_DEPLOY
+)"
+
+remote_rollback="$(cat <<'REMOTE_ROLLBACK'
+PREVIOUS_IMAGE_ID="$(cat .previous-portal-image 2>/dev/null || true)"
+docker compose -f docker-compose.yml ps || true
+docker compose -f docker-compose.yml logs --tail=120 portal || true
+if ! rollback_portal; then
+  echo "Automatic application rollback was not successful; manual recovery is required." >&2
+  exit 1
+fi
+REMOTE_ROLLBACK
+)"
+
+echo "Deploying $IMAGE_REF"
+printf '%s\n%s\n' "$remote_lib" "$remote_deploy" | \
+  ssh "${ssh_opts[@]}" "$TARGET" "$remote_env_prefix bash -s"
+
+# The external healthcheck must run from this machine: requests the VM sends
+# to its own public hostname hairpin through the Cloudflare edge, where the
+# WAF answers them with a managed challenge (403) instead of reaching the app.
+if [[ -n "$HEALTHCHECK_URL" ]]; then
+  external_ready=false
+  for external_attempt in $(seq 1 10); do
+    external_status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$HEALTHCHECK_URL" || true)"
+    if [[ "$external_status" == "200" ]]; then
+      external_ready=true
+      break
+    fi
+    echo "Waiting for external healthcheck ($external_attempt/10): HTTP ${external_status:-000}"
+    sleep 3
+  done
+  if [[ "$external_ready" != "true" ]]; then
+    echo "External healthcheck failed: $HEALTHCHECK_URL" >&2
+    printf '%s\n%s\n' "$remote_lib" "$remote_rollback" | \
+      ssh "${ssh_opts[@]}" "$TARGET" "$remote_env_prefix bash -s" || \
+      echo "Automatic application rollback was not successful; manual recovery is required." >&2
+    exit 1
+  fi
+fi
