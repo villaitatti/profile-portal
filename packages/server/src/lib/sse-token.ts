@@ -2,8 +2,11 @@ import { randomBytes, createHmac, timingSafeEqual } from 'crypto';
 
 // Short-lived SSE tokens avoid putting the full JWT in query strings.
 // Tokens are HMAC-signed and expire after 5 minutes.
-// In production, SSE_SECRET env var (base64-encoded, 32 bytes) is required for
-// token validity across restarts. In development, a random key is acceptable.
+//
+// SSE_SECRET (base64-encoded, >= 32 bytes) keeps tokens valid across restarts
+// and is REQUIRED in production — env.ts refuses to boot without it, so the
+// ephemeral fallback below is reachable only in development, where a key that
+// dies with the process is harmless.
 
 function loadSseSecret(): Buffer {
   const envSecret = process.env.SSE_SECRET;
@@ -13,9 +16,6 @@ function loadSseSecret(): Buffer {
       throw new Error('SSE_SECRET must be at least 32 bytes (base64-encoded). Generate with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))"');
     }
     return buf;
-  }
-  if (process.env.NODE_ENV === 'production') {
-    console.warn('WARNING: SSE_SECRET not set in production. SSE tokens will not survive restarts. Set SSE_SECRET to a base64-encoded 32-byte key.');
   }
   return randomBytes(32);
 }

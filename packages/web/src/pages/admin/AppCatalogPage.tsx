@@ -4,11 +4,11 @@ import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useApplications, useDeleteApplication } from '@/api/applications';
 import { AppTable } from './components/AppTable';
-import { Plus, Grid3X3 } from 'lucide-react';
+import { Plus, Grid3X3, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 export function AppCatalogPage() {
-  const { data: apps, isLoading } = useApplications();
+  const { data: apps, isLoading, error, isFetching, refetch } = useApplications();
   const deleteApp = useDeleteApplication();
 
   const handleDelete = async (id: number) => {
@@ -39,7 +39,25 @@ export function AppCatalogPage() {
         }
       />
 
-      {!apps || apps.length === 0 ? (
+      {error ? (
+        // A failed request must not read as an empty catalog — deleting or
+        // re-adding apps off a stale "nothing here" view is destructive.
+        <EmptyState
+          icon={<AlertCircle className="h-12 w-12 mb-4 text-destructive" />}
+          title="Couldn't load the catalog"
+          description="The application list is temporarily unavailable. Nothing has been deleted."
+          action={
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              disabled={isFetching}
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
+            >
+              {isFetching ? 'Trying again…' : 'Try again'}
+            </button>
+          }
+        />
+      ) : !apps || apps.length === 0 ? (
         <EmptyState
           icon={<Grid3X3 className="h-12 w-12 mb-4" />}
           title="No applications yet"

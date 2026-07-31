@@ -18,6 +18,29 @@ function hashEmail(email: string): string {
   return createHash('sha256').update(email).digest('hex').slice(0, 12);
 }
 
+/**
+ * Tell IT that an Auth0 account was created but provisioning did not complete.
+ *
+ * Best-effort: a failure to notify must not mask the original provisioning
+ * error, which the caller rethrows.
+ */
+async function notifyPartialProvisioning(
+  email: string,
+  userId: string,
+  failedStep: string
+): Promise<void> {
+  try {
+    await emailService.sendClaimNeedsReconciliationNotification({
+      claimantEmail: email,
+      reason: 'partial-provisioning',
+      failedStep,
+      candidates: [{ userId, email, name: null, civicrmId: null }],
+    });
+  } catch (err) {
+    logger.error({ err, userId, failedStep }, 'Claim: failed to notify IT of partial provisioning');
+  }
+}
+
 export async function processClaim(email: string): Promise<void> {
   const emailHash = hashEmail(email);
 
@@ -26,6 +49,30 @@ export async function processClaim(email: string): Promise<void> {
 
   if (existingUser) {
     logger.info({ emailHash }, 'Claim: user already exists');
+
+    // Self-heal a half-provisioned account before doing anything else.
+    // Provisioning below is a sequence of independent Auth0 calls; if it broke
+    // between "create user" and "assign fellows role", this branch is where the
+    // fellow lands on every subsequent attempt. Without the repair the account
+    // stays roleless forever — able to log in, denied by RBAC everywhere, and
+    // invisible to the dashboard, which enumerates by role.
+    try {
+      const repaired = await auth0Service.ensureFellowsRole(existingUser.user_id);
+      if (repaired) {
+        logger.warn(
+          { emailHash, userId: existingUser.user_id },
+          'Claim: repaired account that was missing the fellows role'
+        );
+      }
+    } catch (err) {
+      // Don't fail the claim over this — the password reset below is still
+      // useful. Log so the condition is visible.
+      logger.error(
+        { err, emailHash, userId: existingUser.user_id },
+        'Claim: fellows-role repair check failed'
+      );
+    }
+
     // Send password reset so user knows they have an account
     await auth0Service.triggerPasswordSetupEmail(email);
     return;
@@ -93,9 +140,25 @@ export async function processClaim(email: string): Promise<void> {
 
   logger.info({ emailHash, userId: newUser.user_id }, 'Claim: Auth0 user created');
 
-  // Step 5: Assign "fellows" role
-  await auth0Service.assignFellowsRole(newUser.user_id);
-  logger.info({ emailHash }, 'Claim: fellows role assigned');
+  // Step 5: Assign "fellows" role.
+  //
+  // From here on the account exists, so a failure is a half-provisioned state
+  // rather than a clean no-op. Surface it to IT instead of letting the route's
+  // catch-all swallow it behind the generic success message: the fellow will
+  // receive no password email and would otherwise have to notice on their own
+  // that nothing arrived. The retry path at the top of this function repairs the
+  // role, so the recovery action is simply "ask them to claim again".
+  try {
+    await auth0Service.assignFellowsRole(newUser.user_id);
+    logger.info({ emailHash }, 'Claim: fellows role assigned');
+  } catch (err) {
+    logger.error(
+      { err, emailHash, userId: newUser.user_id },
+      'Claim: fellows role assignment failed — account is half-provisioned'
+    );
+    await notifyPartialProvisioning(email, newUser.user_id, 'fellows-role-assignment-failed');
+    throw err;
+  }
 
   // Step 6: Determine fellowship status for org/role assignment
   const hasFellowship = fellowships.length > 0;
@@ -116,28 +179,57 @@ export async function processClaim(email: string): Promise<void> {
     }
   }
 
-  // Step 7: Persist claim record
-  const claimRecord = await prisma.vitIdClaim.create({
-    data: {
-      email,
-      firstName: contact.firstName,
-      lastName: contact.lastName,
-      civicrmId: contact.id,
-      hasFellowship,
-      hasCurrentFellowship,
-      rolesAssigned,
-      orgsAssigned: [],
-    },
-  });
-  logger.info({ emailHash, hasFellowship, hasCurrentFellowship }, 'Claim: record persisted');
+  // Step 7: Persist claim record.
+  //
+  // A DB failure here does not undo the Auth0 provisioning, so send the password
+  // email anyway rather than abandoning a fully-roled account — the fellow can
+  // then actually use it. The audit row is recoverable from logs; a fellow who
+  // never receives credentials is not.
+  let claimRecordId: string | null = null;
+  try {
+    const claimRecord = await prisma.vitIdClaim.create({
+      data: {
+        email,
+        firstName: contact.firstName,
+        lastName: contact.lastName,
+        civicrmId: contact.id,
+        hasFellowship,
+        hasCurrentFellowship,
+        rolesAssigned,
+        orgsAssigned: [],
+      },
+    });
+    claimRecordId = claimRecord.id;
+    logger.info({ emailHash, hasFellowship, hasCurrentFellowship }, 'Claim: record persisted');
+  } catch (err) {
+    logger.error(
+      { err, emailHash, userId: newUser.user_id },
+      'Claim: audit row write failed — continuing so the fellow still gets credentials'
+    );
+    await notifyPartialProvisioning(email, newUser.user_id, 'claim-audit-row-write-failed');
+  }
 
   // Step 8: Trigger password setup email
-  await auth0Service.triggerPasswordSetupEmail(email);
-  logger.info({ emailHash }, 'Claim: password setup email sent');
+  try {
+    await auth0Service.triggerPasswordSetupEmail(email);
+    logger.info({ emailHash }, 'Claim: password setup email sent');
+  } catch (err) {
+    logger.error(
+      { err, emailHash, userId: newUser.user_id },
+      'Claim: password setup email failed — account provisioned but unusable'
+    );
+    await notifyPartialProvisioning(email, newUser.user_id, 'password-setup-email-failed');
+    throw err;
+  }
+
+  // The async ops below key off the claim id. Without an audit row there is
+  // nothing to attach their results to, so stop here — the account itself is
+  // complete and usable, and IT has been notified above.
+  if (claimRecordId === null) return;
 
   // Step 9: Fire-and-forget async operations (JSM orgs + email notification + bio-email enqueue)
   processAsyncClaimOps({
-    claimId: claimRecord.id,
+    claimId: claimRecordId,
     email,
     firstName: contact.firstName,
     lastName: contact.lastName,

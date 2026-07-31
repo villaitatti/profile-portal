@@ -15,19 +15,59 @@ services:
         condition: service_healthy
     volumes:
       - uploads_data:/app/uploads
+    # Deliberately no `ports:` — the only ingress is cloudflared on the shared
+    # itatti-tunnel network. Rate limiting keys on the `CF-Connecting-IP` header
+    # written by the Cloudflare edge (see packages/server/src/lib/client-ip.ts),
+    # which is only authoritative while every request arrives through the tunnel.
+    # Publishing a host port here would make those limits trivially bypassable.
     networks:
       - internal
       - itatti-tunnel
     restart: unless-stopped
+    # Run a real init as PID 1 so SIGTERM reaches node, zombie children from
+    # sharp/@react-pdf worker processes get reaped, and the server's graceful
+    # shutdown actually fires instead of the container being SIGKILLed.
+    init: true
+    # Long enough for in-flight requests, pg-boss workers, and the Prisma
+    # connection pool to drain before Docker escalates to SIGKILL. Must stay
+    # above the server's own SHUTDOWN_TIMEOUT_MS backstop (25s in
+    # packages/server/src/index.ts) so the process force-exits itself and logs
+    # why, rather than being killed with no shutdown record.
+    stop_grace_period: 30s
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/health/ready || exit 1"]
-      interval: 30s
+      interval: 15s
       timeout: 5s
       retries: 5
+      # docker-entrypoint.sh runs `prisma migrate deploy` BEFORE the server
+      # listens, so a release carrying a slow migration is legitimately not
+      # ready for a while. Failures inside start_period leave the container in
+      # `starting` rather than flipping it to `unhealthy`, which is what stops
+      # scripts/deploy-image.sh from rolling the app back while the new schema
+      # has already been committed.
+      start_period: 180s
     logging: *default-logging
+    # Conservative caps so an image-processing (sharp) or PDF-rendering
+    # (@react-pdf/renderer) spike cannot take the whole VM down — on the dev
+    # host that VM also runs CiviCRM. Raise these together, not individually,
+    # if the portal starts getting OOM-killed under real load.
+    deploy:
+      resources:
+        limits:
+          cpus: "1.50"
+          memory: 1536M
+        reservations:
+          memory: 512M
 
   db:
     image: postgres:17-alpine
+    # `missing` keeps an application deploy from silently upgrading PostgreSQL:
+    # `postgres:17-alpine` is a mutable tag, so an unscoped `docker compose
+    # pull` would fetch a new minor version and recreate the database
+    # container as a side effect of shipping app code. The image is only
+    # fetched when it is absent locally; see the "Upgrading PostgreSQL"
+    # section of DEPLOYMENT.md for the deliberate upgrade procedure.
+    pull_policy: missing
     environment:
       POSTGRES_DB: profile_portal
       POSTGRES_USER: portal
@@ -42,7 +82,17 @@ services:
       timeout: 3s
       retries: 5
     restart: unless-stopped
+    # The official image stops on SIGINT (fast shutdown); give it room to flush
+    # and checkpoint so restarts don't start with crash recovery.
+    stop_grace_period: 60s
     logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 1024M
+        reservations:
+          memory: 256M
 
 networks:
   internal:

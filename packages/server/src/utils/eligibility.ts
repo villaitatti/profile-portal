@@ -15,6 +15,28 @@ export function classifyFellowship(
   return 'upcoming';
 }
 
+/**
+ * True when a fellowship on its own justifies provisioning a VIT ID: it is in
+ * the past or current, or it is upcoming and has been accepted.
+ *
+ * Rows whose CiviCRM dates don't parse are NOT qualifying. CiviCRM can return a
+ * null start/end, which `civicrm.service` stringifies to "null" — that yields an
+ * Invalid Date, and classifyFellowship's comparisons are all false for NaN, so
+ * such a row fell through to 'upcoming' and counted as qualifying whenever
+ * `fellowshipAccepted` happened to be true.
+ */
+function isQualifyingFellowship(
+  fellowship: CiviCRMFellowship,
+  referenceDate: Date
+): boolean {
+  const start = stripTime(new Date(fellowship.startDate));
+  const end = stripTime(new Date(fellowship.endDate));
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false;
+
+  const temporal = classifyFellowship(fellowship.startDate, fellowship.endDate, referenceDate);
+  return temporal === 'past' || temporal === 'current' || !!fellowship.fellowshipAccepted;
+}
+
 export function evaluateEligibility(
   fellowships: CiviCRMFellowship[],
   referenceDate: Date = new Date()
@@ -23,9 +45,16 @@ export function evaluateEligibility(
     return { eligible: false, reason: 'no_fellowship_records' };
   }
 
-  // Multiple fellowship records = eligible (has fellowship history)
+  // Multiple fellowship records = eligible, but only if at least one of them
+  // actually qualifies. The count alone used to be enough, which meant a contact
+  // holding two nominated-but-declined future fellowships was auto-provisioned an
+  // Auth0 account, the fellows role and JSM org membership — while the same
+  // person with exactly one such row was correctly refused.
   if (fellowships.length > 1) {
-    return { eligible: true, reason: 'multiple_fellowships' };
+    if (fellowships.some((f) => isQualifyingFellowship(f, referenceDate))) {
+      return { eligible: true, reason: 'multiple_fellowships' };
+    }
+    return { eligible: false, reason: 'single_upcoming_not_accepted' };
   }
 
   // Single fellowship record

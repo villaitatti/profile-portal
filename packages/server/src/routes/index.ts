@@ -117,10 +117,17 @@ export async function registerRoutes(app: Express) {
   );
 
   // Admin routes: Image uploads (staff-it only)
+  //
+  // requireRole is applied at the mount, matching every other admin mount. Each
+  // handler in uploadsRoutes also carries it individually; that alone was
+  // load-bearing but fragile — the next route added to that file would have
+  // defaulted to "any authenticated Auth0 user can upload or delete tile
+  // images." Defence in depth is cheap here.
   app.use(
     '/api/admin/uploads/images',
     authMiddleware,
     extractUser,
+    requireRole(KnownRoles.STAFF_IT),
     uploadsRoutes,
     uploadsErrorHandler
   );

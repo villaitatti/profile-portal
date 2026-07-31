@@ -4,14 +4,14 @@ import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useApplications } from '@/api/applications';
 import { useProfile } from '@/api/profile';
-import { User, ExternalLink, Grid3X3, ArrowRight } from 'lucide-react';
+import { User, ExternalLink, Grid3X3, ArrowRight, AlertCircle } from 'lucide-react';
 import { LoginMethodBadge } from '@/components/shared/LoginMethodBadge';
 import { Link } from 'react-router-dom';
 
 export function DashboardPage() {
   const { user } = useAuth0();
   const { data: profile } = useProfile();
-  const { data: apps, isLoading } = useApplications();
+  const { data: apps, isLoading, error, isFetching, refetch } = useApplications();
 
   const fullName = profile
     ? `${profile.firstName} ${profile.lastName}`
@@ -77,6 +77,24 @@ export function DashboardPage() {
 
       {isLoading ? (
         <DashboardPageSkeleton />
+      ) : error ? (
+        // Distinct from the empty state on purpose: a failed request must not
+        // read as "you have no applications".
+        <EmptyState
+          icon={<AlertCircle className="h-12 w-12 mb-4 text-destructive" />}
+          title="Couldn't load your applications"
+          description="The list is temporarily unavailable. Try again in a moment — your access has not changed."
+          action={
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              disabled={isFetching}
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/92 disabled:opacity-50"
+            >
+              {isFetching ? 'Trying again…' : 'Try again'}
+            </button>
+          }
+        />
       ) : !apps || apps.length === 0 ? (
         <EmptyState
           icon={<Grid3X3 className="h-12 w-12 mb-4" />}

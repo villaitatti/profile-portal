@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 const { mockUsePublicForm, mockUseSubmitForm, mockMutate } = vi.hoisted(() => ({
   mockUsePublicForm: vi.fn(),
@@ -17,12 +17,21 @@ vi.mock('@/api/forms', () => ({
       super(message);
     }
   },
+  PublicFormSubmitError: class PublicFormSubmitError extends Error {
+    constructor(
+      message: string,
+      public status: number,
+      public issues: { path: string; message: string }[] = []
+    ) {
+      super(message);
+    }
+  },
   usePublicForm: mockUsePublicForm,
   useSubmitForm: mockUseSubmitForm,
 }));
 
 import { PublicFormPage } from '@/pages/forms/PublicFormPage';
-import { PublicFormRequestError } from '@/api/forms';
+import { PublicFormRequestError, PublicFormSubmitError } from '@/api/forms';
 import type { FormDef } from '@itatti/shared';
 
 const minimalForm: FormDef = {
@@ -360,6 +369,175 @@ describe('PublicFormPage — submission flow', () => {
       expect(screen.getByRole('button', { name: /Submit/ })).toBeInTheDocument();
     });
     expect(screen.queryByText(/Form Already Submitted/)).not.toBeInTheDocument();
+  });
+
+  it('keeps the confirmation screen when the post-submit refetch 404s on the rotated token', () => {
+    // The server rotates the token on submit, so a window-focus refetch after
+    // staleTime returns 404. The local success must still own the screen —
+    // otherwise the appointee is told the form was not found.
+    mockUsePublicForm.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isFetching: false,
+      error: new PublicFormRequestError('Form not found', 404),
+      refetch: vi.fn(),
+    });
+    mockUseSubmitForm.mockReturnValue({
+      mutate: mockMutate,
+      isPending: false,
+      error: null,
+      isSuccess: true,
+    });
+
+    render(<PublicFormPage />, { wrapper: makeWrapper() });
+
+    expect(screen.getByText(/Your form has been submitted successfully/)).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Form Not Found' })).not.toBeInTheDocument();
+  });
+
+  it('stops refetching on window focus once the submit succeeded', () => {
+    mockUsePublicForm.mockReturnValue({
+      data: {
+        id: 'inv_1',
+        formType: 'fellow-memorandum',
+        status: 'pending',
+        submittedAt: null,
+        expiresAt: '2026-10-24T10:00:00.000Z',
+        formDef: minimalForm,
+      },
+      isLoading: false,
+      error: null,
+    });
+    mockUseSubmitForm.mockReturnValue({
+      mutate: mockMutate,
+      isPending: false,
+      error: null,
+      isSuccess: true,
+    });
+
+    render(<PublicFormPage />, { wrapper: makeWrapper() });
+
+    expect(mockUsePublicForm).toHaveBeenCalledWith('tok_abc', { refetchOnWindowFocus: false });
+  });
+
+  it('does not inherit the previous link submit state when the token changes in place', async () => {
+    // The mock keeps submit state per component instance, the way React Query's
+    // mutation observer does. Only a remount (key={token}) clears it, so this
+    // fails if PublicFormPage keeps one instance across both links.
+    mockUsePublicForm.mockReturnValue({
+      data: {
+        id: 'inv_1',
+        formType: 'fellow-memorandum',
+        status: 'pending',
+        submittedAt: null,
+        expiresAt: '2026-10-24T10:00:00.000Z',
+        formDef: minimalForm,
+      },
+      isLoading: false,
+      error: null,
+    });
+    mockUseSubmitForm.mockImplementation(() => {
+      const [isSuccess, setIsSuccess] = useState(false);
+      return {
+        mutate: () => setIsSuccess(true),
+        isPending: false,
+        error: null,
+        isSuccess,
+      };
+    });
+
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0, staleTime: 0 } },
+    });
+    const NavButton = () => {
+      const navigate = useNavigate();
+      return <button onClick={() => navigate('/forms/tokB')}>nav</button>;
+    };
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/forms/tokA']}>
+          <Routes>
+            <Route
+              path="/forms/:token"
+              element={
+                <>
+                  <NavButton />
+                  <PublicFormPage />
+                </>
+              }
+            />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    const user = userEvent.setup();
+    await user.type(screen.getAllByRole('textbox')[0], 'Maria Bianchi');
+    await user.click(screen.getByRole('button', { name: /Submit/ }));
+    expect(screen.getByText(/Your form has been submitted successfully/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'nav' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Submit/ })).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/Your form has been submitted successfully/)).not.toBeInTheDocument();
+  });
+
+  it('falls back to a date-free message when submittedAt is missing', () => {
+    mockUsePublicForm.mockReturnValue({
+      data: {
+        id: 'inv_1',
+        formType: 'fellow-memorandum',
+        status: 'submitted',
+        submittedAt: null,
+        expiresAt: '2026-10-24T10:00:00.000Z',
+        formDef: minimalForm,
+      },
+      isLoading: false,
+      error: null,
+    });
+    mockUseSubmitForm.mockReturnValue({
+      mutate: mockMutate,
+      isPending: false,
+      error: null,
+      isSuccess: false,
+    });
+
+    render(<PublicFormPage />, { wrapper: makeWrapper() });
+
+    expect(screen.getByText(/This form has already been submitted/)).toBeInTheDocument();
+    expect(screen.queryByText(/Invalid Date/)).not.toBeInTheDocument();
+  });
+
+  it('renders the server field detail behind a 400 validation failure', () => {
+    mockUsePublicForm.mockReturnValue({
+      data: {
+        id: 'inv_1',
+        formType: 'fellow-memorandum',
+        status: 'pending',
+        submittedAt: null,
+        expiresAt: '2026-10-24T10:00:00.000Z',
+        formDef: minimalForm,
+      },
+      isLoading: false,
+      error: null,
+    });
+    mockUseSubmitForm.mockReturnValue({
+      mutate: mockMutate,
+      isPending: false,
+      error: new PublicFormSubmitError('Validation failed', 400, [
+        { path: 'fullName', message: 'String must contain at most 200 character(s)' },
+      ]),
+      isSuccess: false,
+    });
+
+    render(<PublicFormPage />, { wrapper: makeWrapper() });
+
+    expect(screen.getByText('Validation failed')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Full name: String must contain at most 200 character\(s\)/)
+    ).toBeInTheDocument();
   });
 
   it('passes submitted values through useSubmitForm.mutate when the form is submitted', async () => {

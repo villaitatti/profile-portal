@@ -21,7 +21,44 @@ export class PublicFormRequestError extends Error {
   }
 }
 
-export function usePublicForm(token: string) {
+/** One server-side validation failure, flattened for display. */
+export interface PublicFormSubmitIssue {
+  /** Dotted field path, e.g. `bio` or `familyMembers.0.firstName`. Empty when the issue is form-wide. */
+  path: string;
+  message: string;
+}
+
+export class PublicFormSubmitError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    /** Field-level detail from the server's 400 payload; empty for other failures. */
+    public readonly issues: PublicFormSubmitIssue[] = []
+  ) {
+    super(message);
+    this.name = 'PublicFormSubmitError';
+  }
+}
+
+/**
+ * Flattens the zod issue array the server sends as `details` on a 400. Anything
+ * unrecognised is dropped rather than rendered raw — the generic banner message
+ * still covers it.
+ */
+function parseSubmitIssues(details: unknown): PublicFormSubmitIssue[] {
+  if (!Array.isArray(details)) return [];
+  return details.flatMap((entry) => {
+    if (typeof entry !== 'object' || entry === null) return [];
+    const { path, message } = entry as { path?: unknown; message?: unknown };
+    if (typeof message !== 'string' || message === '') return [];
+    const segments = Array.isArray(path)
+      ? path.filter((p): p is string | number => typeof p === 'string' || typeof p === 'number')
+      : [];
+    return [{ path: segments.join('.'), message }];
+  });
+}
+
+export function usePublicForm(token: string, options?: { refetchOnWindowFocus?: boolean }) {
   return useQuery({
     queryKey: ['public-form', token],
     queryFn: async () => {
@@ -33,6 +70,9 @@ export function usePublicForm(token: string) {
       return res.json() as Promise<PublicFormData>;
     },
     enabled: !!token,
+    // Callers switch this off once a submit succeeded: the server rotates the
+    // token on submit, so a focus refetch would 404 over the confirmation.
+    refetchOnWindowFocus: options?.refetchOnWindowFocus ?? true,
     retry: (failureCount, error) => {
       if (
         error instanceof PublicFormRequestError &&
@@ -59,7 +99,11 @@ export function useSubmitForm(token: string) {
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(body.error || 'Submission failed');
+        throw new PublicFormSubmitError(
+          body.error || 'Submission failed',
+          res.status,
+          parseSubmitIssues(body.details)
+        );
       }
       return res.json();
     },

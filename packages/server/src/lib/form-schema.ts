@@ -108,15 +108,47 @@ function fieldToZod(field: FormFieldDef): z.ZodTypeAny {
   return schema;
 }
 
-export function buildFormSchema(formDef: FormDef): z.ZodObject<Record<string, z.ZodTypeAny>> {
+export function buildFormSchema(formDef: FormDef) {
   const shape: Record<string, z.ZodTypeAny> = {};
+
+  // Fields gated by `conditionalOn` are typed as optional above, because at the
+  // per-field level we can't see whether the gate is satisfied. Collect them so a
+  // cross-field check can enforce requiredness once the whole object is known.
+  const conditionallyRequired: { field: string; on: { field: string; value: string } }[] = [];
 
   for (const section of formDef.sections) {
     for (const field of section.fields) {
       if (field.type === 'subheader') continue;
       shape[field.name] = fieldToZod(field);
+      if (field.required && field.conditionalOn && field.type !== 'checkbox') {
+        conditionallyRequired.push({ field: field.name, on: field.conditionalOn });
+      }
     }
   }
 
-  return z.object(shape).strict();
+  const base = z.object(shape).strict();
+  if (conditionallyRequired.length === 0) return base;
+
+  // Enforce "required when its condition holds". Without this, a raw API client
+  // could store an empty `statusOther` alongside `statusAtItatti = "Other"` — the
+  // browser enforces it, the server didn't — and the generated PDF rendered an
+  // em-dash where the answer should be.
+  return base.superRefine((data, ctx) => {
+    const values = data as Record<string, unknown>;
+    for (const { field, on } of conditionallyRequired) {
+      if (values[on.field] !== on.value) continue;
+      const value = values[field];
+      const isEmpty =
+        value === undefined ||
+        value === null ||
+        (typeof value === 'string' && value.trim().length === 0);
+      if (isEmpty) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [field],
+          message: 'Required',
+        });
+      }
+    }
+  });
 }

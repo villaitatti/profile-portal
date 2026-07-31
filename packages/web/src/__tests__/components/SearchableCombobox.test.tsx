@@ -134,6 +134,24 @@ describe('SearchableCombobox', () => {
     expect(onClear).toHaveBeenCalled();
   });
 
+  it('renders the clear control as a sibling button, not nested inside the trigger', () => {
+    // A role="button" inside a <button> is invalid nested interactive content
+    // and is not reachable by keyboard or screen readers.
+    render(
+      <SearchableCombobox
+        options={options}
+        value="role-1"
+        onSelect={vi.fn()}
+        onClear={vi.fn()}
+        placeholder="Select role"
+      />
+    );
+    const clearBtn = screen.getByLabelText('Clear selection');
+    expect(clearBtn.tagName).toBe('BUTTON');
+    expect(clearBtn.closest('[role="combobox"]')).toBeNull();
+    expect(screen.getByRole('combobox').querySelector('[role="button"]')).toBeNull();
+  });
+
   it('shows displayValue when value does not match any option', () => {
     render(
       <SearchableCombobox

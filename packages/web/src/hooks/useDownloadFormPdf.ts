@@ -68,7 +68,13 @@ export function useDownloadFormPdf() {
         // Always revoke the object URL so the blob is eligible for GC even
         // when click() throws or the fetch rejects after the blob was
         // created. Leaking object URLs across a session accumulates memory.
-        if (url) URL.revokeObjectURL(url);
+        // Deferred, not synchronous: browsers may still be reading the blob
+        // when click() returns, and revoking immediately has historically
+        // aborted downloads of larger PDFs.
+        if (url) {
+          const objectUrl = url;
+          setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+        }
       }
     },
     [getToken]

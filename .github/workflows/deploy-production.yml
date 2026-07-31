@@ -73,6 +73,13 @@ jobs:
             exit 1
           fi
 
+          # The tag is validated against VERSION, but the version the running
+          # container reports on /api/health/ready comes from root package.json
+          # (baked in as __APP_VERSION__ by packages/server/tsup.config.ts). If
+          # those disagree the release gate's "verify the version" step is
+          # meaningless, so assert consistency at the exact commit being shipped.
+          bash scripts/check-version-consistency.sh "$TAG_SHA"
+
           successful_ci=$(gh api \
             "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$TAG_SHA&event=push&status=success&per_page=100" \
             --jq '.total_count')
@@ -105,17 +112,32 @@ jobs:
           echo "IMAGE_REF=$image_ref" >> "$GITHUB_ENV"
 
       - name: Configure SSH
+        # Self-hosted runner: $HOME persists across jobs, so a production deploy
+        # key written to ~/.ssh would be readable by any later workflow that
+        # lands on this runner. Keep it in the per-job RUNNER_TEMP directory and
+        # delete it in the `if: always()` step below.
         run: |
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/profile_portal_deploy
-          chmod 600 ~/.ssh/profile_portal_deploy
-          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/known_hosts
+          install -m 700 -d "$RUNNER_TEMP/ssh"
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > "$RUNNER_TEMP/ssh/profile_portal_deploy"
+          chmod 600 "$RUNNER_TEMP/ssh/profile_portal_deploy"
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > "$RUNNER_TEMP/ssh/known_hosts"
+          chmod 600 "$RUNNER_TEMP/ssh/known_hosts"
 
       - name: Deploy image
         env:
-          SSH_KEY_PATH: ~/.ssh/profile_portal_deploy
-          SSH_KNOWN_HOSTS_FILE: ~/.ssh/known_hosts
+          SSH_KEY_PATH: ${{ runner.temp }}/ssh/profile_portal_deploy
+          SSH_KNOWN_HOSTS_FILE: ${{ runner.temp }}/ssh/known_hosts
           REGISTRY_USERNAME: ${{ github.actor }}
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: scripts/deploy-image.sh
+
+      - name: Remove deploy SSH key
+        if: always()
+        run: |
+          if command -v shred >/dev/null 2>&1; then
+            shred -u "$RUNNER_TEMP/ssh/profile_portal_deploy" 2>/dev/null || true
+          fi
+          rm -rf "$RUNNER_TEMP/ssh"
+          # Also clear the pre-hardening location in case an older run of this
+          # workflow left a key behind on this runner.
+          rm -f ~/.ssh/profile_portal_deploy

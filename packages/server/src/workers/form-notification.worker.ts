@@ -46,82 +46,106 @@ export async function registerFormNotificationWorker(): Promise<void> {
         const { invitationId, responseId } = job.data;
         logger.info({ invitationId, responseId, jobId: job.id }, 'processing form notification');
 
-        const invitation = await prisma.formInvitation.findUnique({
-          where: { id: invitationId },
-          include: { response: true },
-        });
-
-        if (!invitation || !invitation.response) {
-          logger.warn({ invitationId }, 'form notification: invitation or response not found');
-          continue;
-        }
-
-        const formDef = getFormDef(invitation.formType);
-        if (!formDef) {
-          logger.warn({ formType: invitation.formType }, 'form notification: form def not found');
-          continue;
-        }
-
-        const responseData = invitation.response.data as Record<string, unknown>;
-
-        // Resolve the appointee's human-readable name from CiviCRM so the
-        // notification email can read as "submitted by Andrea Caselli"
-        // instead of leaking internal fellowshipId/contactId. On any
-        // CiviCRM failure, fall back to null — sendFormNotificationEmail
-        // renders degraded subject/body variants in that case (no
-        // "Appointee:" line) so the email still ships.
-        let appointeeName: string | null = null;
-        let fellowshipType: string | null = null;
-        let appointment: string | null = null;
+        // pg-boss absorbs a handler throw: the job moves to `failed` and is
+        // retried per retryLimit, but no application log is emitted and the
+        // boss `error` event does not fire for handler failures. A
+        // deterministic failure (a PDF that never renders for one submission's
+        // data) therefore exhausts its retries and vanishes, with recovery
+        // requiring a manual query against pgboss.job. Log on the way out and
+        // rethrow so the retry semantics are unchanged.
         try {
-          const fellow = await getFellowWithContact(
-            invitation.fellowshipId,
-            invitation.contactId
-          );
-          if (fellow && fellow.firstName && fellow.lastName) {
-            const name = `${fellow.firstName} ${fellow.lastName}`.trim();
-            if (name) appointeeName = name;
-          }
-          fellowshipType = fellow?.fellowship ?? null;
-          appointment = fellow?.appointment ?? null;
-          // Note: the email service (sendFormNotificationEmail) is the
-          // authoritative sanitiser for strings that reach SMTP headers —
-          // it strips CR/LF/control chars and RFC 2047-encodes non-ASCII.
-          // We pass the raw name through so that layer sees the value it
-          // actually needs to sanitise.
+          await handleFormNotification(job.data, job.id);
         } catch (err) {
-          logger.warn(
-            { err, invitationId, fellowshipId: invitation.fellowshipId },
-            'form notification: appointee name lookup failed — sending with degraded subject'
+          logger.error(
+            { err, invitationId, responseId, jobId: job.id, retryLimit: 3 },
+            'form notification job failed — pg-boss will retry, then drop it silently'
           );
+          throw err;
         }
-
-        const metadata: FormPdfMetadata = {
-          appointeeName: responseName(responseData) ?? appointeeName,
-          academicYear: invitation.academicYear,
-          fellowshipType,
-          appointment,
-        };
-        const pdfAttachments = await generateFormPdfAttachments(
-          formDef,
-          responseData,
-          metadata
-        );
-
-        await sendFormNotificationEmail({
-          formTitle: formDef.title,
-          fellowshipId: invitation.fellowshipId,
-          contactId: invitation.contactId,
-          academicYear: invitation.academicYear,
-          pdfAttachments,
-          responseData,
-          appointeeName: metadata.appointeeName,
-        });
-
-        logger.info({ invitationId, jobId: job.id }, 'form notification sent');
       }
     }
   );
+}
+
+async function handleFormNotification(
+  payload: FormSubmissionNotificationPayload,
+  jobId: string
+): Promise<void> {
+  const { invitationId } = payload;
+
+  const invitation = await prisma.formInvitation.findUnique({
+    where: { id: invitationId },
+    include: { response: true },
+  });
+
+  if (!invitation || !invitation.response) {
+    logger.warn({ invitationId }, 'form notification: invitation or response not found');
+    return;
+  }
+
+  const formDef = getFormDef(invitation.formType);
+  if (!formDef) {
+    logger.warn({ formType: invitation.formType }, 'form notification: form def not found');
+    return;
+  }
+
+  const responseData = invitation.response.data as Record<string, unknown>;
+
+  // Resolve the appointee's human-readable name from CiviCRM so the
+  // notification email can read as "submitted by Andrea Caselli"
+  // instead of leaking internal fellowshipId/contactId. On any
+  // CiviCRM failure, fall back to null — sendFormNotificationEmail
+  // renders degraded subject/body variants in that case (no
+  // "Appointee:" line) so the email still ships.
+  let appointeeName: string | null = null;
+  let fellowshipType: string | null = null;
+  let appointment: string | null = null;
+  try {
+    const fellow = await getFellowWithContact(
+      invitation.fellowshipId,
+      invitation.contactId
+    );
+    if (fellow && fellow.firstName && fellow.lastName) {
+      const name = `${fellow.firstName} ${fellow.lastName}`.trim();
+      if (name) appointeeName = name;
+    }
+    fellowshipType = fellow?.fellowship ?? null;
+    appointment = fellow?.appointment ?? null;
+    // Note: the email service (sendFormNotificationEmail) is the
+    // authoritative sanitiser for strings that reach SMTP headers —
+    // it strips CR/LF/control chars and RFC 2047-encodes non-ASCII.
+    // We pass the raw name through so that layer sees the value it
+    // actually needs to sanitise.
+  } catch (err) {
+    logger.warn(
+      { err, invitationId, fellowshipId: invitation.fellowshipId },
+      'form notification: appointee name lookup failed — sending with degraded subject'
+    );
+  }
+
+  const metadata: FormPdfMetadata = {
+    appointeeName: responseName(responseData) ?? appointeeName,
+    academicYear: invitation.academicYear,
+    fellowshipType,
+    appointment,
+  };
+  const pdfAttachments = await generateFormPdfAttachments(
+    formDef,
+    responseData,
+    metadata
+  );
+
+  await sendFormNotificationEmail({
+    formTitle: formDef.title,
+    fellowshipId: invitation.fellowshipId,
+    contactId: invitation.contactId,
+    academicYear: invitation.academicYear,
+    pdfAttachments,
+    responseData,
+    appointeeName: metadata.appointeeName,
+  });
+
+  logger.info({ invitationId, jobId }, 'form notification sent');
 }
 
 function responseName(data: Record<string, unknown>): string | null {

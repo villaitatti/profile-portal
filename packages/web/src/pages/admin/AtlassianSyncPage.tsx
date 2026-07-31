@@ -269,7 +269,9 @@ function SyncHistory() {
                     a.href = url;
                     a.download = `sync-run-${run.id}.json`;
                     a.click();
-                    URL.revokeObjectURL(url);
+                    // Deferred so the browser can still read the blob (same
+                    // reason as the automations export below).
+                    setTimeout(() => URL.revokeObjectURL(url), 1000);
                   }}
                   className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
                 >
@@ -375,9 +377,26 @@ function HistoryDiffDetail({ diff }: { diff: SyncRunDetail['diff'] }) {
 
 // ── Main Page ──────────────────────────────────────────────────────
 
+type RunKind = 'dry-run' | 'execute';
+
+const RUN_KIND_LABELS: Record<RunKind, string> = {
+  'dry-run': 'Preview failed',
+  execute: 'Sync failed',
+};
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error && err.message ? err.message : 'Unexpected error';
+}
+
 export function AtlassianSyncPage() {
   const { data: status, isLoading: statusLoading } = useSyncStatus();
-  const { data: mappings, isLoading: mappingsLoading } = useMappings();
+  const {
+    data: mappings,
+    isLoading: mappingsLoading,
+    error: mappingsError,
+    refetch: refetchMappings,
+    isFetching: mappingsFetching,
+  } = useMappings();
   const startDryRun = useStartDryRun();
   const executeSyncMutation = useExecuteSync();
   const queryClient = useQueryClient();
@@ -385,6 +404,7 @@ export function AtlassianSyncPage() {
 
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [progress, setProgress] = useState<SyncProgress | null>(null);
+  const [runError, setRunError] = useState<{ kind: RunKind; message: string } | null>(null);
   const [lastDryRunId, setLastDryRunId] = useState<string | null>(null);
   const [showExecuteConfirm, setShowExecuteConfirm] = useState(false);
   const [startTime, setStartTime] = useState(0);
@@ -411,8 +431,22 @@ export function AtlassianSyncPage() {
     return () => { activeUnsubRef.current?.(); };
   }, []);
 
+  const failRun = useCallback(
+    (kind: RunKind, message: string) => {
+      setRunError({ kind, message });
+      // A failed run is still recorded server-side — refresh history so the
+      // failure row appears instead of leaving the page looking untouched.
+      queryClient.invalidateQueries({ queryKey: ['sync-runs'] });
+      // Drop the previewed diff: after a failure we can no longer claim it
+      // describes the current Atlassian state, so it must not stay on screen
+      // next to an Execute button.
+      setLastDryRunId(null);
+    },
+    [queryClient]
+  );
+
   const startSseSubscription = useCallback(
-    (runId: string, sseToken: string, onDone: () => void) => {
+    (runId: string, sseToken: string, kind: RunKind, onDone: () => void) => {
       activeUnsubRef.current?.();
       const unsub = subscribeSyncProgress(
         runId,
@@ -421,53 +455,84 @@ export function AtlassianSyncPage() {
         () => { activeUnsubRef.current = null; onDone(); },
         (err) => {
           activeUnsubRef.current = null;
-          setProgress({ phase: 'error', step: 0, totalSteps: 0, percentage: 0, description: err });
+          // Keep the last known step and flag it as failed. The panel render
+          // guard below also tests for the error phase, so clearing
+          // activeRunId no longer unmounts the failure.
+          setProgress((prev) =>
+            prev
+              ? { ...prev, phase: 'error' }
+              : { phase: 'error', step: 0, totalSteps: 0, percentage: 0, description: 'Run failed' }
+          );
           setActiveRunId(null);
+          failRun(kind, err);
         }
       );
       activeUnsubRef.current = unsub;
     },
-    []
+    [failRun]
   );
 
   const handleDryRun = useCallback(async () => {
-    const sseToken = await fetchSseToken(getToken);
+    setRunError(null);
+    setProgress(null);
+    let sseToken: string;
+    try {
+      sseToken = await fetchSseToken(getToken);
+    } catch (err) {
+      failRun('dry-run', errorMessage(err));
+      return;
+    }
     startDryRun.mutate(undefined, {
       onSuccess: ({ runId }) => {
         setActiveRunId(runId);
         setStartTime(Date.now());
         setProgress({ phase: 'starting', step: 0, totalSteps: 0, percentage: 0, description: 'Starting dry run...' });
-        startSseSubscription(runId, sseToken, () => {
+        startSseSubscription(runId, sseToken, 'dry-run', () => {
           setLastDryRunId(runId);
           setActiveRunId(null);
           queryClient.invalidateQueries({ queryKey: ['sync-runs'] });
           queryClient.invalidateQueries({ queryKey: ['sync-run', runId] });
         });
       },
+      onError: (err) => failRun('dry-run', errorMessage(err)),
     });
-  }, [startDryRun, queryClient, getToken, startSseSubscription]);
+  }, [startDryRun, queryClient, getToken, startSseSubscription, failRun]);
 
   const handleExecute = useCallback(async () => {
     if (!lastDryRunId) return;
-    const sseToken = await fetchSseToken(getToken);
-    executeSyncMutation.mutate(lastDryRunId, {
+    const dryRunId = lastDryRunId;
+    setRunError(null);
+    setProgress(null);
+    let sseToken: string;
+    try {
+      sseToken = await fetchSseToken(getToken);
+    } catch (err) {
+      failRun('execute', errorMessage(err));
+      return;
+    }
+    executeSyncMutation.mutate(dryRunId, {
       onSuccess: ({ runId }) => {
         setActiveRunId(runId);
         setStartTime(Date.now());
         setProgress({ phase: 'starting', step: 0, totalSteps: 0, percentage: 0, description: 'Starting execution...' });
-        startSseSubscription(runId, sseToken, () => {
+        startSseSubscription(runId, sseToken, 'execute', () => {
           setLastDryRunId(null);
           setActiveRunId(null);
           queryClient.invalidateQueries({ queryKey: ['sync-runs'] });
         });
       },
+      onError: (err) => failRun('execute', errorMessage(err)),
     });
-  }, [lastDryRunId, executeSyncMutation, queryClient, getToken, startSseSubscription]);
+  }, [lastDryRunId, executeSyncMutation, queryClient, getToken, startSseSubscription, failRun]);
 
   if (statusLoading || mappingsLoading) return <AtlassianSyncPageSkeleton />;
 
   const hasMappings = Array.isArray(mappings) && mappings.length > 0;
   const mappingsEmpty = Array.isArray(mappings) && mappings.length === 0;
+  // An errored mappings query leaves `mappings` undefined: neither the
+  // "configure mappings" warning nor the happy path applies, so the dry run
+  // must be blocked until we know which roles are mapped.
+  const mappingsUnavailable = !!mappingsError;
   const isRunning = !!activeRunId;
   const canExecute = lastDryRunId && dryRunDetail?.status === 'completed' && (ttlRemaining === null || ttlRemaining > 0);
 
@@ -503,12 +568,38 @@ export function AtlassianSyncPage() {
         </div>
       )}
 
+      {mappingsUnavailable && (
+        <div className="mb-6 rounded-xl border border-destructive/30 bg-destructive/5 p-4" role="alert">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 flex-shrink-0 text-destructive" />
+            <p className="flex-1 text-sm text-destructive">
+              Couldn't load the group mappings, so previewing changes is disabled — a sync
+              without them would look like every user should be removed.
+            </p>
+            <button
+              onClick={() => void refetchMappings()}
+              disabled={mappingsFetching}
+              className="inline-flex items-center gap-1 rounded-md border border-destructive/30 px-3 py-1.5 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-50"
+            >
+              <RefreshCw className={`h-3 w-3 ${mappingsFetching ? 'animate-spin' : ''}`} />
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="space-y-6">
         {/* Sync actions */}
         <div className="flex items-center gap-3">
           <button
             onClick={handleDryRun}
-            disabled={isRunning || startDryRun.isPending || !status?.configured || mappingsEmpty}
+            disabled={
+              isRunning ||
+              startDryRun.isPending ||
+              !status?.configured ||
+              mappingsEmpty ||
+              mappingsUnavailable
+            }
             className="inline-flex items-center gap-2 rounded-md border border-primary px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/5 disabled:opacity-50"
           >
             <RefreshCw className={`h-4 w-4 ${isRunning ? 'animate-spin' : ''}`} />
@@ -540,8 +631,36 @@ export function AtlassianSyncPage() {
           )}
         </div>
 
-        {/* Progress */}
-        {isRunning && <ProgressPanel progress={progress} startTime={startTime} />}
+        {/* Progress — stays mounted in the error phase so a failed run does not
+            silently revert the page to its pre-run state. */}
+        {(isRunning || progress?.phase === 'error') && (
+          <ProgressPanel progress={progress} startTime={startTime} />
+        )}
+
+        {runError && (
+          <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4" role="alert">
+            <div className="flex items-start gap-2">
+              <XCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-destructive" />
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-destructive">
+                  {RUN_KIND_LABELS[runError.kind]}
+                </p>
+                <p className="mt-1 text-sm text-destructive/90">{runError.message}</p>
+                <p className="mt-1 text-sm text-destructive/90">
+                  {runError.kind === 'execute'
+                    ? 'Some changes may already have been applied. Preview again to see the current state before retrying.'
+                    : 'Nothing was changed in Atlassian Cloud. Preview again to retry.'}
+                </p>
+              </div>
+              <button
+                onClick={() => setRunError(null)}
+                className="rounded-md border border-destructive/30 px-3 py-1.5 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Diff preview */}
         {dryRunDetail && !isRunning && <DiffPreview run={dryRunDetail} />}

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -17,6 +17,12 @@ vi.mock('@/api/emails', () => ({
   useEmailEvents: mockUseEmailEvents,
   useEmailEventPreview: mockUseEmailEventPreview,
   useTemplatePreview: mockUseTemplatePreview,
+}));
+
+// "Load more" bypasses the query hooks and fetches the next cursor page itself.
+vi.mock('@/api/client', () => ({
+  apiUrl: (path: string) => path,
+  useApiToken: () => async () => 'test-token',
 }));
 
 import { EmailsPage } from '@/pages/admin/EmailsPage';
@@ -378,6 +384,144 @@ describe('EmailsPage — Sent emails tab — pagination', () => {
     );
 
     expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+  });
+
+  it('keeps loaded pages when the first-page query returns a new object for the same filters', async () => {
+    // staleTime + window-focus refetch hands back a fresh object identity. That
+    // must not collapse pages the admin already loaded.
+    const firstPage = { events: [mockEvents[0]], nextCursor: 'cursor-abc' };
+    mockUseEmailEvents.mockReturnValue({ data: firstPage, isLoading: false, error: null });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ events: [mockEvents[1]], nextCursor: null }), { status: 200 })
+    );
+
+    const Wrapper = makeWrapper();
+    const { rerender } = render(
+      <Wrapper>
+        <EmailsPage />
+      </Wrapper>
+    );
+
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Load more' }));
+    await waitFor(() => expect(screen.getByText('James Chen')).toBeInTheDocument());
+
+    // Same filters, new object identity — a background refetch.
+    mockUseEmailEvents.mockReturnValue({
+      data: { events: [mockEvents[0]], nextCursor: 'cursor-abc' },
+      isLoading: false,
+      error: null,
+    });
+    rerender(
+      <Wrapper>
+        <EmailsPage />
+      </Wrapper>
+    );
+
+    expect(screen.getByText('James Chen')).toBeInTheDocument();
+  });
+
+  it('resets loaded pages when a filter changes', async () => {
+    mockUseEmailEvents.mockImplementation((params: Record<string, string | number | undefined> = {}) => ({
+      data: params.status
+        ? { events: [mockEvents[1]], nextCursor: null }
+        : { events: [mockEvents[0]], nextCursor: 'cursor-abc' },
+      isLoading: false,
+      error: null,
+    }));
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ events: [mockEvents[2]], nextCursor: null }), { status: 200 })
+    );
+
+    const user = userEvent.setup();
+    const Wrapper = makeWrapper();
+    render(
+      <Wrapper>
+        <EmailsPage />
+      </Wrapper>
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Load more' }));
+    await waitFor(() => expect(screen.getByText('Elena Petrova')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'FAILED status filter' }));
+
+    await waitFor(() => expect(screen.queryByText('Elena Petrova')).not.toBeInTheDocument());
+    expect(screen.getByText('James Chen')).toBeInTheDocument();
+  });
+
+  it('reports a failed "Load more" and offers a retry', async () => {
+    mockUseEmailEvents.mockReturnValue({
+      data: { events: [mockEvents[0]], nextCursor: 'cursor-abc' },
+      isLoading: false,
+      error: null,
+    });
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('nope', { status: 500 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ events: [mockEvents[1]], nextCursor: null }), { status: 200 })
+      );
+
+    const user = userEvent.setup();
+    const Wrapper = makeWrapper();
+    render(
+      <Wrapper>
+        <EmailsPage />
+      </Wrapper>
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Load more' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('Could not load more emails.')
+    );
+    // Rows already fetched stay on screen and the same page can be retried.
+    expect(screen.getByText('Sophie Laurent')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+
+    await waitFor(() => expect(screen.getByText('James Chen')).toBeInTheDocument());
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ─── Sent Emails Tab — Row accessibility ─────────────────────────────────────
+
+describe('EmailsPage — row accessibility', () => {
+  it('exposes a real details button per row and no aria-selected on the <tr>', () => {
+    const Wrapper = makeWrapper();
+    render(
+      <Wrapper>
+        <EmailsPage />
+      </Wrapper>
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'View details for Sophie Laurent' })
+    ).toBeInTheDocument();
+    for (const row of screen.getAllByRole('row')) {
+      expect(row).not.toHaveAttribute('aria-selected');
+      expect(row).not.toHaveAttribute('tabindex');
+    }
+  });
+
+  it('opens the drawer from the row details button', async () => {
+    mockUseEmailEventPreview.mockReturnValue({ data: null, isLoading: false, error: null });
+
+    const Wrapper = makeWrapper();
+    render(
+      <Wrapper>
+        <EmailsPage />
+      </Wrapper>
+    );
+
+    await userEvent
+      .setup()
+      .click(screen.getByRole('button', { name: 'View details for James Chen' }));
+
+    expect(screen.getByText('Email Details')).toBeInTheDocument();
+    expect(screen.getByText('Auth0 ID')).toBeInTheDocument();
   });
 });
 

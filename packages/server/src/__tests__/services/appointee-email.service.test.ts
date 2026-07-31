@@ -725,6 +725,130 @@ describe('sendBioEmailManually', () => {
     expect(result).toEqual({ ok: false, reason: 'already_sent' });
   });
 
+  it('dispatches an already-queued PENDING row instead of reporting it as in-flight', async () => {
+    // A PENDING row is queued, not in flight. Reporting "pending" without
+    // dispatching made the admin's click a no-op, and because
+    // dispatchPendingEmails has exactly one caller — the daily cron, gated on
+    // APPOINTEE_EMAIL_CRON_ENABLED which defaults to false — the row would never
+    // be picked up at all in a deployment that hadn't enabled the flag.
+    mockCivicrm.getContactById.mockResolvedValue({
+      id: 1,
+      firstName: 'A',
+      lastName: 'B',
+      email: 'a@b.com',
+    });
+    mockCivicrm.getFellowships.mockResolvedValue([
+      {
+        id: 10,
+        contactId: 1,
+        startDate: '2026-07-01',
+        endDate: '2027-06-30',
+        fellowshipAccepted: true,
+      },
+    ]);
+    (mockPrisma.appointeeEmailEvent.findFirst as any).mockResolvedValue({
+      id: 'evt_queued',
+      status: 'PENDING',
+      sentAt: null,
+    });
+    // dispatchOne wins the atomic PENDING → SENDING claim.
+    (mockPrisma.appointeeEmailEvent.updateMany as any).mockResolvedValue({ count: 1 });
+    (mockPrisma.appointeeEmailEvent.findUniqueOrThrow as any)
+      .mockResolvedValueOnce({
+        id: 'evt_queued',
+        status: 'SENDING',
+        emailType: 'BIO_PROJECT_DESCRIPTION',
+        contactId: 1,
+        academicYear: '2026-2027',
+        fellowshipId: 10,
+      })
+      .mockResolvedValueOnce({
+        id: 'evt_queued',
+        status: 'SENT',
+        sentAt: new Date('2026-05-01T09:00:00Z'),
+      });
+    (mockPrisma.appointeeEmailEvent.update as any).mockResolvedValue({});
+    mockEmail.sendBioProjectDescriptionEmail.mockResolvedValue({ messageId: 'ses-queued' });
+
+    const result = await sendBioEmailManually({
+      contactId: 1,
+      academicYear: '2026-2027',
+      triggeredBy: 'admin_manual:u1',
+    });
+
+    // The email actually went out, and no duplicate row was created.
+    expect(mockEmail.sendBioProjectDescriptionEmail).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.appointeeEmailEvent.create).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ ok: true, eventId: 'evt_queued', status: 'SENT' });
+  });
+
+  it('reports pending without sending when a concurrent dispatcher already holds the claim', async () => {
+    mockCivicrm.getContactById.mockResolvedValue({
+      id: 1,
+      firstName: 'A',
+      lastName: 'B',
+      email: 'a@b.com',
+    });
+    mockCivicrm.getFellowships.mockResolvedValue([
+      {
+        id: 10,
+        contactId: 1,
+        startDate: '2026-07-01',
+        endDate: '2027-06-30',
+        fellowshipAccepted: true,
+      },
+    ]);
+    (mockPrisma.appointeeEmailEvent.findFirst as any).mockResolvedValue({
+      id: 'evt_queued',
+      status: 'PENDING',
+      sentAt: null,
+    });
+    // The atomic claim loses: the cron got there first.
+    (mockPrisma.appointeeEmailEvent.updateMany as any).mockResolvedValue({ count: 0 });
+
+    const result = await sendBioEmailManually({
+      contactId: 1,
+      academicYear: '2026-2027',
+      triggeredBy: 'admin_manual:u1',
+    });
+
+    expect(mockEmail.sendBioProjectDescriptionEmail).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ ok: true, eventId: 'evt_queued', status: 'SENDING' });
+  });
+
+  it('leaves a genuinely in-flight SENDING row alone', async () => {
+    mockCivicrm.getContactById.mockResolvedValue({
+      id: 1,
+      firstName: 'A',
+      lastName: 'B',
+      email: 'a@b.com',
+    });
+    mockCivicrm.getFellowships.mockResolvedValue([
+      {
+        id: 10,
+        contactId: 1,
+        startDate: '2026-07-01',
+        endDate: '2027-06-30',
+        fellowshipAccepted: true,
+      },
+    ]);
+    (mockPrisma.appointeeEmailEvent.findFirst as any).mockResolvedValue({
+      id: 'evt_inflight',
+      status: 'SENDING',
+      sentAt: null,
+    });
+
+    const result = await sendBioEmailManually({
+      contactId: 1,
+      academicYear: '2026-2027',
+      triggeredBy: 'admin_manual:u1',
+    });
+
+    expect(mockEmail.sendBioProjectDescriptionEmail).not.toHaveBeenCalled();
+    expect(mockPrisma.appointeeEmailEvent.updateMany).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ ok: true, eventId: 'evt_inflight', status: 'SENDING' });
+  });
+
   it('preserves a SENT event and creates a new row when resend=true', async () => {
     mockCivicrm.getContactById.mockResolvedValue({
       id: 1,

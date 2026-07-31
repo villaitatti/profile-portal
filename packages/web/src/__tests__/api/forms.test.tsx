@@ -2,7 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { useFormInvitations, useMarkNominationSent, usePublicForm, useSubmitForm } from '@/api/forms';
+import {
+  PublicFormSubmitError,
+  useFormInvitations,
+  useMarkNominationSent,
+  usePublicForm,
+  useSubmitForm,
+} from '@/api/forms';
 import { waitFor } from '@testing-library/react';
 import { apiFetch } from '@/api/client';
 
@@ -112,6 +118,39 @@ describe('usePublicForm', () => {
 });
 
 describe('useSubmitForm', () => {
+  it('carries the server field detail off a 400 so the UI can render it', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: 'Validation failed',
+          details: [
+            { code: 'too_big', path: ['bio'], message: 'String must contain at most 5000 character(s)' },
+            { code: 'custom', path: [], message: 'Payload too large' },
+            { code: 'unparseable' },
+          ],
+        }),
+        { status: 400 }
+      )
+    );
+
+    const { result } = renderHook(() => useSubmitForm('tok'), { wrapper: wrap() });
+
+    await act(async () => {
+      await result.current.mutateAsync({ bio: 'x'.repeat(6000) }).catch(() => undefined);
+    });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    const error = result.current.error as PublicFormSubmitError;
+    expect(error).toBeInstanceOf(PublicFormSubmitError);
+    expect(error.status).toBe(400);
+    expect(error.message).toBe('Validation failed');
+    // Issues without a usable message are dropped rather than rendered raw.
+    expect(error.issues).toEqual([
+      { path: 'bio', message: 'String must contain at most 5000 character(s)' },
+      { path: '', message: 'Payload too large' },
+    ]);
+  });
+
   it('resets successful mutation state when navigating to a different token', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ invitationId: 'inv_1', responseId: 'r_1' }), { status: 201 })

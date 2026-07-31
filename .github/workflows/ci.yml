@@ -12,6 +12,15 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
+      - name: Verify version consistency
+        # VERSION gates the release tag, but packages/server/tsup.config.ts bakes
+        # the ROOT package.json version into __APP_VERSION__ — which is what
+        # /api/health/ready reports and what the DEPLOYMENT.md release gate asks
+        # the operator to verify. Those two drifted silently once (VERSION
+        # 0.17.14 vs package.json 0.17.13), so a correctly-tagged release would
+        # have reported the wrong version in production. Fail the build instead.
+        run: bash scripts/check-version-consistency.sh
+
       - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
 
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5

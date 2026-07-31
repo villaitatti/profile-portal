@@ -200,6 +200,81 @@ describe('PublicFormRenderer', () => {
     expect(screen.getByLabelText('If other, please indicate')).toBeInTheDocument();
   });
 
+  it('drops a conditional field value once its gate stops matching', () => {
+    const onSubmit = vi.fn();
+    const conditionalForm: FormDef = {
+      id: 'renderer-conditional-clear-test',
+      title: 'Renderer Conditional Clear Test',
+      appointmentTypes: ['Fellow'],
+      sections: [
+        {
+          title: 'Status',
+          fields: [
+            {
+              name: 'statusAtItatti',
+              label: 'Status at I Tatti',
+              type: 'radio',
+              required: true,
+              options: ['Independent Scholar', 'Other'],
+            },
+            {
+              name: 'statusOther',
+              label: 'If other, please indicate',
+              type: 'text',
+              required: false,
+              conditionalOn: { field: 'statusAtItatti', value: 'Other' },
+            },
+          ],
+        },
+      ],
+    };
+
+    render(
+      <PublicFormRenderer
+        formDef={conditionalForm}
+        onSubmit={onSubmit}
+        isSubmitting={false}
+        isSuccess={false}
+      />
+    );
+
+    fireEvent.click(screen.getByLabelText('Other'));
+    fireEvent.change(screen.getByLabelText('If other, please indicate'), {
+      target: { value: 'Visiting Professor' },
+    });
+
+    // Switching away hides the field — its stale value must not be submitted.
+    fireEvent.click(screen.getByLabelText('Independent Scholar'));
+    expect(screen.queryByLabelText('If other, please indicate')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Submit/ }));
+
+    expect(onSubmit).toHaveBeenCalledWith({ statusAtItatti: 'Independent Scholar' });
+  });
+
+  it('lists server-provided field detail under the submit error banner', () => {
+    render(
+      <PublicFormRenderer
+        formDef={addressForm}
+        onSubmit={vi.fn()}
+        isSubmitting={false}
+        isSuccess={false}
+        submitError="Validation failed"
+        submitIssues={[
+          { path: 'legalCity', message: 'String must contain at most 64 character(s)' },
+          { path: '', message: 'Payload too large' },
+        ]}
+      />
+    );
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('Validation failed');
+    // The dotted path resolves to the label the appointee actually saw.
+    expect(alert).toHaveTextContent('City: String must contain at most 64 character(s)');
+    // Form-wide issues render without a label prefix.
+    expect(alert).toHaveTextContent('Payload too large');
+  });
+
   it('shows the status other field beneath a select with animation styling', async () => {
     const user = userEvent.setup();
     const conditionalForm: FormDef = {

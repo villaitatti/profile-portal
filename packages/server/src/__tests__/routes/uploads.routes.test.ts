@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 import { join } from 'path';
-import { mkdirSync, rmSync, writeFileSync } from 'fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
 
 vi.mock('../../middleware/rbac.js', () => ({
   requireRole: (..._roles: string[]) =>
@@ -22,7 +23,20 @@ vi.mock('../../services/image-upload.service.js', async () => {
 import { uploadsRoutes, uploadsErrorHandler } from '../../routes/uploads.routes.js';
 import * as imageService from '../../services/image-upload.service.js';
 
-const TEST_UPLOADS_DIR = join(process.cwd(), 'test-uploads-tmp');
+// A UNIQUE directory per test, not one shared fixed path.
+//
+// The POST tests exercise the real saveImage(), which writes a .webp into this
+// directory. With a single shared `process.cwd()/test-uploads-tmp`, a write that
+// landed after its own afterEach rmSync() leaked a stray .webp into the next
+// describe's directory — so "lists uploaded webp files" intermittently saw three
+// files instead of two. That failed roughly one run in six, and because CI gates
+// production deploys, a flake here blocks a deploy for a reason that has nothing
+// to do with the change under test.
+let TEST_UPLOADS_DIR = '';
+
+function makeIsolatedUploadsDir(): string {
+  return mkdtempSync(join(tmpdir(), 'itatti-uploads-test-'));
+}
 
 function makeApp() {
   const app = express();
@@ -51,7 +65,7 @@ const TINY_JPEG = Buffer.from(
 describe('POST /api/admin/uploads/images', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mkdirSync(TEST_UPLOADS_DIR, { recursive: true });
+    TEST_UPLOADS_DIR = makeIsolatedUploadsDir();
     vi.spyOn(imageService, 'getUploadsDir').mockReturnValue(TEST_UPLOADS_DIR);
   });
 
@@ -174,7 +188,7 @@ describe('POST /api/admin/uploads/images', () => {
 describe('GET /api/admin/uploads/images', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mkdirSync(TEST_UPLOADS_DIR, { recursive: true });
+    TEST_UPLOADS_DIR = makeIsolatedUploadsDir();
     vi.spyOn(imageService, 'getUploadsDir').mockReturnValue(TEST_UPLOADS_DIR);
   });
 
@@ -191,10 +205,11 @@ describe('GET /api/admin/uploads/images', () => {
     const res = await request(app).get('/api/admin/uploads/images');
 
     expect(res.status).toBe(200);
-    expect(res.body).toHaveLength(2);
-    expect(res.body[0]).toHaveProperty('filename');
+    // Assert the exact set, not just the count: if an unrelated file ever leaks
+    // into this directory again, the diff names it instead of reporting
+    // "expected 2, got 3".
+    expect(res.body.map((f: any) => f.filename).sort()).toEqual(['abc.webp', 'def.webp']);
     expect(res.body[0]).toHaveProperty('url');
-    expect(res.body.every((f: any) => f.filename.endsWith('.webp'))).toBe(true);
   });
 
   it('returns empty array when uploads directory is empty', async () => {
@@ -209,7 +224,7 @@ describe('GET /api/admin/uploads/images', () => {
 describe('DELETE /api/admin/uploads/images/:filename', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mkdirSync(TEST_UPLOADS_DIR, { recursive: true });
+    TEST_UPLOADS_DIR = makeIsolatedUploadsDir();
     vi.spyOn(imageService, 'getUploadsDir').mockReturnValue(TEST_UPLOADS_DIR);
   });
 

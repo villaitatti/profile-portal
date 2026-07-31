@@ -57,7 +57,22 @@ describe('automation admin audit identity', () => {
 
     expect(mockAutomation.executeAutomation).toHaveBeenCalledWith(
       'run-1',
-      'admin:auth0|123'
+      'admin:auth0|123',
+      'end-of-year-cleanup'
+    );
+  });
+
+  it('passes the endpoint-specific automation type so a mismatched run id is refused', async () => {
+    mockAutomation.executeAutomation.mockResolvedValue({ id: 'run-2' } as never);
+
+    await request(makeApp({ sub: 'auth0|123' }, 'auth0|123'))
+      .post('/api/admin/automations/backfill/execute/run-2')
+      .expect(200);
+
+    expect(mockAutomation.executeAutomation).toHaveBeenCalledWith(
+      'run-2',
+      'admin:auth0|123',
+      'backfill'
     );
   });
 

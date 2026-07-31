@@ -82,7 +82,11 @@ router.post('/end-of-year/execute/:runId', async (req, res, next) => {
   const triggeredBy = getTriggeredBy(req, res);
   if (!triggeredBy) return;
   try {
-    const result = await automationService.executeAutomation(req.params.runId, triggeredBy);
+    const result = await automationService.executeAutomation(
+      req.params.runId,
+      triggeredBy,
+      'end-of-year-cleanup'
+    );
     res.json(result);
   } catch (err) {
     next(err);
@@ -93,7 +97,11 @@ router.post('/new-cohort/execute/:runId', async (req, res, next) => {
   const triggeredBy = getTriggeredBy(req, res);
   if (!triggeredBy) return;
   try {
-    const result = await automationService.executeAutomation(req.params.runId, triggeredBy);
+    const result = await automationService.executeAutomation(
+      req.params.runId,
+      triggeredBy,
+      'new-cohort-onboarding'
+    );
     res.json(result);
   } catch (err) {
     next(err);
@@ -104,7 +112,11 @@ router.post('/backfill/execute/:runId', async (req, res, next) => {
   const triggeredBy = getTriggeredBy(req, res);
   if (!triggeredBy) return;
   try {
-    const result = await automationService.executeAutomation(req.params.runId, triggeredBy);
+    const result = await automationService.executeAutomation(
+      req.params.runId,
+      triggeredBy,
+      'backfill'
+    );
     res.json(result);
   } catch (err) {
     next(err);

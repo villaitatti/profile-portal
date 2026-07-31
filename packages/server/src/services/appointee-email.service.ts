@@ -489,7 +489,7 @@ export async function dispatchPendingEmails(opts?: {
     if (result === 'sent') sent++;
     else if (result === 'skipped') skipped++;
     else if (result === 'failed') failed++;
-    else if (result === 'deferred') deferred++;
+    else if (result === 'deferred' || result === 'deferred_email') deferred++;
   }
 
   logger.info(
@@ -508,12 +508,65 @@ export async function dispatchPendingEmails(opts?: {
 }
 
 /**
+ * True when an SES failure means "not delivered, try later" rather than "this
+ * message will never be accepted".
+ *
+ * The AWS SDK has already exhausted its own retries (standard mode, 3 attempts)
+ * by the time we see the error, so these are sustained conditions: a throttling
+ * ceiling, an SES-side 5xx, or a connection that never completed. Treating them
+ * as terminal turned a rate-limit burst into a batch of FAILED rows the daily
+ * dispatch would never revisit.
+ *
+ * Credential and configuration errors are deliberately NOT transient — retrying
+ * them forever would hide a broken deployment behind a queue that never drains.
+ */
+export function isTransientSesFailure(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+
+  const e = err as {
+    name?: string;
+    $metadata?: { httpStatusCode?: number };
+    $retryable?: { throttling?: boolean };
+    code?: string;
+  };
+
+  if (e.$retryable?.throttling) return true;
+
+  const status = e.$metadata?.httpStatusCode;
+  if (typeof status === 'number' && (status === 429 || status >= 500)) return true;
+
+  const name = e.name ?? '';
+  if (
+    name === 'Throttling' ||
+    name === 'ThrottlingException' ||
+    name === 'TooManyRequestsException' ||
+    name === 'ServiceUnavailable' ||
+    name === 'InternalFailure' ||
+    name === 'TimeoutError' ||
+    name === 'RequestTimeout' ||
+    name === 'AbortError'
+  ) {
+    return true;
+  }
+
+  // Socket-level failures never reached SES at all.
+  const code = e.code ?? '';
+  return (
+    code === 'ETIMEDOUT' ||
+    code === 'ECONNRESET' ||
+    code === 'ECONNREFUSED' ||
+    code === 'EAI_AGAIN' ||
+    code === 'ENOTFOUND'
+  );
+}
+
+/**
  * Dispatch exactly one event. Public so the admin manual-send route can call
  * it directly after enqueue(delayHours: 0) — same code path, same guarantees.
  */
 export async function dispatchOne(
   eventId: string
-): Promise<'sent' | 'skipped' | 'failed' | 'deferred' | 'not_claimed'> {
+): Promise<'sent' | 'skipped' | 'failed' | 'deferred' | 'deferred_email' | 'not_claimed'> {
   // Atomic PENDING → SENDING. Only one worker wins.
   const claimed = await prisma.appointeeEmailEvent.updateMany({
     where: { id: eventId, status: AppointeeEmailStatus.PENDING },
@@ -628,6 +681,25 @@ export async function dispatchOne(
     messageId = result.messageId;
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
+
+    // Distinguish transient SES failures from genuine rejections. Throttling,
+    // 5xx and timeouts mean "not delivered, try again" — marking them FAILED
+    // made them terminal, so a rate-limit burst mid-cron left a batch of events
+    // that the daily dispatch would never revisit and an admin had to resend by
+    // hand. Reverting to PENDING defers them to the next run, matching how
+    // CiviCRM and Auth0 failures are already treated upstream.
+    if (isTransientSesFailure(err)) {
+      await prisma.appointeeEmailEvent.update({
+        where: { id: eventId },
+        data: { status: AppointeeEmailStatus.PENDING, failureReason: reason.slice(0, 500) },
+      });
+      logger.warn(
+        { err, eventId, emailType: event.emailType },
+        'Appointee email: transient SES failure — deferred to next dispatch'
+      );
+      return 'deferred_email';
+    }
+
     await prisma.appointeeEmailEvent.update({
       where: { id: eventId },
       data: {
@@ -734,16 +806,53 @@ export async function sendBioEmailManually(args: {
       if (!resend) {
         return { ok: false, reason: 'already_sent' };
       }
-    } else if (
-      existing.status === AppointeeEmailStatus.PENDING ||
-      existing.status === AppointeeEmailStatus.SENDING
-    ) {
-      // In-flight: tell admin UI it's pending; don't create a duplicate.
+    } else if (existing.status === AppointeeEmailStatus.SENDING) {
+      // Genuinely in-flight: another dispatcher holds the atomic claim. Report
+      // pending rather than racing it; the stale-SENDING reclaim recovers a
+      // crashed send.
       return {
         ok: true,
         eventId: existing.id,
         status: existing.status,
         sentAt: existing.sentAt,
+      };
+    } else if (existing.status === AppointeeEmailStatus.PENDING) {
+      // A PENDING row is not in flight — it is *queued*, waiting for the daily
+      // cron. Returning "pending" here without dispatching meant the admin's
+      // click did nothing visible, and if APPOINTEE_EMAIL_CRON_ENABLED is unset
+      // (the default) nothing would ever pick the row up: `dispatchPendingEmails`
+      // has exactly one caller, the cron. The VIT invitation path already falls
+      // through to dispatchOne for precisely this reason.
+      //
+      // dispatchOne's PENDING → SENDING transition is atomic, so if the cron does
+      // fire concurrently exactly one of them wins and the other returns
+      // 'not_claimed'.
+      const claimedOutcome = await dispatchOne(existing.id);
+      if (claimedOutcome === 'not_claimed') {
+        return {
+          ok: true,
+          eventId: existing.id,
+          status: AppointeeEmailStatus.SENDING,
+          sentAt: null,
+        };
+      }
+      if (claimedOutcome === 'deferred') {
+        return { ok: false, reason: 'civicrm_unavailable' };
+      }
+      if (claimedOutcome === 'failed' || claimedOutcome === 'deferred_email') {
+        return { ok: false, reason: 'email_send_failed' };
+      }
+      const dispatched = await prisma.appointeeEmailEvent.findUniqueOrThrow({
+        where: { id: existing.id },
+      });
+      if (claimedOutcome === 'skipped') {
+        return { ok: false, reason: 'no_matching_fellowship' };
+      }
+      return {
+        ok: true,
+        eventId: dispatched.id,
+        status: dispatched.status,
+        sentAt: dispatched.sentAt,
       };
     }
   }
@@ -767,9 +876,10 @@ export async function sendBioEmailManually(args: {
     return { ok: false, reason: 'civicrm_unavailable' };
   }
 
-  // SES rejected the send. The row is now FAILED. Return a typed reason so
-  // the route/UI can distinguish delivery failure from an unexpected bug.
-  if (outcome === 'failed') {
+  // SES rejected the send, or failed transiently. Either way the admin who is
+  // watching should be told the delivery did not happen; a 'deferred_email' row
+  // stays PENDING so the daily cron also retries it on its own.
+  if (outcome === 'failed' || outcome === 'deferred_email') {
     return { ok: false, reason: 'email_send_failed' };
   }
 
@@ -902,7 +1012,9 @@ export async function sendVitIdInvitationManually(args: {
   if (outcome === 'deferred') {
     return { ok: false, reason: 'civicrm_unavailable' };
   }
-  if (outcome === 'failed') {
+  // 'deferred_email' = transient SES failure; row stays PENDING for the cron,
+  // but tell the waiting admin the send did not go through.
+  if (outcome === 'failed' || outcome === 'deferred_email') {
     return { ok: false, reason: 'email_send_failed' };
   }
 

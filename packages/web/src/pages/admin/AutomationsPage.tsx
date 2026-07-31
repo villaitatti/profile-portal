@@ -160,17 +160,33 @@ function AutomationCard({
   const dryRunMutation = useStartDryRun(type);
   const executeMutation = useExecuteAutomation(type);
   const [dryRunResult, setDryRunResult] = useState<DryRunResult | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const handleDryRun = async () => {
     executeMutation.reset();
-    const result = await dryRunMutation.mutateAsync();
-    setDryRunResult(result);
+    setActionError(null);
+    try {
+      const result = await dryRunMutation.mutateAsync();
+      setDryRunResult(result);
+    } catch (err) {
+      setActionError(
+        `Preview failed: ${err instanceof Error ? err.message : 'unexpected error'}. Nothing was changed.`
+      );
+    }
   };
 
   const handleExecute = async () => {
     if (!dryRunResult) return;
-    await executeMutation.mutateAsync(dryRunResult.runId);
-    setDryRunResult(null);
+    setActionError(null);
+    try {
+      await executeMutation.mutateAsync(dryRunResult.runId);
+      setDryRunResult(null);
+    } catch (err) {
+      // Keep the preview on screen: the admin needs to see what was attempted.
+      setActionError(
+        `Execution failed: ${err instanceof Error ? err.message : 'unexpected error'}. Some changes may already have been applied — check the history below.`
+      );
+    }
   };
 
   return (
@@ -221,6 +237,16 @@ function AutomationCard({
           </span>
         )}
       </div>
+
+      {actionError && (
+        <div
+          role="alert"
+          className="mt-4 flex items-start gap-2 rounded-lg border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive"
+        >
+          <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          <span>{actionError}</span>
+        </div>
+      )}
 
       {/* Dry run preview */}
       {dryRunResult && dryRunResult.actions.length > 0 && (

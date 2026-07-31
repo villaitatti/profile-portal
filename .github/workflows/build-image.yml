@@ -28,6 +28,57 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Verify version consistency
+        # Runs for tags AND for main pushes: the release tag is validated against
+        # the VERSION file, but the runtime version reported by
+        # /api/health/ready comes from root package.json. Both must agree, or a
+        # correctly-tagged release reports the wrong version in production.
+        run: bash scripts/check-version-consistency.sh
+
+      - name: Require successful CI for this commit
+        # `Build image` and `CI` both trigger on pushes to main and run in
+        # parallel, and `Deploy dev` deploys whatever `Build image` produces. So
+        # without this gate a direct push or an admin merge with red CI would
+        # auto-deploy to the dev VM (which also hosts CiviCRM). Tag builds are
+        # gated by "Verify release tag provenance" below, which requires an
+        # already-completed successful CI run, so this step only covers main.
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          deadline=$(( $(date +%s) + 1800 ))
+          while :; do
+            # `.conclusion // "pending"` maps queued/in-progress runs (null
+            # conclusion) to "pending"; an empty list means CI has not been
+            # created for this SHA yet.
+            states=$(gh api \
+              "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&event=push&per_page=100" \
+              --jq '[.workflow_runs[] | .conclusion // "pending"] | join(" ")')
+            case " $states " in
+              *" success "*)
+                echo "CI succeeded for $GITHUB_SHA."
+                break
+                ;;
+              *" pending "*)
+                : # still running, keep waiting
+                ;;
+              "  ")
+                : # no CI run registered yet, keep waiting
+                ;;
+              *)
+                echo "Refusing to build $GITHUB_SHA: CI concluded '$states'."
+                echo "Fix CI on main before an image is published and auto-deployed to dev."
+                exit 1
+                ;;
+            esac
+            if [[ "$(date +%s)" -ge "$deadline" ]]; then
+              echo "Timed out after 30m waiting for CI on $GITHUB_SHA (last state: '$states')."
+              exit 1
+            fi
+            echo "Waiting for CI on $GITHUB_SHA (state: '$states')..."
+            sleep 20
+          done
+
       - name: Verify release tag provenance
         if: ${{ github.ref_type == 'tag' }}
         env:

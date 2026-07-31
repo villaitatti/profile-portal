@@ -3,8 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <link rel="stylesheet" href="https://use.typekit.net/prv7fdz.css" />
+    <link rel="icon" type="image/png" href="/itatti-logo-email.png" />
+    <link rel="preconnect" href="https://use.typekit.net" crossorigin />
+    <!--
+      Typekit is preloaded, not linked as a stylesheet: a render-blocking
+      third-party CSS request delayed first paint of the public form. main.tsx
+      flips this to rel="stylesheet" once the module runs. The usual
+      media="print" onload="this.media='all'" trick is not usable here — the
+      server CSP is script-src 'self', which forbids inline event handlers.
+    -->
+    <link id="typekit-css" rel="preload" as="style" href="https://use.typekit.net/prv7fdz.css" />
+    <noscript>
+      <link rel="stylesheet" href="https://use.typekit.net/prv7fdz.css" />
+    </noscript>
     <title>I Tatti — Profile Portal</title>
   </head>
   <body>

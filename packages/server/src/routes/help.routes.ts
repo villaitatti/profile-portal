@@ -4,6 +4,7 @@ import rateLimit from 'express-rate-limit';
 import { validate } from '../middleware/validate.js';
 import * as jiraService from '../services/jira.service.js';
 import { logger } from '../lib/logger.js';
+import { rateLimitKey } from '../lib/client-ip.js';
 
 const GENERIC_MESSAGE =
   'Your request has been submitted. Our team will follow up at the email address provided.';
@@ -20,6 +21,7 @@ const helpLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: rateLimitKey,
   message: { error: 'Too many requests. Please try again later.' },
 });
 

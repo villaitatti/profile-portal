@@ -6,6 +6,19 @@ export function isJiraConfigured(): boolean {
   return !!(env.JIRA_BASE_URL && env.JIRA_EMAIL && env.JIRA_API_TOKEN && env.JIRA_SERVICE_DESK_ID && env.JIRA_REQUEST_TYPE_ID);
 }
 
+/**
+ * Neutralise Jira wiki markup in values supplied through the public help form.
+ *
+ * The ticket description is assembled as wiki markup, so an unescaped field can
+ * inject formatting, links, macros or panels into a ticket that staff read as
+ * trustworthy internal content. Jira treats a backslash as the escape character
+ * for its markup metacharacters; `{` and `[` are the ones that start macros and
+ * links, and `*`/`_`/`-`/`+`/`?`/`^`/`~` are inline formatting.
+ */
+function escapeWikiMarkup(value: string): string {
+  return value.replace(/[\\{}[\]*_\-+?^~|!]/g, (c) => `\\${c}`);
+}
+
 export async function createHelpTicket(
   input: HelpTicketInput
 ): Promise<HelpTicketResult> {
@@ -19,10 +32,10 @@ export async function createHelpTicket(
   );
 
   const description = [
-    `*Full Name:* ${input.fullName}`,
-    `*Contact Email:* ${input.contactEmail}`,
-    `*Fellowship Year:* ${input.fellowshipYear}`,
-    input.message ? `*Message:* ${input.message}` : '',
+    `*Full Name:* ${escapeWikiMarkup(input.fullName)}`,
+    `*Contact Email:* ${escapeWikiMarkup(input.contactEmail)}`,
+    `*Fellowship Year:* ${escapeWikiMarkup(input.fellowshipYear)}`,
+    input.message ? `*Message:* ${escapeWikiMarkup(input.message)}` : '',
   ]
     .filter(Boolean)
     .join('\n');

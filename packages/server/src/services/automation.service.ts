@@ -26,6 +26,51 @@ interface DryRunAction {
   needsCurrentAppointees?: boolean;
 }
 
+/**
+ * Names the JSM sites a two-site operation failed on, or '' when both succeeded.
+ *
+ * The JSM helpers swallow per-site errors and communicate through these booleans,
+ * so every caller must consult them — otherwise a total JSM outage is
+ * indistinguishable from a clean run.
+ */
+function describeFailedSites(result: { site1: boolean; site2: boolean }): string {
+  const failed = [!result.site1 && 'site1', !result.site2 && 'site2'].filter(
+    Boolean
+  ) as string[];
+  return failed.length > 0 ? failed.join(' + ') : '';
+}
+
+/**
+ * Email IT when a once-a-year automation fails outright.
+ *
+ * These crons fire on a single minute, once per year. `sendAutomationReport` is
+ * only reached on the success path, so a failure used to leave nothing but a log
+ * line — and the consequence (outgoing fellows keeping fellows-current and JSM
+ * access, or an incoming cohort never being onboarded) persists for twelve
+ * months before anyone would notice.
+ */
+async function reportAutomationFailure(type: AutomationType, err: unknown): Promise<void> {
+  const message = err instanceof Error ? err.message : String(err);
+  try {
+    await emailService.sendAutomationReport({
+      type,
+      academicYear: getCurrentAcademicYear().label,
+      processed: 0,
+      pending: 0,
+      errors: 1,
+      details: [
+        `The scheduled ${type} automation FAILED before completing.`,
+        '',
+        `Error: ${message}`,
+        '',
+        'No changes may have been applied, or only some. Review the server logs, then re-run this automation manually from the Automations admin page.',
+      ],
+    });
+  } catch (reportErr) {
+    logger.error({ err: reportErr, type }, 'Automation: failed to send failure report email');
+  }
+}
+
 // --- Scheduling ---
 
 export function registerCronJobs(): void {
@@ -46,6 +91,7 @@ export function registerCronJobs(): void {
       }
     } catch (err) {
       logger.error({ err }, 'Automation: scheduled end-of-year cleanup failed');
+      await reportAutomationFailure('end-of-year-cleanup', err);
     }
   }, { timezone: 'UTC' });
 
@@ -61,6 +107,7 @@ export function registerCronJobs(): void {
       }
     } catch (err) {
       logger.error({ err }, 'Automation: scheduled new-cohort onboarding failed');
+      await reportAutomationFailure('new-cohort-onboarding', err);
     }
   }, { timezone: 'UTC' });
 
@@ -232,11 +279,23 @@ const DRY_RUN_TTL_MS = 60 * 60 * 1000; // 60 minutes
 
 export async function executeAutomation(
   dryRunId: string,
-  triggeredBy: string
+  triggeredBy: string,
+  expectedType?: AutomationType
 ): Promise<{ runId: string; status: string }> {
   const dryRun = await prisma.automationRun.findUnique({ where: { id: dryRunId } });
   if (!dryRun || dryRun.status !== 'dry_run') {
     throw new Error('Invalid dry run ID or not in dry_run status');
+  }
+
+  // The executor dispatches on the *stored* type, so posting a backfill run id
+  // to the end-of-year endpoint ran the backfill — correctly, but not the
+  // automation the caller asked for. Callers that know which automation they
+  // mean pass expectedType so the mismatch is refused instead of surprising
+  // someone with a different set of Auth0/JSM mutations.
+  if (expectedType && dryRun.type !== expectedType) {
+    throw new Error(
+      `Dry run ${dryRunId} is a "${dryRun.type}" run, not "${expectedType}"`
+    );
   }
 
   if (!dryRun.completedAt || Date.now() - dryRun.completedAt.getTime() > DRY_RUN_TTL_MS) {
@@ -298,9 +357,26 @@ export async function executeAutomation(
 
     return { runId: run.id, status };
   } catch (err) {
+    // Merge the error into the existing result rather than replacing it. The
+    // per-item `details` written by the executor are the only record of which
+    // Auth0/JSM mutations actually ran, and that is precisely what's needed to
+    // reconcile a half-applied July run by hand — overwriting it with an error
+    // string destroyed the audit trail at the moment it mattered most.
+    const existing = await prisma.automationRun
+      .findUnique({ where: { id: run.id }, select: { result: true } })
+      .catch(() => null);
+    const priorResult =
+      existing?.result && typeof existing.result === 'object' && !Array.isArray(existing.result)
+        ? (existing.result as Record<string, unknown>)
+        : {};
+
     await prisma.automationRun.update({
       where: { id: run.id },
-      data: { status: 'failed', completedAt: new Date(), result: { error: String(err) } },
+      data: {
+        status: 'failed',
+        completedAt: new Date(),
+        result: { ...priorResult, error: String(err) } as any,
+      },
     });
     throw err;
   }
@@ -331,13 +407,28 @@ async function executeEndOfYearCleanup(dryRun: { result: unknown }): Promise<Exe
         await auth0Service.removeRole(user.user_id, env.AUTH0_FELLOWS_CURRENT_ROLE_ID);
       }
 
-      // Remove from Current Appointees on both JSM sites
+      // Remove from Current Appointees on both JSM sites.
+      //
+      // The JSM helpers catch per-site failures internally and report them
+      // through the returned booleans, so ignoring the result meant an expired
+      // JSM token produced a report email claiming every fellow had been fully
+      // removed while they all kept their portal access.
+      let jsmDetail = '';
       if (jsmService.isJsmConfigured()) {
-        await jsmService.removeUserFromCurrentAppointees(email);
+        const jsmResult = await jsmService.removeUserFromCurrentAppointees(email);
+        const failedSites = describeFailedSites(jsmResult);
+        if (failedSites) {
+          errors++;
+          details.push(
+            `PARTIAL: ${email} — removed fellows-current role, but Current Appointees removal FAILED on ${failedSites} (see logs)`
+          );
+          continue;
+        }
+        jsmDetail = ' + Current Appointees';
       }
 
       processed++;
-      details.push(`Removed ${email} from fellows-current + Current Appointees`);
+      details.push(`Removed ${email} from fellows-current${jsmDetail}`);
     } catch (err) {
       errors++;
       details.push(`ERROR: ${email} — ${err instanceof Error ? err.message : String(err)}`);
@@ -371,14 +462,29 @@ async function executeNewCohortOnboarding(dryRun: { result: unknown }): Promise<
       }
 
       // Add to Current Appointees on both JSM sites
+      let jsmDetail = '';
       if (jsmService.isJsmConfigured()) {
-        await jsmService.addUserToCurrentAppointees(email, user.name || email);
+        const current = await jsmService.addUserToCurrentAppointees(email, user.name || email);
         // Verify they're in Former Appointees too
-        await jsmService.addUserToFormerAppointees(email, user.name || email);
+        const former = await jsmService.addUserToFormerAppointees(email, user.name || email);
+        const failed = [
+          describeFailedSites(current) && `Current Appointees (${describeFailedSites(current)})`,
+          describeFailedSites(former) && `Former Appointees (${describeFailedSites(former)})`,
+        ]
+          .filter(Boolean)
+          .join('; ');
+        if (failed) {
+          errors++;
+          details.push(
+            `PARTIAL: ${email} — assigned fellows-current role, but JSM org add FAILED for ${failed} (see logs)`
+          );
+          continue;
+        }
+        jsmDetail = ' + Current Appointees';
       }
 
       processed++;
-      details.push(`Onboarded ${email} — fellows-current + Current Appointees`);
+      details.push(`Onboarded ${email} — fellows-current${jsmDetail}`);
     } catch (err) {
       errors++;
       details.push(`ERROR: ${email} — ${err instanceof Error ? err.message : String(err)}`);
@@ -417,10 +523,13 @@ async function executeBackfill(dryRun: { result: unknown }): Promise<ExecutionRe
       }
 
       const displayName = user.name || email;
+      const jsmFailures: string[] = [];
 
       // Add to Former Appointees (all fellows)
       if (jsmService.isJsmConfigured()) {
-        await jsmService.addUserToFormerAppointees(email, displayName);
+        const former = await jsmService.addUserToFormerAppointees(email, displayName);
+        const failed = describeFailedSites(former);
+        if (failed) jsmFailures.push(`Former Appointees (${failed})`);
       }
 
       // Check if current fellow needs Current Appointees too
@@ -429,15 +538,28 @@ async function executeBackfill(dryRun: { result: unknown }): Promise<ExecutionRe
       );
       if (needsCurrent) {
         if (jsmService.isJsmConfigured()) {
-          await jsmService.addUserToCurrentAppointees(email, displayName);
+          const current = await jsmService.addUserToCurrentAppointees(email, displayName);
+          const failed = describeFailedSites(current);
+          if (failed) jsmFailures.push(`Current Appointees (${failed})`);
         }
         if (env.AUTH0_FELLOWS_CURRENT_ROLE_ID) {
           await auth0Service.assignRole(user.user_id, env.AUTH0_FELLOWS_CURRENT_ROLE_ID);
         }
-        details.push(`Backfilled ${email} — Former + Current Appointees + fellows-current`);
-      } else {
-        details.push(`Backfilled ${email} — Former Appointees`);
       }
+
+      if (jsmFailures.length > 0) {
+        errors++;
+        details.push(
+          `PARTIAL: ${email} — JSM org add FAILED for ${jsmFailures.join('; ')} (see logs)`
+        );
+        continue;
+      }
+
+      details.push(
+        needsCurrent
+          ? `Backfilled ${email} — Former + Current Appointees + fellows-current`
+          : `Backfilled ${email} — Former Appointees`
+      );
 
       processed++;
     } catch (err) {

@@ -415,6 +415,19 @@ export async function getFellowsDashboard(
         )
       : undefined;
 
+    // Scope the nomination/submission signals to the same fellowship the email
+    // status uses. `formInvitationsByContact` holds every invitation the contact
+    // has ever had, so an unscoped `.some()` let a form submitted for an earlier
+    // cohort satisfy a fresh nomination: computeAppointeeStatus returned
+    // 'form-submitted' for a cycle whose nomination had never been sent, and the
+    // dashboard invited Angela to skip a step she still had to do. The displayed
+    // `formInvitations` list below deliberately stays unscoped — the archive is
+    // meant to show history.
+    const allContactForms = formInvitationsByContact.get(entry.civicrmId) ?? [];
+    const formsForStatus = statusLookupFellowshipId
+      ? allContactForms.filter((f) => f.fellowshipId === statusLookupFellowshipId)
+      : allContactForms;
+
     // Pre-flight: if any of this fellow's emails is shared across multiple
     // CiviCRM contacts, short-circuit to 'needs-review' with
     // 'duplicate-civicrm-contact'. Bypasses the ladder entirely so we don't
@@ -435,7 +448,7 @@ export async function getFellowsDashboard(
         targetAcademicYear,
         event: vitInvitationEvent,
       });
-      const contactForms = formInvitationsByContact.get(entry.civicrmId) ?? [];
+      const contactForms = allContactForms;
       const formInvitations: FormInvitationSummaryEntry[] = contactForms.map((inv) => ({
         id: inv.id,
         fellowshipId: inv.fellowshipId,
@@ -461,8 +474,8 @@ export async function getFellowsDashboard(
           vitIdTier: 'needs-review',
           vitIdInvitationStatus: toEventStatus(vitInvitationEvent),
           bioEmailStatus: toEventStatus(bioEvent),
-          nominationSent: contactForms.some((f) => !!f.nominationSentAt),
-          formSubmitted: contactForms.some((f) => f.status === 'submitted'),
+          nominationSent: formsForStatus.some((f) => !!f.nominationSentAt),
+          formSubmitted: formsForStatus.some((f) => f.status === 'submitted'),
         }),
       };
       fellows.push(base);
@@ -515,7 +528,7 @@ export async function getFellowsDashboard(
       event: vitInvitationEvent,
     });
 
-    const contactForms = formInvitationsByContact.get(entry.civicrmId) ?? [];
+    const contactForms = allContactForms;
     const formInvitations: FormInvitationSummaryEntry[] = contactForms.map((inv) => ({
       id: inv.id,
       fellowshipId: inv.fellowshipId,
@@ -533,8 +546,8 @@ export async function getFellowsDashboard(
       vitIdTier: match.status,
       vitIdInvitationStatus: toEventStatus(vitInvitationEvent),
       bioEmailStatus: toEventStatus(bioEvent),
-      nominationSent: contactForms.some((f) => !!f.nominationSentAt),
-      formSubmitted: contactForms.some((f) => f.status === 'submitted'),
+      nominationSent: formsForStatus.some((f) => !!f.nominationSentAt),
+      formSubmitted: formsForStatus.some((f) => f.status === 'submitted'),
     });
 
     const base: FellowDashboardEntry = {

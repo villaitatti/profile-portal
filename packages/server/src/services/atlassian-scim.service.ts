@@ -60,9 +60,18 @@ async function scimFetch(
       signal: AbortSignal.timeout(15_000),
     });
 
-    if (response.status === 429 && attempt < maxRetries) {
+    // Retry throttling AND transient server errors. Previously only 429 was
+    // retried, so a single 502/503 from Atlassian aborted a whole sync run that
+    // a one-second wait would have carried through. Only idempotent-safe
+    // conditions are retried: these are responses where the request provably did
+    // not take effect.
+    const isRetryable = response.status === 429 || response.status >= 500;
+    if (isRetryable && attempt < maxRetries) {
       const backoff = Math.min(1000 * 2 ** attempt + Math.random() * 500, 60_000);
-      logger.warn({ attempt, backoff, url }, 'SCIM rate limited, backing off');
+      logger.warn(
+        { attempt, backoff, url, status: response.status },
+        'SCIM request failed transiently, backing off'
+      );
       await new Promise((r) => setTimeout(r, backoff));
       continue;
     }
@@ -70,6 +79,10 @@ async function scimFetch(
     return response;
   }
 
+  // Unreachable: the loop either returns a response or exhausts `attempt <
+  // maxRetries` and falls through to the return above on its final pass. Kept as
+  // a total-function guard so a future edit to the loop bounds fails loudly
+  // rather than returning undefined.
   throw new Error(`SCIM request failed after ${maxRetries + 1} attempts: ${path}`);
 }
 

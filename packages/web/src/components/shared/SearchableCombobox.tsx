@@ -81,46 +81,53 @@ export function SearchableCombobox({
     setSearch('');
   };
 
+  const clearable = !!((selectedOption || displayValue) && onClear);
+
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
-      <Popover.Trigger asChild disabled={disabled}>
-        <button
-          id={id}
-          type="button"
-          role="combobox"
-          aria-expanded={open}
-          aria-labelledby={ariaLabelledBy}
-          aria-describedby={ariaDescribedBy}
-          aria-invalid={ariaInvalid}
-          aria-required={ariaRequired}
-          className={cn(
-            'flex w-full items-center justify-between rounded-md border bg-background px-3.5 py-2.5 text-[0.95rem] text-left',
-            'hover:bg-accent/50 transition-colors',
-            'focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary',
-            disabled && 'opacity-50 cursor-not-allowed',
-            className
-          )}
-        >
-          <span className={cn(!selectedOption && !displayValue && 'text-muted-foreground')}>
-            {selectedOption ? selectedOption.label : displayValue || placeholder}
-          </span>
-          <span className="flex items-center gap-1 ml-2 flex-shrink-0">
-            {(selectedOption || displayValue) && onClear && (
-              <span
-                role="button"
-                tabIndex={0}
-                onClick={handleClear}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleClear(e); }}
-                className="p-0.5 rounded hover:bg-muted transition-colors"
-                aria-label="Clear selection"
-              >
-                <X className="h-3 w-3 text-muted-foreground" />
-              </span>
+      {/* The clear control is a sibling of the trigger, not a child: a
+          role="button" nested inside a <button> is invalid nested interactive
+          content and unreachable for screen readers. */}
+      <div className="relative w-full">
+        <Popover.Trigger asChild disabled={disabled}>
+          <button
+            id={id}
+            type="button"
+            role="combobox"
+            aria-expanded={open}
+            aria-labelledby={ariaLabelledBy}
+            aria-describedby={ariaDescribedBy}
+            aria-invalid={ariaInvalid}
+            aria-required={ariaRequired}
+            className={cn(
+              'flex w-full items-center justify-between rounded-md border bg-background px-3.5 py-2.5 text-[0.95rem] text-left',
+              'hover:bg-accent/50 transition-colors',
+              'focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary',
+              // Reserve room for the absolutely positioned clear button.
+              clearable && 'pr-14',
+              disabled && 'opacity-50 cursor-not-allowed',
+              className
             )}
-            <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
-          </span>
-        </button>
-      </Popover.Trigger>
+          >
+            <span className={cn('min-w-0 truncate', !selectedOption && !displayValue && 'text-muted-foreground')}>
+              {selectedOption ? selectedOption.label : displayValue || placeholder}
+            </span>
+            <ChevronsUpDown className="ml-2 h-4 w-4 flex-shrink-0 text-muted-foreground" />
+          </button>
+        </Popover.Trigger>
+
+        {clearable && (
+          <button
+            type="button"
+            onClick={handleClear}
+            disabled={disabled}
+            aria-label="Clear selection"
+            className="absolute right-9 top-1/2 -translate-y-1/2 rounded p-0.5 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+          >
+            <X className="h-3 w-3 text-muted-foreground" />
+          </button>
+        )}
+      </div>
 
       <Popover.Portal>
         <Popover.Content

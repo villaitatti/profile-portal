@@ -11,8 +11,15 @@ import { sanitizeRequestUrl } from './lib/request-url.js';
 const app = express();
 const auth0Domain = env.PUBLIC_AUTH0_DOMAIN || process.env.VITE_AUTH0_DOMAIN || env.AUTH0_DOMAIN || 'harvard.eu.auth0.com';
 
-// Trust proxy — required behind cloudflared for correct client IP
-app.set('trust proxy', true);
+// Trust proxy — required behind cloudflared for correct client IP.
+//
+// Deliberately a hop count, NOT `true`. Trusting every hop makes `req.ip`
+// resolve to the leftmost X-Forwarded-For entry, which is client-supplied, so
+// every rate limiter keyed on it became trivially bypassable by rotating a fake
+// XFF value. express-rate-limit flags that configuration as
+// ERR_ERL_PERMISSIVE_TRUST_PROXY. Abuse controls key on `rateLimitKey()`
+// (CF-Connecting-IP) rather than `req.ip`; see lib/client-ip.ts.
+app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS ?? 1));
 
 // Global middleware
 app.use(helmet({
@@ -48,6 +55,14 @@ app.use(express.json());
 
 // Register API routes
 await registerRoutes(app);
+
+// Unmatched API paths must 404 as JSON. Without this they fall through to the
+// SPA catch-all below and return index.html with HTTP 200, so a renamed or
+// removed endpoint surfaces to the client as an opaque JSON-parse error and
+// uptime probes cannot distinguish a live route from a dead one.
+app.use('/api', (_req, res) => {
+  res.status(404).json({ error: 'Not found', code: 'NOT_FOUND' });
+});
 
 // In production, serve the built frontend
 if (process.env.NODE_ENV === 'production') {
