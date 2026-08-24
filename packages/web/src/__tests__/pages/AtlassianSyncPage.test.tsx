@@ -213,6 +213,63 @@ describe('AtlassianSyncPage — run failures stay visible', () => {
     // The previewed diff described state we can no longer vouch for.
     expect(screen.queryByText(/Users to Create/)).not.toBeInTheDocument();
   });
+
+  it('keeps the preview and does not warn about applied changes when the execute token fetch fails before the run starts', async () => {
+    mockUseSyncRunDetail.mockImplementation((runId: string | null) =>
+      runId
+        ? {
+            data: {
+              id: runId,
+              status: 'completed',
+              completedAt: new Date().toISOString(),
+              diff: {
+                usersToCreate: [{ email: 'a@itatti.harvard.edu', name: 'A' }],
+                usersToUpdate: [],
+                usersToDeactivate: [],
+                groupsToCreate: [],
+                membershipChanges: [],
+              },
+              result: null,
+              stats: null,
+            },
+          }
+        : { data: undefined }
+    );
+    mockSubscribeSyncProgress.mockImplementation(
+      (_runId: string, _t: string, _p: (p: SyncProgress) => void, onDone: () => void) => {
+        if (_runId === 'dry_1') onDone();
+        return () => {};
+      }
+    );
+    mockStartDryRunMutate.mockImplementation(
+      (_vars: undefined, opts: { onSuccess: (d: { runId: string }) => void }) => {
+        opts.onSuccess({ runId: 'dry_1' });
+      }
+    );
+    // Preview gets its token; the execute attempt's token fetch then fails
+    // BEFORE the execute mutation runs.
+    mockFetchSseToken.mockResolvedValueOnce('sse-token');
+    mockFetchSseToken.mockRejectedValueOnce(new Error('sse-token 401'));
+
+    const user = userEvent.setup();
+    render(<AtlassianSyncPage />, { wrapper: makeWrapper() });
+
+    await user.click(screen.getByRole('button', { name: /Preview Changes/ }));
+    await waitFor(() => expect(screen.getByText(/Users to Create/)).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: /Execute Sync/ }));
+    await user.click(screen.getByRole('button', { name: 'Execute Sync' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent("Couldn't start sync");
+    });
+    // The execute mutation must never have run, and the preview must survive so
+    // the operator can retry against the same (still-valid) diff.
+    expect(mockExecuteMutate).not.toHaveBeenCalled();
+    expect(screen.getByText(/Users to Create/)).toBeInTheDocument();
+    // Must NOT claim changes may have landed — nothing started.
+    expect(screen.queryByText(/may already have been applied/)).not.toBeInTheDocument();
+  });
 });
 
 describe('AtlassianSyncPage — mappings query failure', () => {

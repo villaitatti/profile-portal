@@ -56,7 +56,17 @@ async function getSesClient() {
       // manual-send request until the browser gave up. Passed as plain options
       // so the SDK builds the handler itself — importing NodeHttpHandler here
       // would depend on a package we don't declare.
-      requestHandler: { connectionTimeout: 5_000, requestTimeout: 15_000 },
+      //
+      // throwOnRequestTimeout is REQUIRED for requestTimeout to bite: without it
+      // @smithy/node-http-handler's setRequestTimeout only logs a warning and
+      // lets the request keep hanging (verified in node-http-handler 4.9.5).
+      // With it, an expired request is destroyed and rejected as a TimeoutError,
+      // which classifySesFailure treats as delivery-unknown (no blind retry).
+      requestHandler: {
+        connectionTimeout: 5_000,
+        requestTimeout: 15_000,
+        throwOnRequestTimeout: true,
+      },
     });
   }
   return cachedSesClient;

@@ -507,21 +507,34 @@ export async function dispatchPendingEmails(opts?: {
   };
 }
 
+export type SesFailureClass = 'retryable' | 'delivery-unknown' | 'rejected';
+
 /**
- * True when an SES failure means "not delivered, try later" rather than "this
- * message will never be accepted".
+ * Classify an SES send failure for the dispatcher.
  *
- * The AWS SDK has already exhausted its own retries (standard mode, 3 attempts)
- * by the time we see the error, so these are sustained conditions: a throttling
- * ceiling, an SES-side 5xx, or a connection that never completed. Treating them
- * as terminal turned a rate-limit burst into a batch of FAILED rows the daily
- * dispatch would never revisit.
+ * The distinction that matters is whether the message could ALREADY have been
+ * delivered when the error surfaced — auto-retrying a send that actually went
+ * out would deliver a second, real appointee email:
  *
- * Credential and configuration errors are deliberately NOT transient — retrying
- * them forever would hide a broken deployment behind a queue that never drains.
+ *  - `retryable`        — provably NOT delivered, safe to re-dispatch: throttling
+ *                         / 429 (rejected before processing), an SES 5xx (SendEmail
+ *                         is synchronous, so a 5xx means "not accepted"), and
+ *                         connection-establishment failures (ECONNREFUSED / DNS —
+ *                         the request never left this host).
+ *  - `delivery-unknown` — the request was in flight when it failed, so SES may or
+ *                         may not have accepted it: any TimeoutError (the request/
+ *                         socket timeout added with throwOnRequestTimeout, or a
+ *                         connect-phase timeout we can't reliably tell apart) and a
+ *                         mid-flight socket reset (ECONNRESET / EPIPE / ETIMEDOUT).
+ *                         These must NOT be blind-retried.
+ *  - `rejected`         — a definite terminal rejection (bad address, credential/
+ *                         config error). Retrying would just re-fail forever.
+ *
+ * The AWS SDK has already exhausted its own standard-mode retries by the time we
+ * see the error, so each of these is a sustained condition.
  */
-export function isTransientSesFailure(err: unknown): boolean {
-  if (!err || typeof err !== 'object') return false;
+export function classifySesFailure(err: unknown): SesFailureClass {
+  if (!err || typeof err !== 'object') return 'rejected';
 
   const e = err as {
     name?: string;
@@ -529,35 +542,41 @@ export function isTransientSesFailure(err: unknown): boolean {
     $retryable?: { throttling?: boolean };
     code?: string;
   };
-
-  if (e.$retryable?.throttling) return true;
-
-  const status = e.$metadata?.httpStatusCode;
-  if (typeof status === 'number' && (status === 429 || status >= 500)) return true;
-
   const name = e.name ?? '';
+  const code = e.code ?? '';
+
+  // Delivery-unknown FIRST: a request/socket timeout carries code 'ETIMEDOUT'
+  // and the socket-reset family carries name 'TimeoutError', so they must be
+  // matched before the retryable checks below or they'd be misread as safe.
+  if (
+    name === 'TimeoutError' ||
+    name === 'RequestTimeout' ||
+    name === 'AbortError' ||
+    code === 'ETIMEDOUT' ||
+    code === 'ECONNRESET' ||
+    code === 'EPIPE'
+  ) {
+    return 'delivery-unknown';
+  }
+
+  if (e.$retryable?.throttling) return 'retryable';
+  const status = e.$metadata?.httpStatusCode;
+  if (typeof status === 'number' && (status === 429 || status >= 500)) return 'retryable';
   if (
     name === 'Throttling' ||
     name === 'ThrottlingException' ||
     name === 'TooManyRequestsException' ||
     name === 'ServiceUnavailable' ||
-    name === 'InternalFailure' ||
-    name === 'TimeoutError' ||
-    name === 'RequestTimeout' ||
-    name === 'AbortError'
+    name === 'InternalFailure'
   ) {
-    return true;
+    return 'retryable';
+  }
+  // Connection never established / DNS: the request provably never reached SES.
+  if (code === 'ECONNREFUSED' || code === 'EAI_AGAIN' || code === 'ENOTFOUND') {
+    return 'retryable';
   }
 
-  // Socket-level failures never reached SES at all.
-  const code = e.code ?? '';
-  return (
-    code === 'ETIMEDOUT' ||
-    code === 'ECONNRESET' ||
-    code === 'ECONNREFUSED' ||
-    code === 'EAI_AGAIN' ||
-    code === 'ENOTFOUND'
-  );
+  return 'rejected';
 }
 
 /**
@@ -681,14 +700,13 @@ export async function dispatchOne(
     messageId = result.messageId;
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
+    const failureClass = classifySesFailure(err);
 
-    // Distinguish transient SES failures from genuine rejections. Throttling,
-    // 5xx and timeouts mean "not delivered, try again" — marking them FAILED
-    // made them terminal, so a rate-limit burst mid-cron left a batch of events
-    // that the daily dispatch would never revisit and an admin had to resend by
-    // hand. Reverting to PENDING defers them to the next run, matching how
-    // CiviCRM and Auth0 failures are already treated upstream.
-    if (isTransientSesFailure(err)) {
+    // Provably not delivered (throttle/429, SES 5xx, connection-refused/DNS):
+    // revert to PENDING so the daily dispatch retries. This matches how CiviCRM
+    // and Auth0 failures are deferred upstream and keeps a rate-limit burst from
+    // stranding a batch of FAILED rows.
+    if (failureClass === 'retryable') {
       await prisma.appointeeEmailEvent.update({
         where: { id: eventId },
         data: { status: AppointeeEmailStatus.PENDING, failureReason: reason.slice(0, 500) },
@@ -698,6 +716,26 @@ export async function dispatchOne(
         'Appointee email: transient SES failure — deferred to next dispatch'
       );
       return 'deferred_email';
+    }
+
+    // Delivery-unknown (in-flight timeout or socket reset): SES may already have
+    // accepted and sent the message, so we must NOT auto-retry — a second
+    // dispatch would deliver a real duplicate. Mark FAILED (terminal) with a
+    // reason that tells the admin to VERIFY in SES before resending, rather than
+    // silently re-queueing.
+    if (failureClass === 'delivery-unknown') {
+      await prisma.appointeeEmailEvent.update({
+        where: { id: eventId },
+        data: {
+          status: AppointeeEmailStatus.FAILED,
+          failureReason: `delivery status unknown (verify in SES before resending): ${reason}`.slice(0, 500),
+        },
+      });
+      logger.error(
+        { err, eventId, emailType: event.emailType },
+        'Appointee email: SES send failed with unknown delivery status — NOT auto-retried, needs manual reconciliation'
+      );
+      return 'failed';
     }
 
     await prisma.appointeeEmailEvent.update({
@@ -725,6 +763,9 @@ export async function dispatchOne(
         status: AppointeeEmailStatus.SENT,
         sentAt: new Date(),
         sesMessageId: messageId ?? null,
+        // Clear any failureReason left by a previous attempt so a now-SENT row
+        // doesn't carry a stale delivery-failure message.
+        failureReason: null,
       },
     });
 
