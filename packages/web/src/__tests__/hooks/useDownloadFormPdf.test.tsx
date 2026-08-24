@@ -54,6 +54,8 @@ describe('useDownloadFormPdf', () => {
   let origAppendChild: typeof document.body.appendChild;
 
   beforeEach(() => {
+    // Fake timers: the hook defers URL.revokeObjectURL past the click.
+    vi.useFakeTimers();
     appendedAnchors = [];
     origAppendChild = document.body.appendChild.bind(document.body);
     vi.spyOn(document.body, 'appendChild').mockImplementation((node: Node) => {
@@ -68,6 +70,7 @@ describe('useDownloadFormPdf', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -94,6 +97,12 @@ describe('useDownloadFormPdf', () => {
       { token: 'test-token' }
     );
     expect(clickSpy).toHaveBeenCalledOnce();
+    // The revoke is deferred so the browser can finish reading the blob;
+    // revoking in the same task has historically aborted large downloads.
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+    });
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:fake-url');
     expect(appendedAnchors).toHaveLength(1);
     expect(appendedAnchors[0].download).toBe(

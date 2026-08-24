@@ -12,7 +12,8 @@ import {
   useAtlassianGroups,
 } from '@/api/sync';
 import type { RoleGroupMapping } from '@/api/sync';
-import { Plus, ArrowRight, Trash2, Info, Link as LinkIcon, Search } from 'lucide-react';
+import { Plus, ArrowRight, Trash2, Info, Link as LinkIcon, Search, AlertCircle } from 'lucide-react';
+import { toast } from 'sonner';
 
 function Auth0Logo() {
   return (
@@ -43,9 +44,19 @@ function formatDateTime(dateStr: string): string {
 }
 
 export function AtlassianMappingsPage() {
-  const { data: mappings, isLoading: mappingsLoading } = useMappings();
-  const { data: roles, isLoading: rolesLoading } = useRoles();
-  const { data: groups, isLoading: groupsLoading } = useAtlassianGroups();
+  const {
+    data: mappings,
+    isLoading: mappingsLoading,
+    error: mappingsError,
+    refetch: refetchMappings,
+  } = useMappings();
+  const { data: roles, isLoading: rolesLoading, error: rolesError, refetch: refetchRoles } = useRoles();
+  const {
+    data: groups,
+    isLoading: groupsLoading,
+    error: groupsError,
+    refetch: refetchGroups,
+  } = useAtlassianGroups();
   const createMapping = useCreateMapping();
   const deleteMapping = useDeleteMapping();
 
@@ -134,6 +145,10 @@ export function AtlassianMappingsPage() {
           setSelectedGroupName('');
           setIsNewGroup(false);
         },
+        // A duplicate mapping comes back as 409 with a usable message; without
+        // this the Add button just did nothing.
+        onError: (err) =>
+          toast.error(err instanceof Error ? err.message : 'Failed to add the mapping.'),
       }
     );
   };
@@ -142,12 +157,22 @@ export function AtlassianMappingsPage() {
     if (!deleteTarget || deleteMapping.isPending) return;
     deleteMapping.mutate(deleteTarget.id, {
       onSuccess: () => setDeleteTarget(null),
+      // Deliberately leaves the dialog open so the admin can retry or cancel
+      // rather than being dropped back to a list that still shows the mapping.
+      onError: (err) =>
+        toast.error(err instanceof Error ? err.message : 'Failed to delete the mapping.'),
     });
   };
 
   if (mappingsLoading || rolesLoading || groupsLoading) return <AtlassianMappingsSkeleton />;
 
   const hasMappings = Array.isArray(mappings) && mappings.length > 0;
+  const loadError = mappingsError || rolesError || groupsError;
+  const retryLoad = () => {
+    if (mappingsError) void refetchMappings();
+    if (rolesError) void refetchRoles();
+    if (groupsError) void refetchGroups();
+  };
 
   const roleOptions = (roles ?? []).map((r) => ({
     value: r.id,
@@ -167,6 +192,30 @@ export function AtlassianMappingsPage() {
         title="Manage Group Mapping"
         description="Map Auth0 roles to Atlassian managed groups. Only mapped roles will be synced."
       />
+
+      {loadError && (
+        <div className="mb-6 rounded-xl border border-destructive/30 bg-destructive/5 p-4" role="alert">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 flex-shrink-0 text-destructive" />
+            <p className="flex-1 text-sm text-destructive">
+              Couldn't load {[
+                mappingsError && 'the existing mappings',
+                rolesError && 'the Auth0 roles',
+                groupsError && 'the Atlassian groups',
+              ]
+                .filter(Boolean)
+                .join(', ')}
+              . What you see below is incomplete — reload before adding or deleting anything.
+            </p>
+            <button
+              onClick={retryLoad}
+              className="inline-flex items-center gap-1 rounded-md border border-destructive/30 px-3 py-1.5 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Card 1: Add New Mapping */}
       <div className="mb-6 rounded-xl border bg-card p-6">
@@ -257,7 +306,12 @@ export function AtlassianMappingsPage() {
       <div className="rounded-xl border bg-card p-6">
         <h2 className="mb-4 text-xl font-semibold tracking-tight">Group Mappings</h2>
 
-        {!hasMappings ? (
+        {mappingsError ? (
+          <p className="py-8 text-center text-[0.95rem] text-destructive">
+            The mapping list could not be loaded, so it is not shown here. This does not mean no
+            mappings exist — retry above before changing anything.
+          </p>
+        ) : !hasMappings ? (
           <p className="py-8 text-center text-[0.95rem] text-muted-foreground">
             No mappings configured. Use the form above to add your first mapping.
           </p>

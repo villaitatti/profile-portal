@@ -47,6 +47,12 @@ async function scimFetch(
 ): Promise<Response> {
   const url = scimUrl(path);
   const maxRetries = 3;
+  // A 429 means the request was rejected before processing, so it is safe to
+  // retry for any method. A 5xx is ambiguous — the write may have taken effect
+  // server-side — so retry it ONLY for GET, which is idempotent. Retrying a 5xx
+  // on createUser / createGroup / addGroupMember (all POSTs) risks a duplicate.
+  const method = (options.method ?? 'GET').toUpperCase();
+  const isRead = method === 'GET';
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const response = await fetch(url, {
@@ -60,9 +66,13 @@ async function scimFetch(
       signal: AbortSignal.timeout(15_000),
     });
 
-    if (response.status === 429 && attempt < maxRetries) {
+    const isRetryable = response.status === 429 || (response.status >= 500 && isRead);
+    if (isRetryable && attempt < maxRetries) {
       const backoff = Math.min(1000 * 2 ** attempt + Math.random() * 500, 60_000);
-      logger.warn({ attempt, backoff, url }, 'SCIM rate limited, backing off');
+      logger.warn(
+        { attempt, backoff, url, status: response.status },
+        'SCIM request failed transiently, backing off'
+      );
       await new Promise((r) => setTimeout(r, backoff));
       continue;
     }
@@ -70,6 +80,10 @@ async function scimFetch(
     return response;
   }
 
+  // Unreachable: the loop either returns a response or exhausts `attempt <
+  // maxRetries` and falls through to the return above on its final pass. Kept as
+  // a total-function guard so a future edit to the loop bounds fails loudly
+  // rather than returning undefined.
   throw new Error(`SCIM request failed after ${maxRetries + 1} attempts: ${path}`);
 }
 

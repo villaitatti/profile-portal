@@ -4,10 +4,6 @@ import { PublicLayout } from '@/components/layout/PublicLayout';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { KnownRoles } from '@itatti/shared';
 
-function CallbackPage() {
-  return <LoadingSpinner />;
-}
-
 function RouteErrorPage() {
   return (
     <div className="mx-auto max-w-md py-20 text-center">
@@ -71,7 +67,12 @@ export const router = createBrowserRouter([
             .AuthProviderBoundary,
         }),
         children: [
-          { path: '/callback', element: <CallbackPage /> },
+          {
+            path: '/callback',
+            lazy: async () => ({
+              Component: (await import('@/components/auth/CallbackPage')).CallbackPage,
+            }),
+          },
           {
             lazy: async () => ({
               Component: (await import('@/components/auth/AuthenticationGuard'))

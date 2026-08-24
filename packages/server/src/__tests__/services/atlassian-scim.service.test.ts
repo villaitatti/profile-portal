@@ -252,4 +252,50 @@ describe('error handling', () => {
     await expect(getUsers()).rejects.toThrow('SCIM API error 429');
     expect(mockFetch).toHaveBeenCalledTimes(4); // initial + 3 retries
   }, 30_000);
+
+  it('retries a 5xx on a GET (reads are idempotent)', async () => {
+    mockFetch
+      .mockResolvedValueOnce(new Response('bad gateway', { status: 502 }))
+      .mockResolvedValueOnce(
+        jsonResponse({ totalResults: 0, startIndex: 1, itemsPerPage: 100, Resources: [] })
+      );
+
+    const users = await getUsers();
+    expect(users).toHaveLength(0);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  }, 10_000);
+
+  it('does NOT retry a 5xx on createUser (a POST write may already have taken effect)', async () => {
+    // Retrying a 5xx write risks a duplicate — the server may have created the
+    // user despite returning 503. Only 429 (rejected before processing) is safe
+    // to retry for writes, and that is covered separately below.
+    mockFetch.mockResolvedValue(new Response('server error', { status: 503 }));
+
+    await expect(
+      createUser({ email: 'x@test.com', displayName: 'X', givenName: 'X', familyName: 'Y' })
+    ).rejects.toThrow('SCIM API error 503');
+    expect(mockFetch).toHaveBeenCalledTimes(1); // no retry
+  }, 10_000);
+
+  it('still retries a 429 on createUser (throttled means not processed)', async () => {
+    mockFetch
+      .mockResolvedValueOnce(new Response('Rate limited', { status: 429 }))
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            id: 'scim-1',
+            userName: 'x@test.com',
+            displayName: 'X',
+            name: { givenName: 'X', familyName: 'Y' },
+            emails: [{ value: 'x@test.com', primary: true }],
+            active: true,
+          },
+          201
+        )
+      );
+
+    const user = await createUser({ email: 'x@test.com', displayName: 'X', givenName: 'X', familyName: 'Y' });
+    expect(user.id).toBe('scim-1');
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  }, 10_000);
 });

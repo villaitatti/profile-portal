@@ -9,22 +9,10 @@ import {
   TemplateRenderError,
 } from '../templates/render.js';
 import { logger } from '../lib/logger.js';
+import { getFellowsCached } from '../lib/fellows-cache.js';
 import type { AppointeeEmailType } from '@prisma/client';
 
 const router = Router();
-
-let cachedFellows: { contactId: number; firstName: string; lastName: string }[] | null = null;
-let cachedFellowsExpires = 0;
-const FELLOWS_CACHE_TTL_MS = 120_000;
-
-async function getFellowsCached() {
-  const now = Date.now();
-  if (cachedFellows && now < cachedFellowsExpires) return cachedFellows;
-  const fellows = await civicrmService.getFellowsWithContacts();
-  cachedFellows = fellows;
-  cachedFellowsExpires = now + FELLOWS_CACHE_TTL_MS;
-  return fellows;
-}
 
 interface EmailEventRow {
   id: string;
@@ -97,7 +85,7 @@ router.get('/', async (req, res, next) => {
 
     let nameMap: Map<number, string>;
     try {
-      const fellows = await getFellowsCached();
+      const fellows = await getFellowsCached('emails_admin');
       nameMap = new Map(
         fellows.map((f) => [f.contactId, `${f.firstName} ${f.lastName}`.trim()])
       );

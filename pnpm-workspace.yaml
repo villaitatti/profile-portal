@@ -24,3 +24,37 @@ allowBuilds:
   esbuild: true
   prisma: true
   sharp: true
+
+auditConfig:
+  ignoreGhsas:
+    # GHSA-qwww-vcr4-c8h2 — "React Router: RSC Mode CSRF Bypass Allows Action
+    # Execution Before 400 Response" (react-router >=7.12.0 <8.3.0).
+    #
+    # Not applicable here, and there is no 7.x fix — the advisory is only patched
+    # in 8.3.0, and react-router-dom (which this app imports from) has no v8
+    # release, so clearing it means migrating 28 files off react-router-dom AND
+    # taking a major version bump.
+    #
+    # Why it cannot affect us: the vulnerability is in RSC mode, where a server
+    # action runs before the CSRF check rejects the request. packages/web is a
+    # pure client-side SPA — createBrowserRouter + RouterProvider, no RSC, no
+    # SSR entry point, no route loaders or actions, no react-router/server
+    # import, no createStaticHandler. The Express API is separately authenticated
+    # with bearer tokens and no cookies, so there is no CSRF surface for an
+    # action to bypass.
+    #
+    # Revisit when doing the react-router v8 migration; drop this entry then.
+    - "GHSA-qwww-vcr4-c8h2"
+    # GHSA-ggr8-5vv4-36mx — deepmerge-ts <8.0.0. A transitive dependency of the
+    # Prisma CLI (@prisma/config → prisma / @prisma/client), which pins 7.1.5.
+    #
+    # Not in the server request path: deepmerge-ts runs only while the Prisma CLI
+    # loads prisma.config during `prisma generate` / `prisma migrate deploy`, and
+    # its only input is our own committed Prisma config, never user data.
+    #
+    # Not overridden to the patched 8.x on purpose: forcing a new MAJOR of a
+    # Prisma-internal dependency risks breaking `prisma migrate deploy`, which
+    # runs at container start — a deploy-time break is a worse outcome than a
+    # suppressed advisory on a build-time-only dep with no untrusted input.
+    # Drop this entry once Prisma bumps its own pin (tracked in TODOS.md).
+    - "GHSA-ggr8-5vv4-36mx"

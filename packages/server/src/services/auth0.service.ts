@@ -78,6 +78,31 @@ export async function assignFellowsRole(userId: string): Promise<void> {
   );
 }
 
+/** Role ids currently assigned to a user. Used to detect half-provisioned accounts. */
+export async function getUserRoleIds(userId: string): Promise<string[]> {
+  const response = await management.users.getRoles({ id: userId });
+  return (response.data || []).map((r) => r.id!).filter(Boolean);
+}
+
+/**
+ * Assign the fellows role only if it is missing.
+ *
+ * The claim flow creates the Auth0 user and assigns this role in two separate
+ * Management API calls. An error between them (a 429 that outlives the SDK's
+ * retries, a 5xx) leaves an account that can authenticate but holds no role, and
+ * the claim entry point short-circuits on "user already exists" — so a retry
+ * would send another password reset and never repair the role. Making the repair
+ * idempotent lets the ordinary retry path heal the account.
+ *
+ * Returns true when a repair was performed.
+ */
+export async function ensureFellowsRole(userId: string): Promise<boolean> {
+  const roleIds = await getUserRoleIds(userId);
+  if (roleIds.includes(env.AUTH0_FELLOWS_ROLE_ID)) return false;
+  await assignFellowsRole(userId);
+  return true;
+}
+
 export async function assignRole(userId: string, roleId: string): Promise<void> {
   await management.users.assignRoles({ id: userId }, { roles: [roleId] });
 }
@@ -110,27 +135,50 @@ export interface Auth0FellowUser {
 }
 
 export async function listUsersByRole(roleId: string): Promise<Auth0FellowUser[]> {
-  // Step 1: get user IDs from the role
+  // Step 1: get user IDs from the role, using CHECKPOINT pagination (from/take)
+  // rather than offset pagination (page/per_page).
+  //
+  // Auth0 rejects offset pagination on this endpoint once page * per_page
+  // exceeds 1000 records. The fellows role is append-only across cohorts, so the
+  // previous page-based loop was a guaranteed future cliff: the moment the role
+  // passed 1000 members, the request for page 10 would start returning 400 and
+  // take the dashboard, the claim ladder, bio-email eligibility and the
+  // Atlassian sync dry-run down with it. Checkpoint pagination has no such cap.
   const roleUsers: { user_id: string; email: string; name?: string }[] = [];
-  let page = 0;
-  const perPage = 100;
+  const take = 100;
+  let from: string | undefined;
 
-  while (true) {
-    const response = await management.roles.getUsers({
+  // Belt-and-braces bound. `next` should terminate on its own; this stops a
+  // malformed response from looping forever.
+  const maxPages = 1000;
+  for (let fetched = 0; fetched < maxPages; fetched++) {
+    // The SDK's generated types model only the array and include_totals shapes,
+    // not the checkpoint shape ({ users, next }), so read it structurally.
+    const response = (await management.roles.getUsers({
       id: roleId,
-      per_page: perPage,
-      page,
-    });
+      take,
+      ...(from ? { from } : {}),
+    })) as unknown as {
+      data:
+        | Array<{ user_id: string; email: string; name?: string }>
+        | { users?: Array<{ user_id: string; email: string; name?: string }>; next?: string };
+    };
 
-    const users = response.data || [];
-    roleUsers.push(...users.map((u) => ({
-      user_id: u.user_id,
-      email: u.email,
-      name: u.name,
-    })));
+    const payload = response.data;
+    const users = Array.isArray(payload) ? payload : payload?.users ?? [];
+    const next = Array.isArray(payload) ? undefined : payload?.next;
 
-    if (users.length < perPage) break;
-    page++;
+    roleUsers.push(
+      ...users.map((u) => ({
+        user_id: u.user_id,
+        email: u.email,
+        name: u.name,
+      }))
+    );
+
+    // No continuation token, or a short page, means we've seen everything.
+    if (!next || users.length === 0) break;
+    from = next;
   }
 
   // Step 2: fetch app_metadata for these users in batches

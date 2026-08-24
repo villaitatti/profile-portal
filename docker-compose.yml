@@ -20,15 +20,32 @@ services:
       - internal
       - itatti-tunnel
     restart: unless-stopped
+    # Keep this file's runtime behaviour identical to deploy/docker-compose.yml
+    # so a locally built container fails the same way the deployed one would.
+    init: true
+    stop_grace_period: 30s
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/health || exit 1"]
-      interval: 30s
+      # Deep readiness check (database + upload storage + job queue), matching
+      # deploy/docker-compose.yml. The shallow /api/health used to be checked
+      # here, which reported a container "healthy" while its database was dead.
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/health/ready || exit 1"]
+      interval: 15s
       timeout: 5s
       retries: 5
+      # Migrations run in docker-entrypoint.sh before the server listens.
+      start_period: 180s
     logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "1.50"
+          memory: 1536M
+        reservations:
+          memory: 512M
 
   db:
     image: postgres:17-alpine
+    pull_policy: missing
     environment:
       POSTGRES_DB: profile_portal
       POSTGRES_USER: portal
@@ -43,7 +60,15 @@ services:
       timeout: 3s
       retries: 5
     restart: unless-stopped
+    stop_grace_period: 60s
     logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 1024M
+        reservations:
+          memory: 256M
 
 networks:
   internal:

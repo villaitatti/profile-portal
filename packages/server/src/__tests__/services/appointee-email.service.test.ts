@@ -56,6 +56,7 @@ import {
   sendVitIdInvitationManually,
   getEmailStatusForContacts,
   currentAndNextAcademicYears,
+  classifySesFailure,
 } from '../../services/appointee-email.service.js';
 import { prisma } from '../../lib/prisma.js';
 import * as civicrmService from '../../services/civicrm.service.js';
@@ -587,6 +588,82 @@ describe('dispatchOne', () => {
     expect(updateCall.data.failureReason).toContain('SES bounce');
   });
 
+  it('reverts to PENDING (deferred_email) on a provably-not-delivered SES failure', async () => {
+    // Throttling is rejected before processing, so re-dispatching is safe.
+    (mockPrisma.appointeeEmailEvent.updateMany as any).mockResolvedValue({ count: 1 });
+    (mockPrisma.appointeeEmailEvent.findUniqueOrThrow as any).mockResolvedValue({
+      id: 'evt_throttle',
+      contactId: 1,
+      academicYear: '2026-2027',
+      fellowshipId: 10,
+    });
+    mockCivicrm.getContactById.mockResolvedValue({ id: 1, firstName: 'A', lastName: 'B', email: 'a@b.com' });
+    mockCivicrm.getFellowships.mockResolvedValue([
+      { id: 10, contactId: 1, startDate: '2026-07-01', endDate: '2027-06-30', fellowshipAccepted: true },
+    ]);
+    mockEmail.sendBioProjectDescriptionEmail.mockRejectedValue(
+      Object.assign(new Error('Rate exceeded'), { name: 'ThrottlingException', $retryable: { throttling: true } })
+    );
+    (mockPrisma.appointeeEmailEvent.update as any).mockResolvedValue({});
+
+    const outcome = await dispatchOne('evt_throttle');
+
+    expect(outcome).toBe('deferred_email');
+    const updateCall = (mockPrisma.appointeeEmailEvent.update as any).mock.calls[0][0];
+    expect(updateCall.data.status).toBe('PENDING');
+  });
+
+  it('marks FAILED (not retried) with a verify-in-SES reason when delivery is unknown', async () => {
+    // A request/socket timeout means the send was in flight — SES may already
+    // have accepted it. Blind-retrying would deliver a real duplicate, so the
+    // row must go terminal with a reason that tells the admin to verify first.
+    (mockPrisma.appointeeEmailEvent.updateMany as any).mockResolvedValue({ count: 1 });
+    (mockPrisma.appointeeEmailEvent.findUniqueOrThrow as any).mockResolvedValue({
+      id: 'evt_timeout',
+      contactId: 1,
+      academicYear: '2026-2027',
+      fellowshipId: 10,
+    });
+    mockCivicrm.getContactById.mockResolvedValue({ id: 1, firstName: 'A', lastName: 'B', email: 'a@b.com' });
+    mockCivicrm.getFellowships.mockResolvedValue([
+      { id: 10, contactId: 1, startDate: '2026-07-01', endDate: '2027-06-30', fellowshipAccepted: true },
+    ]);
+    mockEmail.sendBioProjectDescriptionEmail.mockRejectedValue(
+      Object.assign(new Error('request timed out'), { name: 'TimeoutError', code: 'ETIMEDOUT' })
+    );
+    (mockPrisma.appointeeEmailEvent.update as any).mockResolvedValue({});
+
+    const outcome = await dispatchOne('evt_timeout');
+
+    expect(outcome).toBe('failed');
+    const updateCall = (mockPrisma.appointeeEmailEvent.update as any).mock.calls[0][0];
+    expect(updateCall.data.status).toBe('FAILED');
+    expect(updateCall.data.failureReason).toMatch(/delivery status unknown/i);
+  });
+
+  it('clears a stale failureReason when a retried send finally succeeds', async () => {
+    (mockPrisma.appointeeEmailEvent.updateMany as any).mockResolvedValue({ count: 1 });
+    (mockPrisma.appointeeEmailEvent.findUniqueOrThrow as any).mockResolvedValue({
+      id: 'evt_retry_ok',
+      contactId: 1,
+      academicYear: '2026-2027',
+      fellowshipId: 10,
+    });
+    mockCivicrm.getContactById.mockResolvedValue({ id: 1, firstName: 'A', lastName: 'B', email: 'a@b.com' });
+    mockCivicrm.getFellowships.mockResolvedValue([
+      { id: 10, contactId: 1, startDate: '2026-07-01', endDate: '2027-06-30', fellowshipAccepted: true },
+    ]);
+    mockEmail.sendBioProjectDescriptionEmail.mockResolvedValue({ messageId: 'ses-retry-ok' });
+    (mockPrisma.appointeeEmailEvent.update as any).mockResolvedValue({});
+
+    const outcome = await dispatchOne('evt_retry_ok');
+
+    expect(outcome).toBe('sent');
+    const updateCall = (mockPrisma.appointeeEmailEvent.update as any).mock.calls[0][0];
+    expect(updateCall.data.status).toBe('SENT');
+    expect(updateCall.data.failureReason).toBeNull();
+  });
+
   it('routes emailType=VIT_ID_INVITATION to sendVitIdInvitationEmail and the VIT eligibility check', async () => {
     // Guards the emailType branching in dispatchOne. If this regresses, a
     // VIT invitation event would be evaluated against bio-email eligibility
@@ -681,6 +758,43 @@ describe('dispatchOne', () => {
   });
 });
 
+describe('classifySesFailure', () => {
+  it('treats throttling / 429 / 5xx as retryable (rejected before or without delivery)', () => {
+    expect(classifySesFailure({ $retryable: { throttling: true } })).toBe('retryable');
+    expect(classifySesFailure({ name: 'ThrottlingException' })).toBe('retryable');
+    expect(classifySesFailure({ $metadata: { httpStatusCode: 429 } })).toBe('retryable');
+    expect(classifySesFailure({ $metadata: { httpStatusCode: 503 } })).toBe('retryable');
+  });
+
+  it('treats connection-establishment failures as retryable (request never sent)', () => {
+    expect(classifySesFailure({ code: 'ECONNREFUSED' })).toBe('retryable');
+    expect(classifySesFailure({ code: 'ENOTFOUND' })).toBe('retryable');
+    expect(classifySesFailure({ code: 'EAI_AGAIN' })).toBe('retryable');
+  });
+
+  it('treats in-flight timeouts and socket resets as delivery-unknown (must not retry)', () => {
+    // The request-timeout the SES client now throws (throwOnRequestTimeout).
+    expect(classifySesFailure({ name: 'TimeoutError', code: 'ETIMEDOUT' })).toBe('delivery-unknown');
+    expect(classifySesFailure({ name: 'TimeoutError' })).toBe('delivery-unknown');
+    expect(classifySesFailure({ code: 'ECONNRESET' })).toBe('delivery-unknown');
+    expect(classifySesFailure({ code: 'EPIPE' })).toBe('delivery-unknown');
+    expect(classifySesFailure({ name: 'AbortError' })).toBe('delivery-unknown');
+  });
+
+  it('a bare ETIMEDOUT is delivery-unknown, not lumped with connection-refused', () => {
+    // Regression guard for the ordering: ETIMEDOUT must be matched by the
+    // delivery-unknown branch before the retryable connection-error branch.
+    expect(classifySesFailure({ code: 'ETIMEDOUT' })).toBe('delivery-unknown');
+  });
+
+  it('treats anything else (bad address, bad credentials, non-object) as a terminal rejection', () => {
+    expect(classifySesFailure(new Error('Email address is not verified'))).toBe('rejected');
+    expect(classifySesFailure({ name: 'InvalidClientTokenId' })).toBe('rejected');
+    expect(classifySesFailure(null)).toBe('rejected');
+    expect(classifySesFailure('boom')).toBe('rejected');
+  });
+});
+
 describe('sendBioEmailManually', () => {
   it('returns {ok: false, reason} when the contact is ineligible', async () => {
     mockCivicrm.getContactById.mockResolvedValue(null);
@@ -723,6 +837,130 @@ describe('sendBioEmailManually', () => {
     });
 
     expect(result).toEqual({ ok: false, reason: 'already_sent' });
+  });
+
+  it('dispatches an already-queued PENDING row instead of reporting it as in-flight', async () => {
+    // A PENDING row is queued, not in flight. Reporting "pending" without
+    // dispatching made the admin's click a no-op, and because
+    // dispatchPendingEmails has exactly one caller — the daily cron, gated on
+    // APPOINTEE_EMAIL_CRON_ENABLED which defaults to false — the row would never
+    // be picked up at all in a deployment that hadn't enabled the flag.
+    mockCivicrm.getContactById.mockResolvedValue({
+      id: 1,
+      firstName: 'A',
+      lastName: 'B',
+      email: 'a@b.com',
+    });
+    mockCivicrm.getFellowships.mockResolvedValue([
+      {
+        id: 10,
+        contactId: 1,
+        startDate: '2026-07-01',
+        endDate: '2027-06-30',
+        fellowshipAccepted: true,
+      },
+    ]);
+    (mockPrisma.appointeeEmailEvent.findFirst as any).mockResolvedValue({
+      id: 'evt_queued',
+      status: 'PENDING',
+      sentAt: null,
+    });
+    // dispatchOne wins the atomic PENDING → SENDING claim.
+    (mockPrisma.appointeeEmailEvent.updateMany as any).mockResolvedValue({ count: 1 });
+    (mockPrisma.appointeeEmailEvent.findUniqueOrThrow as any)
+      .mockResolvedValueOnce({
+        id: 'evt_queued',
+        status: 'SENDING',
+        emailType: 'BIO_PROJECT_DESCRIPTION',
+        contactId: 1,
+        academicYear: '2026-2027',
+        fellowshipId: 10,
+      })
+      .mockResolvedValueOnce({
+        id: 'evt_queued',
+        status: 'SENT',
+        sentAt: new Date('2026-05-01T09:00:00Z'),
+      });
+    (mockPrisma.appointeeEmailEvent.update as any).mockResolvedValue({});
+    mockEmail.sendBioProjectDescriptionEmail.mockResolvedValue({ messageId: 'ses-queued' });
+
+    const result = await sendBioEmailManually({
+      contactId: 1,
+      academicYear: '2026-2027',
+      triggeredBy: 'admin_manual:u1',
+    });
+
+    // The email actually went out, and no duplicate row was created.
+    expect(mockEmail.sendBioProjectDescriptionEmail).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.appointeeEmailEvent.create).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ ok: true, eventId: 'evt_queued', status: 'SENT' });
+  });
+
+  it('reports pending without sending when a concurrent dispatcher already holds the claim', async () => {
+    mockCivicrm.getContactById.mockResolvedValue({
+      id: 1,
+      firstName: 'A',
+      lastName: 'B',
+      email: 'a@b.com',
+    });
+    mockCivicrm.getFellowships.mockResolvedValue([
+      {
+        id: 10,
+        contactId: 1,
+        startDate: '2026-07-01',
+        endDate: '2027-06-30',
+        fellowshipAccepted: true,
+      },
+    ]);
+    (mockPrisma.appointeeEmailEvent.findFirst as any).mockResolvedValue({
+      id: 'evt_queued',
+      status: 'PENDING',
+      sentAt: null,
+    });
+    // The atomic claim loses: the cron got there first.
+    (mockPrisma.appointeeEmailEvent.updateMany as any).mockResolvedValue({ count: 0 });
+
+    const result = await sendBioEmailManually({
+      contactId: 1,
+      academicYear: '2026-2027',
+      triggeredBy: 'admin_manual:u1',
+    });
+
+    expect(mockEmail.sendBioProjectDescriptionEmail).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ ok: true, eventId: 'evt_queued', status: 'SENDING' });
+  });
+
+  it('leaves a genuinely in-flight SENDING row alone', async () => {
+    mockCivicrm.getContactById.mockResolvedValue({
+      id: 1,
+      firstName: 'A',
+      lastName: 'B',
+      email: 'a@b.com',
+    });
+    mockCivicrm.getFellowships.mockResolvedValue([
+      {
+        id: 10,
+        contactId: 1,
+        startDate: '2026-07-01',
+        endDate: '2027-06-30',
+        fellowshipAccepted: true,
+      },
+    ]);
+    (mockPrisma.appointeeEmailEvent.findFirst as any).mockResolvedValue({
+      id: 'evt_inflight',
+      status: 'SENDING',
+      sentAt: null,
+    });
+
+    const result = await sendBioEmailManually({
+      contactId: 1,
+      academicYear: '2026-2027',
+      triggeredBy: 'admin_manual:u1',
+    });
+
+    expect(mockEmail.sendBioProjectDescriptionEmail).not.toHaveBeenCalled();
+    expect(mockPrisma.appointeeEmailEvent.updateMany).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ ok: true, eventId: 'evt_inflight', status: 'SENDING' });
   });
 
   it('preserves a SENT event and creates a new row when resend=true', async () => {

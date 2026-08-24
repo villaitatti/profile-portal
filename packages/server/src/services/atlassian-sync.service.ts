@@ -140,6 +140,15 @@ async function fetchCurrentState(emitter: EventEmitter): Promise<CurrentState> {
 
 // ── Compute diff ───────────────────────────────────────────────────
 
+/**
+ * Deactivation blast-radius limits. Below the minimum directory size the ratio
+ * is meaningless (deactivating 2 of 3 users is 67% and entirely routine), so the
+ * guard only engages once the directory is big enough for a mass deactivation to
+ * be self-evidently wrong.
+ */
+const DEACTIVATION_GUARD_MIN_DIRECTORY = 10;
+const DEACTIVATION_GUARD_MAX_FRACTION = 0.5;
+
 export function computeDiff(
   desired: Map<string, DesiredUser>,
   current: CurrentState,
@@ -309,6 +318,34 @@ export function computeDiff(
         atlassianId: scimUser.id,
       });
     }
+  }
+
+  // Blast-radius guard.
+  //
+  // The SCIM layer already refuses to return a truncated directory, and an Auth0
+  // fetch failure aborts the dry run, so `desired` can't be silently partial from
+  // an upstream error. What remains is a *legitimately* empty or near-empty
+  // desired set — someone bulk-removes members from a mapped Auth0 role by
+  // mistake, or a mapping is pointed at the wrong role — which produces a diff
+  // that proposes deactivating the whole directory. Nothing about that diff looks
+  // different from a routine one, and the operator has up to the 60-minute TTL to
+  // click execute without re-reading it.
+  //
+  // Refuse to build such a diff at all. A genuine mass-deprovision has to be
+  // done deliberately rather than by clicking through a dry run.
+  const activeScimUsers = [...current.users.values()].filter((u) => u.active).length;
+  if (
+    activeScimUsers >= DEACTIVATION_GUARD_MIN_DIRECTORY &&
+    diff.usersToDeactivate.length / activeScimUsers > DEACTIVATION_GUARD_MAX_FRACTION
+  ) {
+    throw new Error(
+      `Refusing to sync: the computed diff would deactivate ${diff.usersToDeactivate.length} of ` +
+        `${activeScimUsers} active Atlassian users (over ${Math.round(
+          DEACTIVATION_GUARD_MAX_FRACTION * 100
+        )}%). This usually means a mapped Auth0 role lost its members or a mapping ` +
+        `points at the wrong role — verify the role mappings and their membership ` +
+        `before syncing. Deactivate users individually in Atlassian if this is intended.`
+    );
   }
 
   // Build group→roles lookup: all Auth0 roles that grant membership to each group
@@ -715,10 +752,22 @@ export async function runDrySync(triggeredBy: string): Promise<{ runId: string; 
       emitter.emit('progress', { phase: 'done', step: 1, totalSteps: 1, percentage: 100, description: 'Dry run complete' } satisfies SyncProgress);
     } catch (err) {
       logger.error({ err, runId: run.id }, 'Dry sync failed');
-      await prisma.syncRun.update({
-        where: { id: run.id },
-        data: { status: 'failed', completedAt: new Date() },
-      });
+      // The status write can itself throw (the DB going away is a plausible
+      // cause of the outer failure). This runs inside a detached IIFE, so an
+      // unhandled rejection here would escape to the process — swallow it and
+      // still tell the client, leaving the run row for the lease timeout to
+      // reclaim.
+      try {
+        await prisma.syncRun.update({
+          where: { id: run.id },
+          data: { status: 'failed', completedAt: new Date() },
+        });
+      } catch (updateErr) {
+        logger.error(
+          { err: updateErr, runId: run.id },
+          'Sync: could not mark run failed'
+        );
+      }
       emitter.emit('progress', {
         phase: 'error',
         step: 0,
@@ -822,10 +871,22 @@ export async function executeSync(
       emitter.emit('progress', { phase: 'done', step: 1, totalSteps: 1, percentage: 100, description: `Execution ${status}` } satisfies SyncProgress);
     } catch (err) {
       logger.error({ err, runId: run.id }, 'Sync execution failed');
-      await prisma.syncRun.update({
-        where: { id: run.id },
-        data: { status: 'failed', completedAt: new Date() },
-      });
+      // The status write can itself throw (the DB going away is a plausible
+      // cause of the outer failure). This runs inside a detached IIFE, so an
+      // unhandled rejection here would escape to the process — swallow it and
+      // still tell the client, leaving the run row for the lease timeout to
+      // reclaim.
+      try {
+        await prisma.syncRun.update({
+          where: { id: run.id },
+          data: { status: 'failed', completedAt: new Date() },
+        });
+      } catch (updateErr) {
+        logger.error(
+          { err: updateErr, runId: run.id },
+          'Sync: could not mark run failed'
+        );
+      }
       emitter.emit('progress', {
         phase: 'error',
         step: 0,

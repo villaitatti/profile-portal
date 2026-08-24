@@ -46,7 +46,28 @@ let cachedSesClient: any = null;
 async function getSesClient() {
   if (!cachedSesClient) {
     const { SESClient } = await import('@aws-sdk/client-ses');
-    cachedSesClient = new SESClient({ region: env.AWS_SES_REGION });
+    cachedSesClient = new SESClient({
+      region: env.AWS_SES_REGION,
+      // Smithy's defaults for both of these are 0 — i.e. disabled — which made
+      // SES the one outbound integration that could hang forever. Every other
+      // client in this codebase carries an explicit timeout. A black-holed
+      // connection here would wedge the 09:00 dispatch cron indefinitely, with
+      // each subsequent day's tick piling onto the stuck run, or hang an admin's
+      // manual-send request until the browser gave up. Passed as plain options
+      // so the SDK builds the handler itself — importing NodeHttpHandler here
+      // would depend on a package we don't declare.
+      //
+      // throwOnRequestTimeout is REQUIRED for requestTimeout to bite: without it
+      // @smithy/node-http-handler's setRequestTimeout only logs a warning and
+      // lets the request keep hanging (verified in node-http-handler 4.9.5).
+      // With it, an expired request is destroyed and rejected as a TimeoutError,
+      // which classifySesFailure treats as delivery-unknown (no blind retry).
+      requestHandler: {
+        connectionTimeout: 5_000,
+        requestTimeout: 15_000,
+        throwOnRequestTimeout: true,
+      },
+    });
   }
   return cachedSesClient;
 }
@@ -67,6 +88,13 @@ interface SendEmailOptions {
    * and the client picks whichever it can render. Omit to send plaintext-only.
    */
   html?: string;
+  /**
+   * Reply-To address. Set only by the appointee-facing emails, whose recipients
+   * (Fellows) may reply — the no-reply Source otherwise dead-ends their reply.
+   * Deliberately NOT applied globally: admin notifications and automation
+   * reports go to internal staff and keep the no-reply Source.
+   */
+  replyTo?: string;
 }
 
 function buildSesSource(fromName?: string): string {
@@ -133,6 +161,10 @@ async function sendEmail(
       ToAddresses: [to],
       ...(options?.bccAddresses?.length ? { BccAddresses: options.bccAddresses } : {}),
     },
+    // Reply-To is set per-call, only by the appointee-facing emails (a Fellow
+    // may reply to those, and the Source is no-reply). Admin notifications and
+    // automation reports pass no replyTo and keep the no-reply Source.
+    ...(options?.replyTo ? { ReplyToAddresses: [options.replyTo] } : {}),
     Message: {
       Subject: { Data: subject, Charset: 'UTF-8' },
       Body: messageBody,
@@ -166,7 +198,14 @@ interface ClaimNeedsReconciliationInput {
     // password reset sent to their OLD Auth0 email. IT should intervene if
     // the claimant reports not receiving it (they may no longer control the
     // old mailbox).
-    | 'returning-fellow-reset-sent';
+    | 'returning-fellow-reset-sent'
+    // Provisioning began but did not finish: the Auth0 account exists while a
+    // later step (role assignment, audit row, password email) failed. Needs a
+    // human because the fellow received no password email and has no way to
+    // know the claim half-succeeded.
+    | 'partial-provisioning';
+  /** Which provisioning step failed. Only meaningful for 'partial-provisioning'. */
+  failedStep?: string;
   candidates: {
     userId: string;
     email: string;
@@ -190,12 +229,31 @@ export async function sendClaimNeedsReconciliationNotification(
   input: ClaimNeedsReconciliationInput
 ): Promise<void> {
   const isReturningFellow = input.reason === 'returning-fellow-reset-sent';
+  const isPartialProvisioning = input.reason === 'partial-provisioning';
   const subject = isReturningFellow
     ? `I Tatti Profile Portal — Returning Fellow Claim (password reset sent to old email)`
-    : `I Tatti Profile Portal — VIT ID Claim Needs Manual Reconciliation (${input.reason})`;
+    : isPartialProvisioning
+      ? `I Tatti Profile Portal — VIT ID Claim Half-Completed (action required)`
+      : `I Tatti Profile Portal — VIT ID Claim Needs Manual Reconciliation (${input.reason})`;
 
   const lines: string[] = [];
-  if (isReturningFellow) {
+  if (isPartialProvisioning) {
+    lines.push(
+      `A VIT ID claim created the Auth0 account but did not finish provisioning it. The claimant saw the normal "check your email" message and will NOT receive a password-setup email, so they have no way to tell that anything went wrong.`
+    );
+    lines.push('');
+    lines.push(`Claimant email: ${input.claimantEmail}`);
+    if (input.candidates.length > 0) {
+      lines.push(`Auth0 account created: user_id ${input.candidates[0].userId}`);
+    }
+    if (input.failedStep) {
+      lines.push(`Failed step: ${input.failedStep}`);
+    }
+    lines.push('');
+    lines.push(
+      `Action: ask the claimant to submit the claim form again. The retry path re-checks and repairs a missing fellows role, then re-sends the password email. If a second attempt also fails, check the server logs for the underlying Auth0 error.`
+    );
+  } else if (isReturningFellow) {
     lines.push(
       `A returning fellow tried to claim a VIT ID under a new email address. The match ladder found their existing Auth0 account via civicrm_id, and a password reset was sent to their OLD Auth0 email.`
     );
@@ -342,6 +400,7 @@ export async function sendBioProjectDescriptionEmail(args: {
     bccAddresses: bccAddresses.length > 0 ? bccAddresses : undefined,
     fromName: env.APPOINTEE_EMAIL_FROM_NAME_BIO,
     html: rendered.html,
+    replyTo: env.APPOINTEE_EMAIL_REPLY_TO || undefined,
   });
 
   return { messageId };
@@ -374,6 +433,7 @@ export async function sendVitIdInvitationEmail(args: {
     bccAddresses: bccAddresses.length > 0 ? bccAddresses : undefined,
     fromName: env.APPOINTEE_EMAIL_FROM_NAME_VIT_ID,
     html: rendered.html,
+    replyTo: env.APPOINTEE_EMAIL_REPLY_TO || undefined,
   });
 
   return { messageId };

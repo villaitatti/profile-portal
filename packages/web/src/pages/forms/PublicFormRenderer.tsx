@@ -16,12 +16,15 @@ import {
 import { SearchableCombobox } from '@/components/shared/SearchableCombobox';
 import { SelectDropdown } from '@/components/shared/SelectDropdown';
 import { cn } from '@/lib/utils';
+import type { PublicFormSubmitIssue } from '@/api/forms';
 
 interface PublicFormRendererProps {
   formDef: FormDef;
   onSubmit: (data: Record<string, unknown>) => void;
   isSubmitting: boolean;
   submitError?: string;
+  /** Field-level detail from a server 400 — what makes an over-limit paste diagnosable. */
+  submitIssues?: PublicFormSubmitIssue[];
   isSuccess: boolean;
 }
 
@@ -56,37 +59,73 @@ function dateConstraintError(field: FormFieldDef, value: unknown): string | null
   return null;
 }
 
+/**
+ * Post-submit confirmation. Shared with PublicFormPage, which shows it even
+ * when a later refetch of the (now rotated) token fails.
+ */
+export function FormSubmittedPanel() {
+  return (
+    <div className="mx-auto max-w-xl rounded-lg border bg-card px-6 py-12 text-center shadow-sm">
+      <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+        <CheckCircle2 className="h-9 w-9 text-primary" />
+      </div>
+      <h2 className="mb-2 text-2xl font-semibold tracking-tight">Thank you!</h2>
+      <p className="text-muted-foreground">
+        Your form has been submitted successfully. The I Tatti office will review your information. You may now close this window.
+      </p>
+    </div>
+  );
+}
+
 export function PublicFormRenderer({
   formDef,
   onSubmit,
   isSubmitting,
   submitError,
+  submitIssues,
   isSuccess,
 }: PublicFormRendererProps) {
   const [values, setValues] = useState<Record<string, FormValue>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   if (isSuccess) {
-    return (
-      <div className="mx-auto max-w-xl rounded-lg border bg-card px-6 py-12 text-center shadow-sm">
-        <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-          <CheckCircle2 className="h-9 w-9 text-primary" />
-        </div>
-        <h2 className="mb-2 text-2xl font-semibold tracking-tight">Thank you!</h2>
-        <p className="text-muted-foreground">
-          Your form has been submitted successfully. The I Tatti office will review your information. You may now close this window.
-        </p>
-      </div>
-    );
+    return <FormSubmittedPanel />;
+  }
+
+  /**
+   * Names of fields whose `conditionalOn` gate is no longer satisfied. Applied
+   * repeatedly so a chain of conditionals collapses in one pass.
+   */
+  function pruneHiddenValues(next: Record<string, FormValue>): string[] {
+    const removed: string[] = [];
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const section of formDef.sections) {
+        for (const field of section.fields) {
+          const gate = field.conditionalOn;
+          if (!gate || !(field.name in next) || next[gate.field] === gate.value) continue;
+          delete next[field.name];
+          removed.push(field.name);
+          changed = true;
+        }
+      }
+    }
+    return removed;
   }
 
   function handleChange(name: string, value: FormValue) {
-    setValues((prev) => ({ ...prev, [name]: value }));
+    // A field that just became hidden must not keep submitting its old value
+    // (e.g. a stale "Other status" text after switching away from Other).
+    const next = { ...values, [name]: value };
+    const hidden = pruneHiddenValues(next);
+    setValues(next);
     setErrors((prev) => {
       const next = { ...prev };
       delete next[name];
       for (const key of Object.keys(next)) {
-        if (key.startsWith(`${name}.`)) delete next[key];
+        const owner = key.split('.')[0];
+        if (owner === name || hidden.includes(owner)) delete next[key];
       }
       return next;
     });
@@ -191,9 +230,24 @@ export function PublicFormRenderer({
       ))}
 
       {submitError && (
-        <div className="flex items-start gap-2 rounded-md border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive">
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-md border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive"
+        >
           <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-          <div>{submitError}</div>
+          <div>
+            <p>{submitError}</p>
+            {submitIssues && submitIssues.length > 0 && (
+              <ul className="mt-1.5 list-disc space-y-0.5 pl-4">
+                {submitIssues.map((issue, index) => (
+                  <li key={`${issue.path}-${index}`}>
+                    {issue.path ? `${fieldLabelForPath(formDef, issue.path)}: ` : ''}
+                    {issue.message}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       )}
 
@@ -209,6 +263,25 @@ export function PublicFormRenderer({
       </div>
     </form>
   );
+}
+
+/**
+ * Turns a server issue path (`bio`, `familyMembers.0.firstName`) into the
+ * label the appointee actually saw. Falls back to the raw path when the field
+ * is not in this form definition.
+ */
+function fieldLabelForPath(formDef: FormDef, path: string): string {
+  const [head, ...rest] = path.split('.');
+  for (const section of formDef.sections) {
+    for (const field of section.fields) {
+      if (field.name !== head) continue;
+      const childName = rest[rest.length - 1];
+      const child = field.fields?.find((f) => f.name === childName);
+      if (child) return `${field.label} — ${child.label}`;
+      return field.label;
+    }
+  }
+  return path;
 }
 
 function SectionIcon({ icon }: { icon?: FormSectionIcon }) {

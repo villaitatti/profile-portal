@@ -142,6 +142,64 @@ describe('computeDiff', () => {
     expect(diff.usersToDeactivate[0].email).toBe('user@itatti.harvard.edu');
   });
 
+  it('refuses a diff that would deactivate most of a sizeable directory', () => {
+    // 20 active SCIM users, none of them desired — the shape produced when a
+    // mapped Auth0 role loses its members or a mapping points at the wrong role.
+    // Nothing upstream can detect this (the SCIM snapshot is complete and Auth0
+    // answered successfully), so the guard has to refuse at diff time rather than
+    // hand the operator a directory-wide deactivation that looks routine.
+    const users = Array.from({ length: 20 }, (_, i) =>
+      makeScimUser({
+        id: `scim-${i}`,
+        userName: `user${i}@itatti.harvard.edu`,
+        emails: [{ value: `user${i}@itatti.harvard.edu`, primary: true }],
+      })
+    );
+    const current = makeCurrentState(users, [makeScimGroup()]);
+
+    expect(() => computeDiff(new Map(), current, [makeMapping()])).toThrow(
+      /Refusing to sync/
+    );
+  });
+
+  it('allows a large deactivation batch in a small directory', () => {
+    // Below the minimum directory size the ratio carries no signal: deactivating
+    // 2 of 3 users is 67% and completely ordinary at I Tatti's scale.
+    const users = Array.from({ length: 3 }, (_, i) =>
+      makeScimUser({
+        id: `scim-${i}`,
+        userName: `user${i}@itatti.harvard.edu`,
+        emails: [{ value: `user${i}@itatti.harvard.edu`, primary: true }],
+      })
+    );
+    const current = makeCurrentState(users, [makeScimGroup()]);
+
+    const diff = computeDiff(new Map(), current, [makeMapping()]);
+    expect(diff.usersToDeactivate).toHaveLength(3);
+  });
+
+  it('allows a routine partial deactivation in a sizeable directory', () => {
+    // 20 active users, 18 still desired, 2 leaving — normal end-of-year churn
+    // must not trip the guard.
+    const users = Array.from({ length: 20 }, (_, i) =>
+      makeScimUser({
+        id: `scim-${i}`,
+        userName: `user${i}@itatti.harvard.edu`,
+        emails: [{ value: `user${i}@itatti.harvard.edu`, primary: true }],
+      })
+    );
+    const desired = new Map(
+      Array.from({ length: 18 }, (_, i) => [
+        `user${i}@itatti.harvard.edu`,
+        makeDesiredUser({ auth0UserId: `auth0|${i}`, email: `user${i}@itatti.harvard.edu` }),
+      ])
+    );
+    const current = makeCurrentState(users, [makeScimGroup()]);
+
+    const diff = computeDiff(desired, current, [makeMapping()]);
+    expect(diff.usersToDeactivate).toHaveLength(2);
+  });
+
   it('skips already-deactivated users', () => {
     const desired = new Map();
     const scimUser = makeScimUser({ active: false });

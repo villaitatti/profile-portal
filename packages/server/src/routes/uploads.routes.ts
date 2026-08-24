@@ -8,6 +8,7 @@ import {
   deleteImage,
   getUploadsDir,
 } from '../services/image-upload.service.js';
+import { logger } from '../lib/logger.js';
 import { readdir } from 'fs/promises';
 
 const ALLOWED_MIMES = ['image/png', 'image/jpeg', 'image/webp'];
@@ -60,7 +61,7 @@ router.post(
           .json({ error: 'Image dimensions too large (max 25MP)', code: 'TOO_LARGE_DIMENSIONS' });
         return;
       }
-      console.error('[uploads] Processing error:', err);
+      logger.error({ err }, 'uploads_processing_failed');
       res.status(422).json({ error: 'Could not process image', code: 'PROCESSING_FAILED' });
     }
   }
@@ -76,7 +77,11 @@ router.get('/', requireRole(KnownRoles.STAFF_IT), async (_req, res) => {
         filename,
       }));
     res.json(images);
-  } catch {
+  } catch (err) {
+    // Graceful degrade: the tile picker still works with an empty list. Log it
+    // so a genuine permissions or mount problem is visible rather than looking
+    // like "no images uploaded yet".
+    logger.error({ err, uploadsDir: getUploadsDir() }, 'uploads_listing_failed');
     res.json([]);
   }
 });

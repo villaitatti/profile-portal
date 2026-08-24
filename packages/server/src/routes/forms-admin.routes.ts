@@ -13,45 +13,17 @@ import {
 } from '../services/form-pdf.service.js';
 import { isDevMode } from '../env.js';
 import { logger } from '../lib/logger.js';
-
-// Mirrors the fellows cache pattern in emails-admin.routes.ts (120s TTL).
-// Reused here so /invitations can join CiviCRM contact names onto each row
-// without a per-request roundtrip. Graceful-degrade: if the CiviCRM fetch
-// fails, the lookup returns a map with no names, and the endpoint still
-// returns rows (the UI shows "Contact #<id>" as a fallback).
-type CachedFellow = { contactId: number; firstName: string; lastName: string };
-
-let cachedFellows: CachedFellow[] | null = null;
-let cachedFellowsExpires = 0;
-const FELLOWS_CACHE_TTL_MS = 120_000;
-
-async function getFellowsCached(): Promise<CachedFellow[]> {
-  const now = Date.now();
-  if (cachedFellows && now < cachedFellowsExpires) return cachedFellows;
-  const fellows = await civicrmService.getFellowsWithContacts();
-  // Cache-poisoning guard: a transient CiviCRM hiccup can return a 200 with
-  // { values: [] } (which the service maps to []). Caching an empty list
-  // for 120s would silently label every submission "Contact #<id>" until
-  // the TTL expires, with no way for an operator to notice. Treat empty
-  // results as a non-cacheable response — every subsequent request retries
-  // until Civi returns real data.
-  if (fellows.length === 0) {
-    logger.warn('forms_admin_fellows_empty_response — not caching');
-    return fellows;
-  }
-  cachedFellows = fellows;
-  cachedFellowsExpires = now + FELLOWS_CACHE_TTL_MS;
-  return fellows;
-}
+import { getFellowsCached } from '../lib/fellows-cache.js';
 
 /**
- * Build a NameLookup backed by the fellows cache. On CiviCRM failure, returns
- * a lookup whose getName() always returns null — the caller's items still
- * include contactId so the UI can render a "Contact #<id>" fallback.
+ * Build a NameLookup backed by the shared fellows cache (lib/fellows-cache.ts,
+ * 120s TTL, empty-response guard). On CiviCRM failure, returns a lookup whose
+ * getName() always returns null — the caller's items still include contactId so
+ * the UI can render a "Contact #<id>" fallback.
  */
 async function buildNameLookup(): Promise<formService.NameLookup> {
   try {
-    const fellows = await getFellowsCached();
+    const fellows = await getFellowsCached('forms_admin');
     const byId = new Map<number, string>();
     for (const f of fellows) {
       const name = `${f.firstName} ${f.lastName}`.trim();
@@ -100,42 +72,46 @@ router.get('/registry', (_req, res) => {
   res.json(FORM_REGISTRY);
 });
 
-router.get('/invitations', async (req, res) => {
+router.get('/invitations', async (req, res, next) => {
   const { academicYear, formType, status } = req.query as Record<string, string | undefined>;
 
-  const nameLookup = await buildNameLookup();
-  const { items, facets } = await formService.listInvitations(
-    { academicYear, formType, status },
-    nameLookup
-  );
+  try {
+    const nameLookup = await buildNameLookup();
+    const { items, facets } = await formService.listInvitations(
+      { academicYear, formType, status },
+      nameLookup
+    );
 
-  // Deliberately OMIT `token` from this response. Form tokens are the key
-  // to the unauthenticated GET /api/forms/:token endpoint that returns the
-  // submitted response data. The admin submissions archive has no reason
-  // to expose tokens — admin actions (reset, download PDF, etc.) use the
-  // invitation id, not the token. Keeping tokens out of this response
-  // reduces blast radius if an admin page is compromised, screenshotted,
-  // or leaks through a browser extension.
-  res.json({
-    items: items.map((inv) => ({
-      id: inv.id,
-      fellowshipId: inv.fellowshipId,
-      contactId: inv.contactId,
-      contactName: inv.contactName,
-      academicYear: inv.academicYear,
-      formType: inv.formType,
-      formTitle: inv.formTitle,
-      status: inv.status,
-      nominationSentAt: inv.nominationSentAt?.toISOString() ?? null,
-      submittedAt: inv.submittedAt?.toISOString() ?? null,
-      createdAt: inv.createdAt.toISOString(),
-      hasResponse: inv.hasResponse,
-    })),
-    facets,
-  });
+    // Deliberately OMIT `token` from this response. Form tokens are the key
+    // to the unauthenticated GET /api/forms/:token endpoint that returns the
+    // submitted response data. The admin submissions archive has no reason
+    // to expose tokens — admin actions (reset, download PDF, etc.) use the
+    // invitation id, not the token. Keeping tokens out of this response
+    // reduces blast radius if an admin page is compromised, screenshotted,
+    // or leaks through a browser extension.
+    res.json({
+      items: items.map((inv) => ({
+        id: inv.id,
+        fellowshipId: inv.fellowshipId,
+        contactId: inv.contactId,
+        contactName: inv.contactName,
+        academicYear: inv.academicYear,
+        formType: inv.formType,
+        formTitle: inv.formTitle,
+        status: inv.status,
+        nominationSentAt: inv.nominationSentAt?.toISOString() ?? null,
+        submittedAt: inv.submittedAt?.toISOString() ?? null,
+        createdAt: inv.createdAt.toISOString(),
+        hasResponse: inv.hasResponse,
+      })),
+      facets,
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
-router.post('/generate', validate(generateSchema), async (req, res) => {
+router.post('/generate', validate(generateSchema), async (req, res, next) => {
   const triggeredBy = `admin:${req.userId}`;
   try {
     let appointmentType: string | undefined;
@@ -195,11 +171,11 @@ router.post('/generate', validate(generateSchema), async (req, res) => {
       });
       return;
     }
-    throw err;
+    next(err);
   }
 });
 
-router.post('/nomination-sent/:id', validate(nominationSentSchema), async (req, res) => {
+router.post('/nomination-sent/:id', validate(nominationSentSchema), async (req, res, next) => {
   try {
     const updated = await formService.markNominationSent(
       String(req.params.id),
@@ -211,11 +187,11 @@ router.post('/nomination-sent/:id', validate(nominationSentSchema), async (req, 
       res.status(err.statusCode).json({ error: err.message });
       return;
     }
-    throw err;
+    next(err);
   }
 });
 
-router.post('/reset', validate(resetSchema), async (req, res) => {
+router.post('/reset', validate(resetSchema), async (req, res, next) => {
   const triggeredBy = `admin:${req.userId}`;
   try {
     const result = await formService.resetInvitation(req.body.invitationId, triggeredBy);
@@ -225,20 +201,24 @@ router.post('/reset', validate(resetSchema), async (req, res) => {
       res.status(err.statusCode).json({ error: err.message });
       return;
     }
-    throw err;
+    next(err);
   }
 });
 
-router.get('/response/:invitationId', async (req, res) => {
-  const response = await formService.getResponseByInvitationId(req.params.invitationId);
-  if (!response) {
-    res.status(404).json({ error: 'Response not found' });
-    return;
+router.get('/response/:invitationId', async (req, res, next) => {
+  try {
+    const response = await formService.getResponseByInvitationId(req.params.invitationId);
+    if (!response) {
+      res.status(404).json({ error: 'Response not found' });
+      return;
+    }
+    res.json({ id: response.id, data: response.data, createdAt: response.createdAt.toISOString() });
+  } catch (err) {
+    next(err);
   }
-  res.json({ id: response.id, data: response.data, createdAt: response.createdAt.toISOString() });
 });
 
-router.get('/response/:invitationId/pdf/:pdfKind', async (req, res) => {
+router.get('/response/:invitationId/pdf/:pdfKind', async (req, res, next) => {
   const parsedKind = pdfKindSchema.safeParse(req.params.pdfKind);
   if (!parsedKind.success) {
     res.status(400).json({ error: 'Invalid PDF kind' });
@@ -246,34 +226,40 @@ router.get('/response/:invitationId/pdf/:pdfKind', async (req, res) => {
   }
   const pdfKind = parsedKind.data as FormPdfKind;
 
-  const invitation = await prisma.formInvitation.findUnique({
-    where: { id: req.params.invitationId },
-    include: { response: true },
-  });
+  try {
+    const invitation = await prisma.formInvitation.findUnique({
+      where: { id: req.params.invitationId },
+      include: { response: true },
+    });
 
-  if (!invitation || !invitation.response) {
-    res.status(404).json({ error: 'Response not found' });
-    return;
+    if (!invitation || !invitation.response) {
+      res.status(404).json({ error: 'Response not found' });
+      return;
+    }
+
+    const formDef = getFormDef(invitation.formType);
+    if (!formDef) {
+      res.status(500).json({ error: 'Form definition not found' });
+      return;
+    }
+
+    const responseData = invitation.response.data as Record<string, unknown>;
+    const metadata = await buildPdfMetadata(invitation, responseData);
+    const pdfBuffer = await generateFormPdf(formDef, responseData, {
+      kind: pdfKind,
+      metadata,
+    });
+    const label = getFormPdfKindLabel(formDef, pdfKind);
+    const filename = `${sanitizeFilename(formDef.title)}_${sanitizeFilename(label)}_${invitation.contactId}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(pdfBuffer);
+  } catch (err) {
+    // A @react-pdf render failure lands here. Before this, it rejected straight
+    // into Node and took the process down.
+    next(err);
   }
-
-  const formDef = getFormDef(invitation.formType);
-  if (!formDef) {
-    res.status(500).json({ error: 'Form definition not found' });
-    return;
-  }
-
-  const responseData = invitation.response.data as Record<string, unknown>;
-  const metadata = await buildPdfMetadata(invitation, responseData);
-  const pdfBuffer = await generateFormPdf(formDef, responseData, {
-    kind: pdfKind,
-    metadata,
-  });
-  const label = getFormPdfKindLabel(formDef, pdfKind);
-  const filename = `${sanitizeFilename(formDef.title)}_${sanitizeFilename(label)}_${invitation.contactId}.pdf`;
-
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-  res.send(pdfBuffer);
 });
 
 async function buildPdfMetadata(

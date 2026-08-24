@@ -1,18 +1,39 @@
 import { useParams } from 'react-router-dom';
-import { PublicFormRequestError, usePublicForm, useSubmitForm } from '@/api/forms';
-import { PublicFormRenderer } from './PublicFormRenderer';
+import { PublicFormRequestError, PublicFormSubmitError, usePublicForm, useSubmitForm } from '@/api/forms';
+import { PublicFormRenderer, FormSubmittedPanel } from './PublicFormRenderer';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { CheckCircle2 } from 'lucide-react';
 
 export function PublicFormPage() {
   const { token } = useParams<{ token: string }>();
-  const { data, isLoading, isFetching, error, refetch } = usePublicForm(token || '');
-  const submitMutation = useSubmitForm(token || '');
+  // Keyed on the token so an in-place navigation between two form links
+  // remounts: submit state lives inside PublicFormView, and link B must never
+  // inherit link A's confirmation screen.
+  return <PublicFormView key={token ?? ''} token={token ?? ''} />;
+}
+
+function PublicFormView({ token }: { token: string }) {
+  const submitMutation = useSubmitForm(token);
+  const { data, isLoading, isFetching, error, refetch } = usePublicForm(token, {
+    refetchOnWindowFocus: !submitMutation.isSuccess,
+  });
 
   if (isLoading) {
     return (
       <div className="flex justify-center py-20">
         <LoadingSpinner />
+      </div>
+    );
+  }
+
+  // A local success always owns the confirmation screen, so this branch comes
+  // before the load-error one: the server rotates the token on submit, so a
+  // later refetch 404s and must not replace the confirmation with
+  // "Form Not Found".
+  if (submitMutation.isSuccess) {
+    return (
+      <div className="mx-auto max-w-5xl">
+        <FormSubmittedPanel />
       </div>
     );
   }
@@ -54,28 +75,15 @@ export function PublicFormPage() {
     );
   }
 
-  // A local success always owns the confirmation screen. Server status remains
-  // authoritative for expiry or submission from another browser/tab.
-  if (submitMutation.isSuccess) {
-    return (
-      <div className="mx-auto max-w-5xl">
-        <PublicFormRenderer
-          formDef={data.formDef}
-          onSubmit={() => undefined}
-          isSubmitting={false}
-          isSuccess={true}
-        />
-      </div>
-    );
-  }
-
   if (data.status === 'submitted') {
     return (
       <div className="text-center py-20 max-w-md mx-auto">
         <CheckCircle2 className="h-16 w-16 text-green-600 mx-auto mb-4" />
         <h1 className="text-2xl font-bold mb-2">Form Already Submitted</h1>
         <p className="text-muted-foreground">
-          This form was submitted on {new Date(data.submittedAt!).toLocaleDateString()}.
+          {data.submittedAt
+            ? `This form was submitted on ${new Date(data.submittedAt).toLocaleDateString()}. `
+            : 'This form has already been submitted. '}
           If you need to make changes, please contact the I Tatti staff member who sent you this form.
         </p>
       </div>
@@ -113,6 +121,11 @@ export function PublicFormPage() {
         onSubmit={(formData) => submitMutation.mutate(formData)}
         isSubmitting={submitMutation.isPending}
         submitError={submitMutation.error?.message}
+        submitIssues={
+          submitMutation.error instanceof PublicFormSubmitError
+            ? submitMutation.error.issues
+            : undefined
+        }
         isSuccess={submitMutation.isSuccess}
       />
     </div>

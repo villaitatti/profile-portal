@@ -50,17 +50,39 @@ jobs:
           persist-credentials: false
 
       - name: Configure SSH
+        # These runners are self-hosted, so $HOME persists across jobs and any
+        # later workflow landing on the same runner could read a key left in
+        # ~/.ssh. Keep the key in the per-job RUNNER_TEMP directory and delete it
+        # in an `if: always()` step below.
+        env:
+          # Passed through env rather than interpolated into the script body:
+          # ${{ secrets.X }} inside `run:` is substituted into the shell source
+          # before execution, so a secret containing quotes or backticks would
+          # be parsed as code. An env var is data no matter what it contains.
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
         run: |
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/profile_portal_deploy
-          chmod 600 ~/.ssh/profile_portal_deploy
-          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/known_hosts
+          install -m 700 -d "$RUNNER_TEMP/ssh"
+          printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > "$RUNNER_TEMP/ssh/profile_portal_deploy"
+          chmod 600 "$RUNNER_TEMP/ssh/profile_portal_deploy"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$RUNNER_TEMP/ssh/known_hosts"
+          chmod 600 "$RUNNER_TEMP/ssh/known_hosts"
 
       - name: Deploy image
         env:
-          SSH_KEY_PATH: ~/.ssh/profile_portal_deploy
-          SSH_KNOWN_HOSTS_FILE: ~/.ssh/known_hosts
+          SSH_KEY_PATH: ${{ runner.temp }}/ssh/profile_portal_deploy
+          SSH_KNOWN_HOSTS_FILE: ${{ runner.temp }}/ssh/known_hosts
           REGISTRY_USERNAME: ${{ github.actor }}
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: scripts/deploy-image.sh
+
+      - name: Remove deploy SSH key
+        if: always()
+        run: |
+          if command -v shred >/dev/null 2>&1; then
+            shred -u "$RUNNER_TEMP/ssh/profile_portal_deploy" 2>/dev/null || true
+          fi
+          rm -rf "$RUNNER_TEMP/ssh"
+          # Also clear the pre-hardening location in case an older run of this
+          # workflow left a key behind on this runner.
+          rm -f ~/.ssh/profile_portal_deploy

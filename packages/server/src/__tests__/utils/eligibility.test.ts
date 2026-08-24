@@ -60,6 +60,55 @@ describe('evaluateEligibility', () => {
     expect(result.reason).toBe('multiple_fellowships');
   });
 
+  it('refuses multiple fellowships when every one is upcoming and unaccepted', () => {
+    // Two nominations for future years, neither accepted. The count alone used to
+    // short-circuit to eligible, auto-provisioning a VIT ID for someone who had
+    // declined (or not yet answered) every offer.
+    const ref = new Date('2026-01-01');
+    const fellowships = [
+      makeFellowship({ id: 1, startDate: '2026-07-01', endDate: '2027-06-30', fellowshipAccepted: false }),
+      makeFellowship({ id: 2, startDate: '2027-07-01', endDate: '2028-06-30', fellowshipAccepted: false }),
+    ];
+    const result = evaluateEligibility(fellowships, ref);
+    expect(result.eligible).toBe(false);
+    expect(result.reason).toBe('single_upcoming_not_accepted');
+  });
+
+  it('accepts multiple fellowships when at least one is a past fellowship', () => {
+    const ref = new Date('2026-01-01');
+    const fellowships = [
+      makeFellowship({ id: 1, startDate: '2024-07-01', endDate: '2025-06-30', fellowshipAccepted: false }),
+      makeFellowship({ id: 2, startDate: '2027-07-01', endDate: '2028-06-30', fellowshipAccepted: false }),
+    ];
+    const result = evaluateEligibility(fellowships, ref);
+    expect(result.eligible).toBe(true);
+    expect(result.reason).toBe('multiple_fellowships');
+  });
+
+  it('does not treat an unparseable fellowship row as qualifying', () => {
+    // CiviCRM can return null dates, which the service stringifies to "null".
+    // classifyFellowship's NaN comparisons all fail, so such a row landed on
+    // 'upcoming' and counted as qualifying whenever fellowshipAccepted was true.
+    const ref = new Date('2026-01-01');
+    const fellowships = [
+      makeFellowship({ id: 1, startDate: 'null', endDate: 'null', fellowshipAccepted: true }),
+      makeFellowship({ id: 2, startDate: '2027-07-01', endDate: '2028-06-30', fellowshipAccepted: false }),
+    ];
+    const result = evaluateEligibility(fellowships, ref);
+    expect(result.eligible).toBe(false);
+  });
+
+  it('rejects a single fellowship row with unparseable dates even when accepted', () => {
+    // The single-row branch must apply the same date-validity rule as the
+    // multi-row path; otherwise a lone garbage-dated but "accepted" row fell
+    // through classifyFellowship to 'upcoming' and provisioned an account.
+    const result = evaluateEligibility([
+      makeFellowship({ startDate: 'null', endDate: 'null', fellowshipAccepted: true }),
+    ]);
+    expect(result.eligible).toBe(false);
+    expect(result.reason).toBe('single_upcoming_not_accepted');
+  });
+
   it('returns eligible for single past fellowship', () => {
     const ref = new Date('2026-01-01');
     const result = evaluateEligibility([makeFellowship()], ref);

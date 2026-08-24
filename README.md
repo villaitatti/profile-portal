@@ -8,6 +8,9 @@ A single portal application for I Tatti staff and appointees (fellows). Users lo
 # Install dependencies
 pnpm install
 
+# Generate the Prisma client — required before typecheck/build/test will pass
+pnpm db:generate
+
 # Copy environment variables
 cp .env.example .env
 # Fill in Auth0, CiviCRM, and Jira credentials in .env
@@ -22,6 +25,13 @@ pnpm dev
 - Frontend: http://localhost:5173
 - Backend API: http://localhost:3000
 - The Vite dev server proxies `/api/*` to the backend
+
+**`pnpm db:generate` is not optional on a fresh clone.** The Prisma client is
+generated into `node_modules`, not committed, and `packages/server` imports its
+generated types directly — so `pnpm typecheck` reports roughly 40 errors in
+`packages/server` until it has been run once. Run it again after any change to
+`packages/server/prisma/schema.prisma`. CI does this explicitly before linting
+and typechecking.
 
 ## Project Structure
 
@@ -122,6 +132,16 @@ The Docker setup includes:
 - PostgreSQL 17 with health checks
 - Automatic Prisma migrations on startup
 - Structured JSON logging via pino
+- A deep container healthcheck against `/api/health/ready` (database + upload
+  storage + job queue), with a `start_period` that allows for a slow migration —
+  the shallow `/api/health` would report a healthy container with a dead database
+- `init: true` plus a 30s `stop_grace_period` so `SIGTERM` reaches node and the
+  server can drain
+- Conservative CPU/memory limits on both services
+
+The portal is designed to run as a **single** container — `--scale portal=2` would
+double-fire cron jobs, multiply the in-memory rate limits, and race migrations.
+See the "Single-instance constraint" section of [`DEPLOYMENT.md`](./DEPLOYMENT.md).
 
 ## Assumptions
 

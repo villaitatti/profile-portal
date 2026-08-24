@@ -201,7 +201,7 @@ router.get('/status', (_req, res) => {
 // Auth is handled by the short-lived SSE token validated inline.
 const sseRouter = Router();
 
-sseRouter.get('/runs/:runId/stream', async (req, res) => {
+sseRouter.get('/runs/:runId/stream', async (req, res, next) => {
   const sseToken = req.query.sse_token as string | undefined;
   if (!isDevMode) {
     if (!sseToken) {
@@ -217,7 +217,13 @@ sseRouter.get('/runs/:runId/stream', async (req, res) => {
 
   const { runId } = req.params;
 
-  const run = await prisma.syncRun.findUnique({ where: { id: runId } });
+  let run;
+  try {
+    run = await prisma.syncRun.findUnique({ where: { id: runId } });
+  } catch (err) {
+    next(err);
+    return;
+  }
   if (!run) {
     res.status(404).json({ error: 'Run not found' });
     return;
@@ -246,17 +252,32 @@ sseRouter.get('/runs/:runId/stream', async (req, res) => {
     return;
   }
 
-  const onProgress = (progress: SyncProgress) => {
-    res.write(`data: ${JSON.stringify(progress)}\n\n`);
+  const flushIfBuffered = () => {
     if (typeof (res as unknown as { flush?: () => void }).flush === 'function') {
       (res as unknown as { flush: () => void }).flush();
     }
+  };
+
+  const onProgress = (progress: SyncProgress) => {
+    res.write(`data: ${JSON.stringify(progress)}\n\n`);
+    flushIfBuffered();
     if (progress.phase === 'done' || progress.phase === 'error') {
       cleanup();
     }
   };
 
+  // Keep-alive comment. The Auth0 fetch phase emits only one event per mapped
+  // role, so a large role list (worse when it hits 429 backoffs) can exceed
+  // cloudflared's idle timeout and drop the stream while the run is still
+  // progressing server-side. A comment line is ignored by EventSource and
+  // resets the idle timer on every intermediate proxy.
+  const heartbeat = setInterval(() => {
+    res.write(': keep-alive\n\n');
+    flushIfBuffered();
+  }, 25_000);
+
   const cleanup = () => {
+    clearInterval(heartbeat);
     emitter.removeListener('progress', onProgress);
     res.end();
   };

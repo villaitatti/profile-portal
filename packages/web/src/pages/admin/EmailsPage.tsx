@@ -89,7 +89,7 @@ function SentEmailsTab() {
   const [loadedPages, setLoadedPages] = useState<EmailEvent[][]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [knownYears, setKnownYears] = useState<string[]>([]);
-  const lastDataRef = useRef<unknown>(null);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
 
   const statusParam = statusFilters.size > 0 ? [...statusFilters].join(',') : undefined;
 
@@ -100,14 +100,25 @@ function SentEmailsTab() {
     limit: 100,
   });
 
-  if (data && data !== lastDataRef.current) {
-    lastDataRef.current = data;
-    setNextCursor(data.nextCursor);
+  // Pagination resets on the filter *values*, not on the query object identity:
+  // a background refetch (staleTime + window focus) hands back a new object for
+  // the same filters, and resetting on that collapsed every page the admin had
+  // already loaded.
+  const filterKey = `${yearFilter}|${typeFilter}|${statusParam ?? ''}`;
+  const pageStateRef = useRef({ filterKey, cursorSeeded: false });
+  if (pageStateRef.current.filterKey !== filterKey) {
+    pageStateRef.current = { filterKey, cursorSeeded: false };
     setLoadedPages([]);
-    if (yearFilter === 'all' && typeFilter === 'all' && !statusParam) {
-      const years = [...new Set(data.events.map((e) => e.academicYear))].sort().reverse();
-      if (years.length > 0) setKnownYears(years);
-    }
+    setLoadMoreError(null);
+  }
+  if (data && !pageStateRef.current.cursorSeeded) {
+    pageStateRef.current.cursorSeeded = true;
+    setNextCursor(data.nextCursor);
+  }
+
+  if (data && yearFilter === 'all' && typeFilter === 'all' && !statusParam) {
+    const years = [...new Set(data.events.map((e) => e.academicYear))].sort().reverse();
+    if (years.length > 0 && years.join(',') !== knownYears.join(',')) setKnownYears(years);
   }
 
   const events = useMemo(() => {
@@ -158,6 +169,7 @@ function SentEmailsTab() {
   const loadMore = useCallback(async () => {
     if (!nextCursor || loadingMore) return;
     setLoadingMore(true);
+    setLoadMoreError(null);
     try {
       const token = await getToken();
       const url = new URL(apiUrl('/api/admin/emails'), window.location.origin);
@@ -173,6 +185,10 @@ function SentEmailsTab() {
       const page = (await res.json()) as EmailEventsResponse;
       setLoadedPages((prev) => [...prev, page.events]);
       setNextCursor(page.nextCursor);
+    } catch {
+      // The cursor is kept so the same page can be retried; the rows already
+      // loaded stay on screen.
+      setLoadMoreError('Could not load more emails.');
     } finally {
       setLoadingMore(false);
     }
@@ -278,27 +294,18 @@ function SentEmailsTab() {
             </thead>
             <tbody className="divide-y divide-border">
               {sorted.map((event) => (
+                // The row is a pointer shortcut only. Keyboard users get the
+                // real button in the last cell — a <tr> cannot carry
+                // aria-selected or a tab stop outside grid semantics.
                 <tr
                   key={event.id}
-                  tabIndex={0}
-                  aria-selected={selectedEventId === event.id}
                   onClick={() => setSelectedEventId(event.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      setSelectedEventId(event.id);
-                    }
-                  }}
-                  className="cursor-pointer transition-colors hover:bg-muted/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                  className={cn(
+                    'cursor-pointer transition-colors hover:bg-muted/30',
+                    selectedEventId === event.id && 'bg-muted/40'
+                  )}
                 >
-                  <td className="px-4 py-3 font-medium">
-                    <button
-                      className="sr-only"
-                      aria-label={`View details for ${event.appointeeName}`}
-                      tabIndex={-1}
-                    />
-                    {event.appointeeName}
-                  </td>
+                  <td className="px-4 py-3 font-medium">{event.appointeeName}</td>
                   <td className="px-4 py-3 text-muted-foreground">{event.academicYear}</td>
                   <td className="px-4 py-3 text-muted-foreground">{formatEmailType(event.emailType)}</td>
                   <td className="px-4 py-3">
@@ -307,7 +314,17 @@ function SentEmailsTab() {
                   <td className="px-4 py-3 text-muted-foreground">{formatDateTime(event.enqueuedAt)}</td>
                   <td className="hidden px-4 py-3 text-muted-foreground lg:table-cell">{formatTriggeredBy(event.triggeredBy)}</td>
                   <td className="px-4 py-3 text-muted-foreground">
-                    <ChevronRight className="h-4 w-4" />
+                    <button
+                      type="button"
+                      aria-label={`View details for ${event.appointeeName}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedEventId(event.id);
+                      }}
+                      className="rounded p-1 hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                    >
+                      <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -319,12 +336,17 @@ function SentEmailsTab() {
       {/* Load more */}
       {nextCursor && (
         <div className="mt-4 text-center">
+          {loadMoreError && (
+            <p role="alert" className="mb-2 text-sm text-destructive">
+              {loadMoreError}
+            </p>
+          )}
           <button
-            onClick={loadMore}
+            onClick={() => void loadMore()}
             disabled={loadingMore}
             className="rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"
           >
-            {loadingMore ? 'Loading...' : 'Load more'}
+            {loadingMore ? 'Loading...' : loadMoreError ? 'Try again' : 'Load more'}
           </button>
         </div>
       )}

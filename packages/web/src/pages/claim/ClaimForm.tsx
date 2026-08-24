@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { apiFetch } from '@/api/client';
-import { Loader2, CheckCircle2 } from 'lucide-react';
+import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 
 const claimSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -14,6 +14,7 @@ type ClaimFormData = z.infer<typeof claimSchema>;
 export function ClaimForm() {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [unreachable, setUnreachable] = useState(false);
 
   const {
     register,
@@ -25,16 +26,26 @@ export function ClaimForm() {
 
   const onSubmit = async (data: ClaimFormData) => {
     setSubmitting(true);
+    setUnreachable(false);
     try {
       await apiFetch('/api/claim', {
         method: 'POST',
         body: JSON.stringify(data),
       });
-    } catch {
-      // Always show success — anti-enumeration
+      setSubmitted(true);
+    } catch (err) {
+      // Any *response* from the server — 404, 409, 429, 500 — is masked behind
+      // the generic confirmation: telling them apart would let a caller
+      // enumerate which addresses are eligible. A fetch TypeError is different:
+      // the request never left the browser, so nothing about the address leaks
+      // and claiming "submitted" would be a lie.
+      if (err instanceof TypeError) {
+        setUnreachable(true);
+      } else {
+        setSubmitted(true);
+      }
     } finally {
       setSubmitting(false);
-      setSubmitted(true);
     }
   };
 
@@ -58,6 +69,16 @@ export function ClaimForm() {
       <p className="text-muted-foreground mb-6 text-sm">
         Enter your email address to check your eligibility and receive your VIT ID credentials.
       </p>
+
+      {unreachable && (
+        <div
+          role="alert"
+          className="mb-4 flex items-start gap-2 rounded-md border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive"
+        >
+          <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          <span>We couldn't reach the server — check your connection and try again.</span>
+        </div>
+      )}
 
       <div className="space-y-4">
         <div>

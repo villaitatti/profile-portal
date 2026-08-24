@@ -13,6 +13,7 @@ import {
   TemplateRenderError,
 } from '../templates/render.js';
 import { logger } from '../lib/logger.js';
+import { parseCiviCRMError } from '../lib/civicrm-error.js';
 import type {
   Auth0Candidate,
   FellowMatch,
@@ -177,6 +178,21 @@ router.get('/', async (req, res, next) => {
     const data = await getFellowsDashboard(academicYear);
     res.json(data);
   } catch (error) {
+    // The dashboard is a pure read over CiviCRM + Auth0, so a failure here is
+    // almost always an upstream outage rather than a bug in our code. Returning
+    // the default 500 left the client unable to tell "CiviCRM is down, retry in a
+    // moment" from "the server is broken" — the send-email routes on this same
+    // router already make that distinction. 503 + a retryable code lets the UI
+    // offer a retry instead of a dead end.
+    const mapped = parseCiviCRMError(
+      error,
+      'The fellows dashboard is temporarily unavailable because an upstream service (CiviCRM or Auth0) did not respond. Please try again in a moment.'
+    );
+    if (mapped.status === 503) {
+      logger.warn({ err: error }, 'fellows_dashboard_upstream_unavailable');
+      res.status(503).json({ error: mapped.message, code: mapped.code });
+      return;
+    }
     next(error);
   }
 });

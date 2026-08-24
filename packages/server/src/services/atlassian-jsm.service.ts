@@ -81,7 +81,26 @@ export async function ensureCustomer(
     body: JSON.stringify({ email, displayName }),
   });
 
+  // 409 means the customer already exists — the common case for a returning
+  // fellow who was provisioned in a previous year. The conflict body is an error
+  // envelope, not a customer, so it carries no accountId: reading it blindly
+  // yielded `undefined`, which JSON.stringify renders as `[null]` in the
+  // subsequent addToOrganization call, so the org membership silently failed.
+  // Fall back to looking the customer up by email.
+  if (res.status === 409) {
+    const existing = await findCustomerByEmail(siteUrl, email);
+    if (!existing) {
+      throw new Error(
+        `JSM customer conflict for ${email} at ${siteUrl} but lookup by email found no account`
+      );
+    }
+    return existing;
+  }
+
   const data = (await res.json()) as JsmCustomer;
+  if (!data.accountId) {
+    throw new Error(`JSM customer create at ${siteUrl} returned no accountId`);
+  }
   return data.accountId;
 }
 

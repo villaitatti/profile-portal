@@ -2,12 +2,14 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import * as formService from '../services/form-invitation.service.js';
 import { logger } from '../lib/logger.js';
+import { rateLimitKey } from '../lib/client-ip.js';
 
 const getLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 60,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: rateLimitKey,
   message: { error: 'Too many requests. Please try again later.' },
 });
 
@@ -16,6 +18,7 @@ const submitLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: rateLimitKey,
   message: { error: 'Too many submission attempts. Please try again later.' },
 });
 

@@ -10,6 +10,30 @@
 - **Context:** Flagged by Codex during `/ship` of the initial submissions archive. The response-JSON-loading half of this TODO was fixed in the same review round (`listInvitations` now projects only `response.id` for a boolean `hasResponse` signal). What remains is unbounded list size.
 - **Blocked by:** Nothing.
 
+### Migrate off react-router-dom and onto react-router v8
+- **Priority:** P2
+- **What:** `packages/web` imports from `react-router-dom` in 28 files. `react-router-dom` has no v8 release (it was folded into `react-router`), and GHSA-qwww-vcr4-c8h2 is only patched in `react-router` >= 8.3.0. Migrate the imports, bump to v8, drop `react-router-dom`, and remove the `auditConfig.ignoreGhsas` entry from `pnpm-workspace.yaml`.
+- **Why:** Right now the advisory is suppressed with a documented exception rather than fixed. The suppression is sound — the vulnerability is an RSC-mode server-action CSRF bypass and this is a pure client SPA with no RSC, no SSR entry, no route loaders/actions, and a bearer-token API with no cookies — but a suppression is a standing claim that has to be re-verified every time the routing setup changes.
+- **How:** The API surface in use is small and unchanged in v8: `createBrowserRouter`, `RouterProvider`, `Routes`, `Route`, `Link`, `NavLink`, `Navigate`, `Outlet`, `MemoryRouter`, `useLocation`, `useNavigate`, `useParams`, `useSearchParams`. Step 1 (swap `react-router-dom` → `react-router`) is valid on v7 too, so it can land and be verified on its own before the major bump.
+- **Context:** Deliberately deferred during the v0.17.15 production-readiness pass — a major routing bump on launch week costs more risk than the suppressed advisory does. The exception in `pnpm-workspace.yaml` carries the full rationale.
+- **Blocked by:** Nothing.
+
+### Drop the deepmerge-ts audit suppression once Prisma updates its pin
+- **Priority:** P3
+- **What:** GHSA-ggr8-5vv4-36mx (deepmerge-ts <8.0.0) is suppressed in `pnpm-workspace.yaml`'s `auditConfig.ignoreGhsas`. It reaches us only as a transitive dependency of the Prisma CLI (`@prisma/config`), which pins `deepmerge-ts@7.1.5`. Remove the suppression when a Prisma release bumps that pin to the patched 8.x.
+- **Why:** The suppression is sound today — deepmerge-ts runs only during `prisma generate` / `prisma migrate deploy`, its input is our own committed config (never user data), and force-overriding a Prisma-internal dependency to a new major risks breaking migrations at container start. But like any suppression it is a standing claim to re-check.
+- **How:** Periodically `pnpm why deepmerge-ts` after Prisma upgrades; once it resolves to >=8.0.0, delete the `GHSA-ggr8-5vv4-36mx` entry and confirm `pnpm audit --prod` stays green.
+- **Context:** This advisory surfaced spontaneously mid-review (the advisory DB updates continuously) and was blocking the CI `pnpm audit` gate. Exactly the "new upstream advisory blocks deploys" dynamic flagged as L8 in the original readiness review.
+- **Blocked by:** A Prisma release that bumps the pin.
+
+### Bind SSE tokens to a specific sync run
+- **Priority:** P3
+- **What:** `createSseToken(userId)` mints a 5-minute token that authorises the progress stream for *any* run id, and `sync-admin.routes.ts` discards the `userId` that `verifySseToken` returns.
+- **Why:** Low impact — the mint endpoint is behind `requireRole(STAFF_IT)`, so both minter and consumer are already inside the same trust boundary, and the only thing leaked is sync progress. It is still broader than it needs to be.
+- **How:** Requires reordering the client flow: the frontend currently fetches the token *before* it knows the run id (`fetchSseToken` → `mutate` → `startSseSubscription`). Either return the token from the dry-run/execute response, or mint it in a second call after the run id is known, then include `runId` in the signed payload and check it on connect.
+- **Context:** Not done in the v0.17.15 pass because it needs a coordinated server + frontend change and the security review rated it low.
+- **Blocked by:** Nothing.
+
 ### Stampede protection + timeout on CiviCRM name lookup
 - **Priority:** P3
 - **What:** The fellows cache in `forms-admin.routes.ts` (and `emails-admin.routes.ts`) has no in-flight request coalescing. On cache expiry, concurrent admin opens all call `civicrmService.getFellowsWithContacts()` in parallel. If CiviCRM hangs, every concurrent archive open hangs too.
@@ -18,13 +42,9 @@
 - **Context:** Flagged by Codex during `/ship` of the submissions archive. The existing try/catch handles "CiviCRM throws" but not "CiviCRM hangs forever." Applies equally to `emails-admin.routes.ts` which uses the same pattern.
 - **Blocked by:** Nothing. Ideal candidate for the existing shared-cache refactor (both routes use identical code).
 
-### Worker unit-test infrastructure (pg-boss queues)
-- **Priority:** P3
-- **What:** The project has zero tests for any of the `packages/server/src/workers/*` files. That's how the pg-boss v10 `createQueue` regression (fixed in this PR) lived undetected for a full release cycle — a future refactor could silently remove the fix with no CI signal.
-- **Why:** Any code that touches the job queue has the same silent-failure shape: `boss.send()` returns null on misconfigured queues, no error is thrown, downstream side effects (emails, reports) never fire. Unit tests would have caught the original bug at PR time.
-- **How:** Either (a) add a lightweight mocking layer where tests import a `bossStub` that replaces the real `getJobQueue()` via `vi.mock`, assert `createQueue` is called before `work`, and assert `enqueueFormNotification` logs when `send` returns null — OR (b) add a docker-compose test fixture with a disposable Postgres instance and run pg-boss against it in CI. Option (a) is cheap and catches the specific regression; option (b) catches more integration issues but adds CI time. Start with (a).
-- **Context:** Flagged during `/ship` of the form-submit-fix branch. The reviewer noted the createQueue fix has no regression test.
-- **Blocked by:** Nothing.
+### ~~Worker unit-test infrastructure (pg-boss queues)~~ (RESOLVED)
+- **Resolved:** v0.17.15 (31 July 2026). This entry was already partly stale — `packages/server/src/__tests__/workers/form-notification.worker.test.ts` existed and covered the happy path (PDF generation + email dispatch) via the option (a) `vi.mock` approach. Added the two silent-failure cases the entry was actually worried about: `enqueueFormNotification` logging an ERROR when `boss.send()` returns null (the createQueue regression shape), and a handler failure being logged before it is rethrown. The handler previously swallowed its own failure into pg-boss with no application log, so a deterministic failure exhausted its retries and vanished.
+- **Not done:** option (b), a disposable-Postgres integration fixture in CI. Still worth considering if the queue grows beyond one worker.
 
 ## ~~Forms — Bugs to investigate~~ (RESOLVED)
 

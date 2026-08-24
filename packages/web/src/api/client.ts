@@ -43,14 +43,40 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Auth0 error codes that mean silent renewal can never succeed — the session is
+ * gone, consent was revoked, or there is no refresh token to use. Only a full
+ * redirect recovers; retrying the request would just fail again with a generic
+ * error banner.
+ */
+const INTERACTIVE_LOGIN_REQUIRED = new Set([
+  'login_required',
+  'consent_required',
+  'interaction_required',
+  'missing_refresh_token',
+]);
+
+function needsInteractiveLogin(error: unknown): boolean {
+  const code = (error as { error?: unknown } | null)?.error;
+  return typeof code === 'string' && INTERACTIVE_LOGIN_REQUIRED.has(code);
+}
+
 export function useApiToken() {
-  const { getAccessTokenSilently } = useAuth0();
+  const { getAccessTokenSilently, loginWithRedirect } = useAuth0();
 
   return async () => {
-    return getAccessTokenSilently({
-      authorizationParams: {
-        audience: auth0Config.audience,
-      },
-    });
+    try {
+      return await getAccessTokenSilently({
+        authorizationParams: {
+          audience: auth0Config.audience,
+        },
+      });
+    } catch (error) {
+      if (needsInteractiveLogin(error)) {
+        const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+        await loginWithRedirect({ appState: { returnTo } });
+      }
+      throw error;
+    }
   };
 }

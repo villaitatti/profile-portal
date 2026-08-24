@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { validateSseSecret } from './lib/sse-secret.js';
 
 const devMode = process.env.DEV_SKIP_EXTERNAL_SERVICES === 'true';
 
@@ -113,6 +114,10 @@ const envSchema = z.object({
   // email (Angela + Andrea, typically). Shared across bio & VIT ID invitation.
   // Empty disables BCC.
   APPOINTEE_EMAIL_BCC: z.string().optional(),
+  // Reply-To for outgoing appointee email. AWS_SES_FROM_EMAIL is a no-reply
+  // identity, so without this an appointee replying to the VIT ID invitation
+  // reaches nobody. Optional — unset means no Reply-To header.
+  APPOINTEE_EMAIL_REPLY_TO: z.string().email().optional().or(z.literal('')),
 
   // VIT ID claim page URL — interpolated into the VIT ID invitation email.
   // Single URL, required when SES is configured. Server fails fast if unset
@@ -144,6 +149,15 @@ const envSchema = z.object({
   // Public form bearer links expire even if an invitation is never submitted.
   // Resetting an invitation rotates the token and starts a fresh TTL.
   FORM_INVITATION_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(180),
+
+  // HMAC key for the short-lived SSE tokens that authorise the sync progress
+  // stream (EventSource cannot send an Authorization header, so the token rides
+  // in the query string instead of the JWT). Base64-encoded, >= 32 bytes.
+  // Validated here rather than read straight from process.env so that a missing
+  // value fails the process at boot like every other secret; previously
+  // lib/sse-token.ts fell back to a per-process random key with only a
+  // console.warn, which meant tokens silently stopped working across restarts.
+  SSE_SECRET: z.string().optional(),
 });
 
 function loadEnv() {
@@ -178,6 +192,33 @@ function loadEnv() {
     console.error('CORS_ORIGIN is required in production mode.');
     console.error('Set CORS_ORIGIN to the frontend URL (e.g. https://dev.profile.itatti.net)');
     process.exit(1);
+  }
+
+  // SSE_SECRET must be present and long enough in production. Fail closed here
+  // rather than in lib/sse-token.ts, which used to warn and continue with an
+  // ephemeral key — every container restart silently invalidated outstanding
+  // tokens, breaking the sync progress stream with no actionable signal.
+  if (result.data.NODE_ENV === 'production' && !devMode) {
+    const secret = result.data.SSE_SECRET;
+    if (!secret) {
+      console.error('SSE_SECRET is required in production mode.');
+      console.error(
+        'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))"'
+      );
+      process.exit(1);
+    }
+    // Same validator lib/sse-token.ts uses at load time, so the boot gate and
+    // the runtime loader can never disagree about what counts as valid — and it
+    // rejects malformed base64 rather than letting Buffer.from silently drop
+    // invalid characters before the length check.
+    const sseCheck = validateSseSecret(secret);
+    if (!sseCheck.ok) {
+      console.error(`SSE_SECRET is invalid: ${sseCheck.reason}.`);
+      console.error(
+        'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))"'
+      );
+      process.exit(1);
+    }
   }
 
   // APPOINTEE_EMAIL_REDIRECT_TO is a dev/staging-only safety valve. In

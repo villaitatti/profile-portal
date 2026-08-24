@@ -1,4 +1,5 @@
 import cron from 'node-cron';
+import { Prisma } from '@prisma/client';
 import { env, isDevMode } from '../env.js';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
@@ -26,6 +27,51 @@ interface DryRunAction {
   needsCurrentAppointees?: boolean;
 }
 
+/**
+ * Names the JSM sites a two-site operation failed on, or '' when both succeeded.
+ *
+ * The JSM helpers swallow per-site errors and communicate through these booleans,
+ * so every caller must consult them — otherwise a total JSM outage is
+ * indistinguishable from a clean run.
+ */
+function describeFailedSites(result: { site1: boolean; site2: boolean }): string {
+  const failed = [!result.site1 && 'site1', !result.site2 && 'site2'].filter(
+    Boolean
+  ) as string[];
+  return failed.length > 0 ? failed.join(' + ') : '';
+}
+
+/**
+ * Email IT when a once-a-year automation fails outright.
+ *
+ * These crons fire on a single minute, once per year. `sendAutomationReport` is
+ * only reached on the success path, so a failure used to leave nothing but a log
+ * line — and the consequence (outgoing fellows keeping fellows-current and JSM
+ * access, or an incoming cohort never being onboarded) persists for twelve
+ * months before anyone would notice.
+ */
+async function reportAutomationFailure(type: AutomationType, err: unknown): Promise<void> {
+  const message = err instanceof Error ? err.message : String(err);
+  try {
+    await emailService.sendAutomationReport({
+      type,
+      academicYear: getCurrentAcademicYear().label,
+      processed: 0,
+      pending: 0,
+      errors: 1,
+      details: [
+        `The scheduled ${type} automation FAILED before completing.`,
+        '',
+        `Error: ${message}`,
+        '',
+        'No changes may have been applied, or only some. Review the server logs, then re-run this automation manually from the Automations admin page.',
+      ],
+    });
+  } catch (reportErr) {
+    logger.error({ err: reportErr, type }, 'Automation: failed to send failure report email');
+  }
+}
+
 // --- Scheduling ---
 
 export function registerCronJobs(): void {
@@ -46,6 +92,7 @@ export function registerCronJobs(): void {
       }
     } catch (err) {
       logger.error({ err }, 'Automation: scheduled end-of-year cleanup failed');
+      await reportAutomationFailure('end-of-year-cleanup', err);
     }
   }, { timezone: 'UTC' });
 
@@ -61,6 +108,7 @@ export function registerCronJobs(): void {
       }
     } catch (err) {
       logger.error({ err }, 'Automation: scheduled new-cohort onboarding failed');
+      await reportAutomationFailure('new-cohort-onboarding', err);
     }
   }, { timezone: 'UTC' });
 
@@ -232,11 +280,23 @@ const DRY_RUN_TTL_MS = 60 * 60 * 1000; // 60 minutes
 
 export async function executeAutomation(
   dryRunId: string,
-  triggeredBy: string
+  triggeredBy: string,
+  expectedType?: AutomationType
 ): Promise<{ runId: string; status: string }> {
   const dryRun = await prisma.automationRun.findUnique({ where: { id: dryRunId } });
   if (!dryRun || dryRun.status !== 'dry_run') {
     throw new Error('Invalid dry run ID or not in dry_run status');
+  }
+
+  // The executor dispatches on the *stored* type, so posting a backfill run id
+  // to the end-of-year endpoint ran the backfill — correctly, but not the
+  // automation the caller asked for. Callers that know which automation they
+  // mean pass expectedType so the mismatch is refused instead of surprising
+  // someone with a different set of Auth0/JSM mutations.
+  if (expectedType && dryRun.type !== expectedType) {
+    throw new Error(
+      `Dry run ${dryRunId} is a "${dryRun.type}" run, not "${expectedType}"`
+    );
   }
 
   if (!dryRun.completedAt || Date.now() - dryRun.completedAt.getTime() > DRY_RUN_TTL_MS) {
@@ -273,8 +333,18 @@ export async function executeAutomation(
         throw new Error(`Unknown automation type: ${dryRun.type}`);
     }
 
-    const hasErrors = result.errors > 0;
-    const status = result.errors === result.processed ? 'failed' : hasErrors ? 'partial' : 'completed';
+    // failed  = at least one attempt AND every attempt failed
+    // partial = some failed, some succeeded
+    // completed = no failures
+    // Comparing errors to `attempted` (not `processed`) is what makes an
+    // all-failure run report `failed`: with the old `errors === processed`
+    // test, 5 failures / 0 successes gave `5 === 0` → false → `partial`.
+    const status =
+      result.errors === 0
+        ? 'completed'
+        : result.attempted > 0 && result.errors >= result.attempted
+          ? 'failed'
+          : 'partial';
 
     await prisma.automationRun.update({
       where: { id: run.id },
@@ -298,15 +368,38 @@ export async function executeAutomation(
 
     return { runId: run.id, status };
   } catch (err) {
+    // Merge the error into the existing result rather than replacing it. The
+    // per-item `details` written by the executor are the only record of which
+    // Auth0/JSM mutations actually ran, and that is precisely what's needed to
+    // reconcile a half-applied July run by hand — overwriting it with an error
+    // string destroyed the audit trail at the moment it mattered most.
+    const existing = await prisma.automationRun
+      .findUnique({ where: { id: run.id }, select: { result: true } })
+      .catch(() => null);
+    const priorResult: Prisma.JsonObject =
+      existing?.result && typeof existing.result === 'object' && !Array.isArray(existing.result)
+        ? (existing.result as Prisma.JsonObject)
+        : {};
+
     await prisma.automationRun.update({
       where: { id: run.id },
-      data: { status: 'failed', completedAt: new Date(), result: { error: String(err) } },
+      data: {
+        status: 'failed',
+        completedAt: new Date(),
+        result: { ...priorResult, error: String(err) } satisfies Prisma.InputJsonValue,
+      },
     });
     throw err;
   }
 }
 
 interface ExecutionResult {
+  // Users we actually tried to mutate (past the skip/not-found guards).
+  // `processed` counts only fully-successful ones and `errors` the failures, so
+  // `attempted === processed + errors`. Status is derived from `attempted`, not
+  // from `processed`, so a run where every attempt failed is reported `failed`
+  // rather than `partial`.
+  attempted: number;
   processed: number;
   pending: number;
   errors: number;
@@ -317,6 +410,7 @@ interface ExecutionResult {
 async function executeEndOfYearCleanup(dryRun: { result: unknown }): Promise<ExecutionResult> {
   const { actions } = dryRun.result as { actions: DryRunAction[] };
   const details: string[] = [];
+  let attempted = 0;
   let processed = 0;
   let errors = 0;
 
@@ -324,6 +418,9 @@ async function executeEndOfYearCleanup(dryRun: { result: unknown }): Promise<Exe
   const emails = [...new Set(actions.map((a) => a.email))];
 
   for (const email of emails) {
+    // Every row here is a user we intend to mutate — there is no skip guard, so
+    // count the attempt up front.
+    attempted++;
     try {
       // Remove fellows-current role
       const user = await auth0Service.findUserByEmail(email);
@@ -331,13 +428,28 @@ async function executeEndOfYearCleanup(dryRun: { result: unknown }): Promise<Exe
         await auth0Service.removeRole(user.user_id, env.AUTH0_FELLOWS_CURRENT_ROLE_ID);
       }
 
-      // Remove from Current Appointees on both JSM sites
+      // Remove from Current Appointees on both JSM sites.
+      //
+      // The JSM helpers catch per-site failures internally and report them
+      // through the returned booleans, so ignoring the result meant an expired
+      // JSM token produced a report email claiming every fellow had been fully
+      // removed while they all kept their portal access.
+      let jsmDetail = '';
       if (jsmService.isJsmConfigured()) {
-        await jsmService.removeUserFromCurrentAppointees(email);
+        const jsmResult = await jsmService.removeUserFromCurrentAppointees(email);
+        const failedSites = describeFailedSites(jsmResult);
+        if (failedSites) {
+          errors++;
+          details.push(
+            `PARTIAL: ${email} — removed fellows-current role, but Current Appointees removal FAILED on ${failedSites} (see logs)`
+          );
+          continue;
+        }
+        jsmDetail = ' + Current Appointees';
       }
 
       processed++;
-      details.push(`Removed ${email} from fellows-current + Current Appointees`);
+      details.push(`Removed ${email} from fellows-current${jsmDetail}`);
     } catch (err) {
       errors++;
       details.push(`ERROR: ${email} — ${err instanceof Error ? err.message : String(err)}`);
@@ -345,7 +457,7 @@ async function executeEndOfYearCleanup(dryRun: { result: unknown }): Promise<Exe
     }
   }
 
-  return { processed, pending: 0, errors, details, stats: { removed: processed, errors } };
+  return { attempted, processed, pending: 0, errors, details, stats: { removed: processed, errors } };
 }
 
 async function executeNewCohortOnboarding(dryRun: { result: unknown }): Promise<ExecutionResult> {
@@ -354,31 +466,61 @@ async function executeNewCohortOnboarding(dryRun: { result: unknown }): Promise<
     pending?: string[];
   };
   const details: string[] = [];
+  let attempted = 0;
   let processed = 0;
   let errors = 0;
 
   for (const email of toOnboard) {
+    // Look the user up first. A lookup that THROWS is a failed attempt (Auth0
+    // unreachable); a lookup that returns null is a genuine skip, not an
+    // attempt — keeping the two apart is what lets an all-Auth0-down run be
+    // reported `failed` rather than `partial`.
+    let user: Awaited<ReturnType<typeof auth0Service.findUserByEmail>>;
     try {
-      const user = await auth0Service.findUserByEmail(email);
-      if (!user) {
-        details.push(`SKIPPED: ${email} — Auth0 account not found (may have been deleted)`);
-        continue;
-      }
+      user = await auth0Service.findUserByEmail(email);
+    } catch (err) {
+      attempted++;
+      errors++;
+      details.push(`ERROR: ${email} — ${err instanceof Error ? err.message : String(err)}`);
+      logger.error({ err, email }, 'New cohort onboarding: Auth0 lookup failed for user');
+      continue;
+    }
+    if (!user) {
+      details.push(`SKIPPED: ${email} — Auth0 account not found (may have been deleted)`);
+      continue;
+    }
 
+    attempted++;
+    try {
       // Add fellows-current role
       if (env.AUTH0_FELLOWS_CURRENT_ROLE_ID) {
         await auth0Service.assignRole(user.user_id, env.AUTH0_FELLOWS_CURRENT_ROLE_ID);
       }
 
       // Add to Current Appointees on both JSM sites
+      let jsmDetail = '';
       if (jsmService.isJsmConfigured()) {
-        await jsmService.addUserToCurrentAppointees(email, user.name || email);
+        const current = await jsmService.addUserToCurrentAppointees(email, user.name || email);
         // Verify they're in Former Appointees too
-        await jsmService.addUserToFormerAppointees(email, user.name || email);
+        const former = await jsmService.addUserToFormerAppointees(email, user.name || email);
+        const failed = [
+          describeFailedSites(current) && `Current Appointees (${describeFailedSites(current)})`,
+          describeFailedSites(former) && `Former Appointees (${describeFailedSites(former)})`,
+        ]
+          .filter(Boolean)
+          .join('; ');
+        if (failed) {
+          errors++;
+          details.push(
+            `PARTIAL: ${email} — assigned fellows-current role, but JSM org add FAILED for ${failed} (see logs)`
+          );
+          continue;
+        }
+        jsmDetail = ' + Current Appointees';
       }
 
       processed++;
-      details.push(`Onboarded ${email} — fellows-current + Current Appointees`);
+      details.push(`Onboarded ${email} — fellows-current${jsmDetail}`);
     } catch (err) {
       errors++;
       details.push(`ERROR: ${email} — ${err instanceof Error ? err.message : String(err)}`);
@@ -391,6 +533,7 @@ async function executeNewCohortOnboarding(dryRun: { result: unknown }): Promise<
   }
 
   return {
+    attempted,
     processed,
     pending: pendingEmails.length,
     errors,
@@ -402,6 +545,7 @@ async function executeNewCohortOnboarding(dryRun: { result: unknown }): Promise<
 async function executeBackfill(dryRun: { result: unknown }): Promise<ExecutionResult> {
   const { actions } = dryRun.result as { actions: DryRunAction[] };
   const details: string[] = [];
+  let attempted = 0;
   let processed = 0;
   let errors = 0;
 
@@ -409,18 +553,33 @@ async function executeBackfill(dryRun: { result: unknown }): Promise<ExecutionRe
   const emails = [...new Set(actions.map((a) => a.email))];
 
   for (const email of emails) {
+    // As in new-cohort onboarding: a lookup that throws is a failed attempt; a
+    // null result is a genuine skip, not an attempt.
+    let user: Awaited<ReturnType<typeof auth0Service.findUserByEmail>>;
     try {
-      const user = await auth0Service.findUserByEmail(email);
-      if (!user) {
-        details.push(`SKIPPED: ${email} — Auth0 account not found`);
-        continue;
-      }
+      user = await auth0Service.findUserByEmail(email);
+    } catch (err) {
+      attempted++;
+      errors++;
+      details.push(`ERROR: ${email} — ${err instanceof Error ? err.message : String(err)}`);
+      logger.error({ err, email }, 'Backfill: Auth0 lookup failed for user');
+      continue;
+    }
+    if (!user) {
+      details.push(`SKIPPED: ${email} — Auth0 account not found`);
+      continue;
+    }
 
+    attempted++;
+    try {
       const displayName = user.name || email;
+      const jsmFailures: string[] = [];
 
       // Add to Former Appointees (all fellows)
       if (jsmService.isJsmConfigured()) {
-        await jsmService.addUserToFormerAppointees(email, displayName);
+        const former = await jsmService.addUserToFormerAppointees(email, displayName);
+        const failed = describeFailedSites(former);
+        if (failed) jsmFailures.push(`Former Appointees (${failed})`);
       }
 
       // Check if current fellow needs Current Appointees too
@@ -429,15 +588,28 @@ async function executeBackfill(dryRun: { result: unknown }): Promise<ExecutionRe
       );
       if (needsCurrent) {
         if (jsmService.isJsmConfigured()) {
-          await jsmService.addUserToCurrentAppointees(email, displayName);
+          const current = await jsmService.addUserToCurrentAppointees(email, displayName);
+          const failed = describeFailedSites(current);
+          if (failed) jsmFailures.push(`Current Appointees (${failed})`);
         }
         if (env.AUTH0_FELLOWS_CURRENT_ROLE_ID) {
           await auth0Service.assignRole(user.user_id, env.AUTH0_FELLOWS_CURRENT_ROLE_ID);
         }
-        details.push(`Backfilled ${email} — Former + Current Appointees + fellows-current`);
-      } else {
-        details.push(`Backfilled ${email} — Former Appointees`);
       }
+
+      if (jsmFailures.length > 0) {
+        errors++;
+        details.push(
+          `PARTIAL: ${email} — JSM org add FAILED for ${jsmFailures.join('; ')} (see logs)`
+        );
+        continue;
+      }
+
+      details.push(
+        needsCurrent
+          ? `Backfilled ${email} — Former + Current Appointees + fellows-current`
+          : `Backfilled ${email} — Former Appointees`
+      );
 
       processed++;
     } catch (err) {
@@ -447,5 +619,5 @@ async function executeBackfill(dryRun: { result: unknown }): Promise<ExecutionRe
     }
   }
 
-  return { processed, pending: 0, errors, details, stats: { backfilled: processed, errors } };
+  return { attempted, processed, pending: 0, errors, details, stats: { backfilled: processed, errors } };
 }

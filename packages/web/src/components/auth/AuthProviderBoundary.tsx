@@ -24,10 +24,17 @@ export function AuthProviderBoundary() {
     <Auth0Provider
       domain={auth0Config.domain}
       clientId={auth0Config.clientId}
+      // Renew via refresh token, not a hidden iframe: Safari ITP (and
+      // increasingly Chrome) blocks the third-party cookie the iframe needs, so
+      // mid-session renewal used to throw login_required and every query failed.
+      // cacheLocation stays 'memory' on purpose — tokens must never be written
+      // to localStorage.
+      useRefreshTokens
+      cacheLocation="memory"
       authorizationParams={{
         redirect_uri: auth0Config.callbackUrl,
         audience: auth0Config.audience,
-        scope: 'openid profile email',
+        scope: 'openid profile email offline_access',
       }}
       onRedirectCallback={onRedirectCallback}
     >

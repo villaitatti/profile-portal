@@ -15,6 +15,22 @@ The backend uses Express with:
 - Server-side RBAC middleware (`requireRole`) on protected routes
 - Zod for environment variable validation at startup
 
+### Deliberately single-instance
+
+The server is designed to run as **exactly one process**. Rate-limit stores, the
+CiviCRM/fellows lookup caches, and the SCIM-sync SSE emitter registry are all
+in-memory; `node-cron` schedules (July 1 / July 2 automations, the daily bio-email
+dispatch) are per-process timers; and `prisma migrate deploy` runs at container
+startup. A second replica would multiply the effective rate limits, serve
+divergent cached data, strand SSE subscribers on the wrong process, double-fire
+the non-idempotent July automations, and race the migration.
+
+This is a conscious trade for a portal serving a few hundred fellows and a handful
+of staff: no Redis, no external scheduler, no leader election. Capacity is added
+vertically. Anything that would require a second instance (or that assumes one
+exists) needs the shared-state work described in the "Single-instance constraint"
+section of `DEPLOYMENT.md` first.
+
 ## Database: PostgreSQL + Prisma ORM
 
 - PostgreSQL for relational data (applications catalog, fellow invite tracking)
