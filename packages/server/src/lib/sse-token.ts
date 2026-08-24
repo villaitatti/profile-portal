@@ -1,4 +1,5 @@
 import { randomBytes, createHmac, timingSafeEqual } from 'crypto';
+import { validateSseSecret } from './sse-secret.js';
 
 // Short-lived SSE tokens avoid putting the full JWT in query strings.
 // Tokens are HMAC-signed and expire after 5 minutes.
@@ -6,16 +7,19 @@ import { randomBytes, createHmac, timingSafeEqual } from 'crypto';
 // SSE_SECRET (base64-encoded, >= 32 bytes) keeps tokens valid across restarts
 // and is REQUIRED in production — env.ts refuses to boot without it, so the
 // ephemeral fallback below is reachable only in development, where a key that
-// dies with the process is harmless.
+// dies with the process is harmless. The base64 + length validation lives in
+// lib/sse-secret.ts so this loader and the env.ts boot gate share one rule.
 
 function loadSseSecret(): Buffer {
   const envSecret = process.env.SSE_SECRET;
   if (envSecret) {
-    const buf = Buffer.from(envSecret, 'base64');
-    if (buf.length < 32) {
-      throw new Error('SSE_SECRET must be at least 32 bytes (base64-encoded). Generate with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))"');
+    const result = validateSseSecret(envSecret);
+    if (!result.ok) {
+      throw new Error(
+        `SSE_SECRET is invalid: ${result.reason}. Generate one with: node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`
+      );
     }
-    return buf;
+    return Buffer.from(envSecret.trim(), 'base64');
   }
   return randomBytes(32);
 }

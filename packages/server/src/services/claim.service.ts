@@ -222,12 +222,13 @@ export async function processClaim(email: string): Promise<void> {
     throw err;
   }
 
-  // The async ops below key off the claim id. Without an audit row there is
-  // nothing to attach their results to, so stop here — the account itself is
-  // complete and usable, and IT has been notified above.
-  if (claimRecordId === null) return;
-
-  // Step 9: Fire-and-forget async operations (JSM orgs + email notification + bio-email enqueue)
+  // Step 9: Fire-and-forget async operations (JSM orgs + email notification +
+  // bio-email enqueue). These run even when the audit row failed to write
+  // (claimRecordId === null): the JSM org membership, the claim notification and
+  // the bio-email enqueue are real provisioning side effects the fellow depends
+  // on, and only the orgsAssigned audit update needs the claim id. Skipping them
+  // for a missing audit row would leave a fully-provisioned fellow out of the
+  // JSM organisations with no bio email.
   processAsyncClaimOps({
     claimId: claimRecordId,
     email,
@@ -409,7 +410,7 @@ async function runClaimLadder(
 }
 
 async function processAsyncClaimOps(params: {
-  claimId: string;
+  claimId: string | null;
   email: string;
   firstName: string;
   lastName: string;
@@ -445,8 +446,10 @@ async function processAsyncClaimOps(params: {
     if (result.site2) orgsAssigned.push('Current Appointees (Site 2)');
   }
 
-  // Update claim record with org results
-  if (orgsAssigned.length > 0) {
+  // Update claim record with org results. Skipped when the audit row failed to
+  // write (claimId === null) — this is the only step that needs it; the JSM
+  // assignment above and the notification + bio-email below run regardless.
+  if (claimId !== null && orgsAssigned.length > 0) {
     await prisma.vitIdClaim.update({
       where: { id: claimId },
       data: { orgsAssigned },

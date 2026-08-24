@@ -3,6 +3,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { useAutomationRuns, useStartDryRun, useExecuteAutomation } from '@/api/automations';
 import type { AutomationRun, DryRunResult } from '@/api/automations';
+import { getErrorMessage } from '@/lib/errors';
 import {
   Info,
   Play,
@@ -169,9 +170,7 @@ function AutomationCard({
       const result = await dryRunMutation.mutateAsync();
       setDryRunResult(result);
     } catch (err) {
-      setActionError(
-        `Preview failed: ${err instanceof Error ? err.message : 'unexpected error'}. Nothing was changed.`
-      );
+      setActionError(`Preview failed: ${getErrorMessage(err)}. Nothing was changed.`);
     }
   };
 
@@ -184,7 +183,7 @@ function AutomationCard({
     } catch (err) {
       // Keep the preview on screen: the admin needs to see what was attempted.
       setActionError(
-        `Execution failed: ${err instanceof Error ? err.message : 'unexpected error'}. Some changes may already have been applied — check the history below.`
+        `Execution failed: ${getErrorMessage(err)}. Some changes may already have been applied — check the history below.`
       );
     }
   };

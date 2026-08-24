@@ -842,12 +842,16 @@ export async function sendBioEmailManually(args: {
       if (claimedOutcome === 'failed' || claimedOutcome === 'deferred_email') {
         return { ok: false, reason: 'email_send_failed' };
       }
+      // Check 'skipped' BEFORE querying the row: a skip carries a
+      // failureReason we must surface (same mapping the fresh-enqueue path
+      // uses), not a fixed 'no_matching_fellowship'. Only the success path
+      // needs the persisted row.
+      if (claimedOutcome === 'skipped') {
+        return { ok: false, reason: await mapBioSkippedReason(existing.id) };
+      }
       const dispatched = await prisma.appointeeEmailEvent.findUniqueOrThrow({
         where: { id: existing.id },
       });
-      if (claimedOutcome === 'skipped') {
-        return { ok: false, reason: 'no_matching_fellowship' };
-      }
       return {
         ok: true,
         eventId: dispatched.id,
@@ -883,43 +887,54 @@ export async function sendBioEmailManually(args: {
     return { ok: false, reason: 'email_send_failed' };
   }
 
-  const finalEvent = await prisma.appointeeEmailEvent.findUniqueOrThrow({
-    where: { id: eventId },
-  });
-
   // SKIPPED means eligibility flipped between the pre-check above and the
   // dispatch-time re-check (rare race). Map the persisted failureReason back
   // to an ineligibility reason the admin UI already knows how to render.
-  // Anything that isn't a recognized reason falls through as a generic 500.
+  // (mapBioSkippedReason re-reads the row itself, so query for success only.)
   if (outcome === 'skipped') {
-    const reason = finalEvent.failureReason;
-    const validReasons: readonly BioEmailIneligibilityReason[] = [
-      'no_vit_id',
-      'no_matching_fellowship',
-      'fellowship_not_accepted',
-      'no_primary_email',
-      'already_sent',
-      'civicrm_unavailable',
-      'email_send_failed',
-    ];
-    if (reason && (validReasons as readonly string[]).includes(reason)) {
-      return { ok: false, reason: reason as BioEmailIneligibilityReason };
-    }
-    logger.warn(
-      { eventId, failureReason: reason },
-      'Bio email: dispatch returned skipped with unrecognized failureReason'
-    );
-    throw new Error('dispatch_skipped_unexpected');
+    return { ok: false, reason: await mapBioSkippedReason(eventId) };
   }
 
   // outcome === 'sent' (or 'not_claimed', which only happens if another worker
   // raced us on the same eventId — treat the persisted state as authoritative).
+  const finalEvent = await prisma.appointeeEmailEvent.findUniqueOrThrow({
+    where: { id: eventId },
+  });
   return {
     ok: true,
     eventId: finalEvent.id,
     status: finalEvent.status,
     sentAt: finalEvent.sentAt,
   };
+}
+
+/**
+ * A dispatchOne 'skipped' outcome persists a `failureReason` on the row.
+ * Re-read it and map it to a typed BioEmailIneligibilityReason the admin UI can
+ * render; anything unrecognized is a real bug, so throw and let it surface as a
+ * 500. Shared by both the fresh-enqueue and existing-PENDING manual paths so
+ * they return the same reason for the same skip.
+ */
+async function mapBioSkippedReason(eventId: string): Promise<BioEmailIneligibilityReason> {
+  const event = await prisma.appointeeEmailEvent.findUniqueOrThrow({ where: { id: eventId } });
+  const reason = event.failureReason;
+  const validReasons: readonly BioEmailIneligibilityReason[] = [
+    'no_vit_id',
+    'no_matching_fellowship',
+    'fellowship_not_accepted',
+    'no_primary_email',
+    'already_sent',
+    'civicrm_unavailable',
+    'email_send_failed',
+  ];
+  if (reason && (validReasons as readonly string[]).includes(reason)) {
+    return reason as BioEmailIneligibilityReason;
+  }
+  logger.warn(
+    { eventId, failureReason: reason },
+    'Bio email: dispatch returned skipped with unrecognized failureReason'
+  );
+  throw new Error('dispatch_skipped_unexpected');
 }
 
 /**

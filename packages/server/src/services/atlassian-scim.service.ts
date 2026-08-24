@@ -47,6 +47,12 @@ async function scimFetch(
 ): Promise<Response> {
   const url = scimUrl(path);
   const maxRetries = 3;
+  // A 429 means the request was rejected before processing, so it is safe to
+  // retry for any method. A 5xx is ambiguous — the write may have taken effect
+  // server-side — so retry it ONLY for GET, which is idempotent. Retrying a 5xx
+  // on createUser / createGroup / addGroupMember (all POSTs) risks a duplicate.
+  const method = (options.method ?? 'GET').toUpperCase();
+  const isRead = method === 'GET';
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const response = await fetch(url, {
@@ -60,12 +66,7 @@ async function scimFetch(
       signal: AbortSignal.timeout(15_000),
     });
 
-    // Retry throttling AND transient server errors. Previously only 429 was
-    // retried, so a single 502/503 from Atlassian aborted a whole sync run that
-    // a one-second wait would have carried through. Only idempotent-safe
-    // conditions are retried: these are responses where the request provably did
-    // not take effect.
-    const isRetryable = response.status === 429 || response.status >= 500;
+    const isRetryable = response.status === 429 || (response.status >= 500 && isRead);
     if (isRetryable && attempt < maxRetries) {
       const backoff = Math.min(1000 * 2 ** attempt + Math.random() * 500, 60_000);
       logger.warn(

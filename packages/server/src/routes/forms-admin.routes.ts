@@ -13,45 +13,17 @@ import {
 } from '../services/form-pdf.service.js';
 import { isDevMode } from '../env.js';
 import { logger } from '../lib/logger.js';
-
-// Mirrors the fellows cache pattern in emails-admin.routes.ts (120s TTL).
-// Reused here so /invitations can join CiviCRM contact names onto each row
-// without a per-request roundtrip. Graceful-degrade: if the CiviCRM fetch
-// fails, the lookup returns a map with no names, and the endpoint still
-// returns rows (the UI shows "Contact #<id>" as a fallback).
-type CachedFellow = { contactId: number; firstName: string; lastName: string };
-
-let cachedFellows: CachedFellow[] | null = null;
-let cachedFellowsExpires = 0;
-const FELLOWS_CACHE_TTL_MS = 120_000;
-
-async function getFellowsCached(): Promise<CachedFellow[]> {
-  const now = Date.now();
-  if (cachedFellows && now < cachedFellowsExpires) return cachedFellows;
-  const fellows = await civicrmService.getFellowsWithContacts();
-  // Cache-poisoning guard: a transient CiviCRM hiccup can return a 200 with
-  // { values: [] } (which the service maps to []). Caching an empty list
-  // for 120s would silently label every submission "Contact #<id>" until
-  // the TTL expires, with no way for an operator to notice. Treat empty
-  // results as a non-cacheable response — every subsequent request retries
-  // until Civi returns real data.
-  if (fellows.length === 0) {
-    logger.warn('forms_admin_fellows_empty_response — not caching');
-    return fellows;
-  }
-  cachedFellows = fellows;
-  cachedFellowsExpires = now + FELLOWS_CACHE_TTL_MS;
-  return fellows;
-}
+import { getFellowsCached } from '../lib/fellows-cache.js';
 
 /**
- * Build a NameLookup backed by the fellows cache. On CiviCRM failure, returns
- * a lookup whose getName() always returns null — the caller's items still
- * include contactId so the UI can render a "Contact #<id>" fallback.
+ * Build a NameLookup backed by the shared fellows cache (lib/fellows-cache.ts,
+ * 120s TTL, empty-response guard). On CiviCRM failure, returns a lookup whose
+ * getName() always returns null — the caller's items still include contactId so
+ * the UI can render a "Contact #<id>" fallback.
  */
 async function buildNameLookup(): Promise<formService.NameLookup> {
   try {
-    const fellows = await getFellowsCached();
+    const fellows = await getFellowsCached('forms_admin');
     const byId = new Map<number, string>();
     for (const f of fellows) {
       const name = `${f.firstName} ${f.lastName}`.trim();

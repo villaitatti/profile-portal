@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { LoadingSpinner, SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { getErrorMessage } from '@/lib/errors';
 import { useApiToken } from '@/api/client';
 import {
   useMappings,
@@ -384,9 +385,6 @@ const RUN_KIND_LABELS: Record<RunKind, string> = {
   execute: 'Sync failed',
 };
 
-function errorMessage(err: unknown): string {
-  return err instanceof Error && err.message ? err.message : 'Unexpected error';
-}
 
 export function AtlassianSyncPage() {
   const { data: status, isLoading: statusLoading } = useSyncStatus();
@@ -479,7 +477,7 @@ export function AtlassianSyncPage() {
     try {
       sseToken = await fetchSseToken(getToken);
     } catch (err) {
-      failRun('dry-run', errorMessage(err));
+      failRun('dry-run', getErrorMessage(err));
       return;
     }
     startDryRun.mutate(undefined, {
@@ -494,7 +492,7 @@ export function AtlassianSyncPage() {
           queryClient.invalidateQueries({ queryKey: ['sync-run', runId] });
         });
       },
-      onError: (err) => failRun('dry-run', errorMessage(err)),
+      onError: (err) => failRun('dry-run', getErrorMessage(err)),
     });
   }, [startDryRun, queryClient, getToken, startSseSubscription, failRun]);
 
@@ -507,7 +505,7 @@ export function AtlassianSyncPage() {
     try {
       sseToken = await fetchSseToken(getToken);
     } catch (err) {
-      failRun('execute', errorMessage(err));
+      failRun('execute', getErrorMessage(err));
       return;
     }
     executeSyncMutation.mutate(dryRunId, {
@@ -521,7 +519,7 @@ export function AtlassianSyncPage() {
           queryClient.invalidateQueries({ queryKey: ['sync-runs'] });
         });
       },
-      onError: (err) => failRun('execute', errorMessage(err)),
+      onError: (err) => failRun('execute', getErrorMessage(err)),
     });
   }, [lastDryRunId, executeSyncMutation, queryClient, getToken, startSseSubscription, failRun]);
 

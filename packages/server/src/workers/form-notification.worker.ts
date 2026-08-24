@@ -56,9 +56,11 @@ export async function registerFormNotificationWorker(): Promise<void> {
         try {
           await handleFormNotification(job.data, job.id);
         } catch (err) {
+          // Don't restate the retry limit here — it lives in job-queue.ts and a
+          // stale copy would misreport how many attempts remain.
           logger.error(
-            { err, invitationId, responseId, jobId: job.id, retryLimit: 3 },
-            'form notification job failed — pg-boss will retry, then drop it silently'
+            { err, invitationId, responseId, jobId: job.id },
+            'form notification job failed — pg-boss will retry per its retryLimit, then drop it silently'
           );
           throw err;
         }

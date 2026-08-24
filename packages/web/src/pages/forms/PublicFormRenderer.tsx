@@ -16,6 +16,7 @@ import {
 import { SearchableCombobox } from '@/components/shared/SearchableCombobox';
 import { SelectDropdown } from '@/components/shared/SelectDropdown';
 import { cn } from '@/lib/utils';
+import type { PublicFormSubmitIssue } from '@/api/forms';
 
 interface PublicFormRendererProps {
   formDef: FormDef;
@@ -23,7 +24,7 @@ interface PublicFormRendererProps {
   isSubmitting: boolean;
   submitError?: string;
   /** Field-level detail from a server 400 — what makes an over-limit paste diagnosable. */
-  submitIssues?: { path: string; message: string }[];
+  submitIssues?: PublicFormSubmitIssue[];
   isSuccess: boolean;
 }
 

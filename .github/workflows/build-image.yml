@@ -54,23 +54,25 @@ jobs:
             states=$(gh api \
               "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&event=push&per_page=100" \
               --jq '[.workflow_runs[] | .conclusion // "pending"] | join(" ")')
-            case " $states " in
-              *" success "*)
-                echo "CI succeeded for $GITHUB_SHA."
-                break
-                ;;
-              *" pending "*)
-                : # still running, keep waiting
-                ;;
-              "  ")
-                : # no CI run registered yet, keep waiting
-                ;;
-              *)
-                echo "Refusing to build $GITHUB_SHA: CI concluded '$states'."
-                echo "Fix CI on main before an image is published and auto-deployed to dev."
-                exit 1
-                ;;
-            esac
+            # Precedence matters: failures are checked BEFORE success. The old
+            # success-first match let a mixed state like "failure success" (or
+            # an early success with a second run still pending) pass the gate.
+            # Any conclusion that is neither success nor pending fails
+            # immediately; pending waits; success is accepted only when every
+            # run for this SHA succeeded.
+            bad=$(tr ' ' '\n' <<<"$states" | grep -vE '^(success|pending)$' | sort -u | xargs || true)
+            if [[ -n "$bad" ]]; then
+              echo "Refusing to build $GITHUB_SHA: CI concluded '$states' (blocking: '$bad')."
+              echo "Fix CI on main before an image is published and auto-deployed to dev."
+              exit 1
+            elif [[ " $states " == *" pending "* ]]; then
+              : # still running, keep waiting
+            elif [[ -z "${states// /}" ]]; then
+              : # no CI run registered yet, keep waiting
+            else
+              echo "CI succeeded for $GITHUB_SHA."
+              break
+            fi
             if [[ "$(date +%s)" -ge "$deadline" ]]; then
               echo "Timed out after 30m waiting for CI on $GITHUB_SHA (last state: '$states')."
               exit 1

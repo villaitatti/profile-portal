@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { validateSseSecret } from './lib/sse-secret.js';
 
 const devMode = process.env.DEV_SKIP_EXTERNAL_SERVICES === 'true';
 
@@ -206,8 +207,16 @@ function loadEnv() {
       );
       process.exit(1);
     }
-    if (Buffer.from(secret, 'base64').length < 32) {
-      console.error('SSE_SECRET must decode to at least 32 bytes (base64-encoded).');
+    // Same validator lib/sse-token.ts uses at load time, so the boot gate and
+    // the runtime loader can never disagree about what counts as valid — and it
+    // rejects malformed base64 rather than letting Buffer.from silently drop
+    // invalid characters before the length check.
+    const sseCheck = validateSseSecret(secret);
+    if (!sseCheck.ok) {
+      console.error(`SSE_SECRET is invalid: ${sseCheck.reason}.`);
+      console.error(
+        'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))"'
+      );
       process.exit(1);
     }
   }

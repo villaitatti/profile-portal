@@ -45,3 +45,16 @@ auditConfig:
     #
     # Revisit when doing the react-router v8 migration; drop this entry then.
     - "GHSA-qwww-vcr4-c8h2"
+    # GHSA-ggr8-5vv4-36mx — deepmerge-ts <8.0.0. A transitive dependency of the
+    # Prisma CLI (@prisma/config → prisma / @prisma/client), which pins 7.1.5.
+    #
+    # Not in the server request path: deepmerge-ts runs only while the Prisma CLI
+    # loads prisma.config during `prisma generate` / `prisma migrate deploy`, and
+    # its only input is our own committed Prisma config, never user data.
+    #
+    # Not overridden to the patched 8.x on purpose: forcing a new MAJOR of a
+    # Prisma-internal dependency risks breaking `prisma migrate deploy`, which
+    # runs at container start — a deploy-time break is a worse outcome than a
+    # suppressed advisory on a build-time-only dep with no untrusted input.
+    # Drop this entry once Prisma bumps its own pin (tracked in TODOS.md).
+    - "GHSA-ggr8-5vv4-36mx"

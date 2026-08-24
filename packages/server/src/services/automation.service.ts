@@ -1,4 +1,5 @@
 import cron from 'node-cron';
+import { Prisma } from '@prisma/client';
 import { env, isDevMode } from '../env.js';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
@@ -332,8 +333,18 @@ export async function executeAutomation(
         throw new Error(`Unknown automation type: ${dryRun.type}`);
     }
 
-    const hasErrors = result.errors > 0;
-    const status = result.errors === result.processed ? 'failed' : hasErrors ? 'partial' : 'completed';
+    // failed  = at least one attempt AND every attempt failed
+    // partial = some failed, some succeeded
+    // completed = no failures
+    // Comparing errors to `attempted` (not `processed`) is what makes an
+    // all-failure run report `failed`: with the old `errors === processed`
+    // test, 5 failures / 0 successes gave `5 === 0` → false → `partial`.
+    const status =
+      result.errors === 0
+        ? 'completed'
+        : result.attempted > 0 && result.errors >= result.attempted
+          ? 'failed'
+          : 'partial';
 
     await prisma.automationRun.update({
       where: { id: run.id },
@@ -365,9 +376,9 @@ export async function executeAutomation(
     const existing = await prisma.automationRun
       .findUnique({ where: { id: run.id }, select: { result: true } })
       .catch(() => null);
-    const priorResult =
+    const priorResult: Prisma.JsonObject =
       existing?.result && typeof existing.result === 'object' && !Array.isArray(existing.result)
-        ? (existing.result as Record<string, unknown>)
+        ? (existing.result as Prisma.JsonObject)
         : {};
 
     await prisma.automationRun.update({
@@ -375,7 +386,7 @@ export async function executeAutomation(
       data: {
         status: 'failed',
         completedAt: new Date(),
-        result: { ...priorResult, error: String(err) } as any,
+        result: { ...priorResult, error: String(err) } satisfies Prisma.InputJsonValue,
       },
     });
     throw err;
@@ -383,6 +394,12 @@ export async function executeAutomation(
 }
 
 interface ExecutionResult {
+  // Users we actually tried to mutate (past the skip/not-found guards).
+  // `processed` counts only fully-successful ones and `errors` the failures, so
+  // `attempted === processed + errors`. Status is derived from `attempted`, not
+  // from `processed`, so a run where every attempt failed is reported `failed`
+  // rather than `partial`.
+  attempted: number;
   processed: number;
   pending: number;
   errors: number;
@@ -393,6 +410,7 @@ interface ExecutionResult {
 async function executeEndOfYearCleanup(dryRun: { result: unknown }): Promise<ExecutionResult> {
   const { actions } = dryRun.result as { actions: DryRunAction[] };
   const details: string[] = [];
+  let attempted = 0;
   let processed = 0;
   let errors = 0;
 
@@ -400,6 +418,9 @@ async function executeEndOfYearCleanup(dryRun: { result: unknown }): Promise<Exe
   const emails = [...new Set(actions.map((a) => a.email))];
 
   for (const email of emails) {
+    // Every row here is a user we intend to mutate — there is no skip guard, so
+    // count the attempt up front.
+    attempted++;
     try {
       // Remove fellows-current role
       const user = await auth0Service.findUserByEmail(email);
@@ -436,7 +457,7 @@ async function executeEndOfYearCleanup(dryRun: { result: unknown }): Promise<Exe
     }
   }
 
-  return { processed, pending: 0, errors, details, stats: { removed: processed, errors } };
+  return { attempted, processed, pending: 0, errors, details, stats: { removed: processed, errors } };
 }
 
 async function executeNewCohortOnboarding(dryRun: { result: unknown }): Promise<ExecutionResult> {
@@ -445,17 +466,32 @@ async function executeNewCohortOnboarding(dryRun: { result: unknown }): Promise<
     pending?: string[];
   };
   const details: string[] = [];
+  let attempted = 0;
   let processed = 0;
   let errors = 0;
 
   for (const email of toOnboard) {
+    // Look the user up first. A lookup that THROWS is a failed attempt (Auth0
+    // unreachable); a lookup that returns null is a genuine skip, not an
+    // attempt — keeping the two apart is what lets an all-Auth0-down run be
+    // reported `failed` rather than `partial`.
+    let user: Awaited<ReturnType<typeof auth0Service.findUserByEmail>>;
     try {
-      const user = await auth0Service.findUserByEmail(email);
-      if (!user) {
-        details.push(`SKIPPED: ${email} — Auth0 account not found (may have been deleted)`);
-        continue;
-      }
+      user = await auth0Service.findUserByEmail(email);
+    } catch (err) {
+      attempted++;
+      errors++;
+      details.push(`ERROR: ${email} — ${err instanceof Error ? err.message : String(err)}`);
+      logger.error({ err, email }, 'New cohort onboarding: Auth0 lookup failed for user');
+      continue;
+    }
+    if (!user) {
+      details.push(`SKIPPED: ${email} — Auth0 account not found (may have been deleted)`);
+      continue;
+    }
 
+    attempted++;
+    try {
       // Add fellows-current role
       if (env.AUTH0_FELLOWS_CURRENT_ROLE_ID) {
         await auth0Service.assignRole(user.user_id, env.AUTH0_FELLOWS_CURRENT_ROLE_ID);
@@ -497,6 +533,7 @@ async function executeNewCohortOnboarding(dryRun: { result: unknown }): Promise<
   }
 
   return {
+    attempted,
     processed,
     pending: pendingEmails.length,
     errors,
@@ -508,6 +545,7 @@ async function executeNewCohortOnboarding(dryRun: { result: unknown }): Promise<
 async function executeBackfill(dryRun: { result: unknown }): Promise<ExecutionResult> {
   const { actions } = dryRun.result as { actions: DryRunAction[] };
   const details: string[] = [];
+  let attempted = 0;
   let processed = 0;
   let errors = 0;
 
@@ -515,13 +553,25 @@ async function executeBackfill(dryRun: { result: unknown }): Promise<ExecutionRe
   const emails = [...new Set(actions.map((a) => a.email))];
 
   for (const email of emails) {
+    // As in new-cohort onboarding: a lookup that throws is a failed attempt; a
+    // null result is a genuine skip, not an attempt.
+    let user: Awaited<ReturnType<typeof auth0Service.findUserByEmail>>;
     try {
-      const user = await auth0Service.findUserByEmail(email);
-      if (!user) {
-        details.push(`SKIPPED: ${email} — Auth0 account not found`);
-        continue;
-      }
+      user = await auth0Service.findUserByEmail(email);
+    } catch (err) {
+      attempted++;
+      errors++;
+      details.push(`ERROR: ${email} — ${err instanceof Error ? err.message : String(err)}`);
+      logger.error({ err, email }, 'Backfill: Auth0 lookup failed for user');
+      continue;
+    }
+    if (!user) {
+      details.push(`SKIPPED: ${email} — Auth0 account not found`);
+      continue;
+    }
 
+    attempted++;
+    try {
       const displayName = user.name || email;
       const jsmFailures: string[] = [];
 
@@ -569,5 +619,5 @@ async function executeBackfill(dryRun: { result: unknown }): Promise<ExecutionRe
     }
   }
 
-  return { processed, pending: 0, errors, details, stats: { backfilled: processed, errors } };
+  return { attempted, processed, pending: 0, errors, details, stats: { backfilled: processed, errors } };
 }

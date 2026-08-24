@@ -25,13 +25,17 @@ export function classifyFellowship(
  * such a row fell through to 'upcoming' and counted as qualifying whenever
  * `fellowshipAccepted` happened to be true.
  */
+function hasParseableDates(fellowship: CiviCRMFellowship): boolean {
+  const start = stripTime(new Date(fellowship.startDate));
+  const end = stripTime(new Date(fellowship.endDate));
+  return !Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime());
+}
+
 function isQualifyingFellowship(
   fellowship: CiviCRMFellowship,
   referenceDate: Date
 ): boolean {
-  const start = stripTime(new Date(fellowship.startDate));
-  const end = stripTime(new Date(fellowship.endDate));
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false;
+  if (!hasParseableDates(fellowship)) return false;
 
   const temporal = classifyFellowship(fellowship.startDate, fellowship.endDate, referenceDate);
   return temporal === 'past' || temporal === 'current' || !!fellowship.fellowshipAccepted;
@@ -57,8 +61,14 @@ export function evaluateEligibility(
     return { eligible: false, reason: 'single_upcoming_not_accepted' };
   }
 
-  // Single fellowship record
+  // Single fellowship record. Reject unparseable dates first — the same rule
+  // the multi-fellowship path applies via isQualifyingFellowship — so a lone row
+  // with a null/"null" CiviCRM date can't fall through classifyFellowship to
+  // 'upcoming' and provision an account off a garbage date.
   const fellowship = fellowships[0];
+  if (!hasParseableDates(fellowship)) {
+    return { eligible: false, reason: 'single_upcoming_not_accepted' };
+  }
   const temporal = classifyFellowship(
     fellowship.startDate,
     fellowship.endDate,

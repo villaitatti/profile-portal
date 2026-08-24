@@ -42,21 +42,25 @@ export function AppCatalogPage() {
       {error ? (
         // A failed request must not read as an empty catalog — deleting or
         // re-adding apps off a stale "nothing here" view is destructive.
-        <EmptyState
-          icon={<AlertCircle className="h-12 w-12 mb-4 text-destructive" />}
-          title="Couldn't load the catalog"
-          description="The application list is temporarily unavailable. Nothing has been deleted."
-          action={
-            <button
-              type="button"
-              onClick={() => void refetch()}
-              disabled={isFetching}
-              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
-            >
-              {isFetching ? 'Trying again…' : 'Try again'}
-            </button>
-          }
-        />
+        // role="alert" so assistive tech announces the failure, not just the
+        // (visually distinct) empty layout.
+        <div role="alert">
+          <EmptyState
+            icon={<AlertCircle className="h-12 w-12 mb-4 text-destructive" />}
+            title="Couldn't load the catalog"
+            description="The application list is temporarily unavailable. Nothing has been deleted."
+            action={
+              <button
+                type="button"
+                onClick={() => void refetch()}
+                disabled={isFetching}
+                className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
+              >
+                {isFetching ? 'Trying again…' : 'Try again'}
+              </button>
+            }
+          />
+        </div>
       ) : !apps || apps.length === 0 ? (
         <EmptyState
           icon={<Grid3X3 className="h-12 w-12 mb-4" />}

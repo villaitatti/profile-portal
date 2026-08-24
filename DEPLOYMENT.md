@@ -249,15 +249,18 @@ until an operator turns them on.
 
 > **⚠️ `APPOINTEE_EMAIL_CRON_ENABLED` must be `true` on real production.**
 > The bio & project description email is queued automatically 24 hours after an
-> appointee claims their VIT ID, but the *only* thing that dispatches a queued row
-> is the daily 09:00 Europe/Rome cron — and that cron is not registered at all
-> when this flag is unset or `false`. Rows accumulate in `PENDING` forever and no
-> appointee is ever emailed. The manual **Send bio email** action in Manage
-> Appointees does **not** rescue them: it sees the existing `PENDING` row, reports
-> "pending", and deliberately declines to create a duplicate. So with the flag
-> off the queue silently grows and every manual click is a no-op. There is no
-> alert for this today — check it as part of provisioning and after any `.env`
-> change (see "Monitoring").
+> appointee claims their VIT ID, and the daily 09:00 Europe/Rome cron is what
+> dispatches queued rows in bulk — that cron is not registered at all when this
+> flag is unset or `false`, so without it no appointee is emailed automatically.
+> The manual **Send bio email** action in Manage Appointees now dispatches an
+> existing `PENDING` row on the spot (the atomic `PENDING → SENDING` claim means
+> it cannot collide with a concurrent cron run), so an operator *can* clear the
+> queue by hand if the flag was left off — but that is a manual, per-appointee
+> recovery, not a substitute for the flag. Set `APPOINTEE_EMAIL_CRON_ENABLED=true`
+> on real production so the automatic daily dispatch runs; there is no alert for a
+> silently-off flag today, so check it as part of provisioning and after any
+> `.env` change (see "Monitoring"). See CHANGELOG 0.17.15 "Queued appointee emails
+> can be sent by hand".
 
 ### Optional services (features disabled if not set)
 
@@ -451,7 +454,7 @@ only mails you when something is written to stderr, i.e. on failure:
 BACKUP_VERBOSE=true
 BACKUP_RETENTION_DAYS=14
 BACKUP_MIN_KEEP=7
-BACKUP_OFFSITE_COMMAND=rclone copyto "$1" itatti-backups:profile-portal/
+BACKUP_OFFSITE_COMMAND=rclone copyto "$1" itatti-backups:profile-portal/"$(basename "$1")"
 MAILTO=it@itatti.harvard.edu
 15 2 * * * /opt/profile-portal/scripts/backup-database.sh >> /var/log/profile-portal-backup.log
 ```
@@ -474,7 +477,7 @@ Environment=BACKUP_VERBOSE=true
 Environment=BACKUP_RETENTION_DAYS=14
 Environment=BACKUP_MIN_KEEP=7
 # Offsite copy — see "Offsite copy is required" below.
-Environment=BACKUP_OFFSITE_COMMAND=rclone copyto "$1" itatti-backups:profile-portal/
+Environment=BACKUP_OFFSITE_COMMAND=rclone copyto "$1" itatti-backups:profile-portal/"$(basename "$1")"
 ExecStart=/opt/profile-portal/scripts/backup-database.sh
 ```
 
@@ -542,34 +545,46 @@ will mail you daily until it is configured. That noise is intentional.
 
 #### Restore from a scheduled dump
 
-Dumps are plain-text `pg_dump` output, gzipped by default. Restoring drops and
-recreates objects the dump defines, so stop the app first to avoid writes racing
-the restore:
+Dumps are plain-text `pg_dump` output (no `--clean`), gzipped by default, so they
+carry `CREATE`/`COPY` statements but no `DROP`. Loading one into the existing,
+populated `profile_portal` therefore fails with "already exists" under
+`ON_ERROR_STOP=1`. Always restore into a **fresh** database, then promote it —
+this also means a bad dump never destroys your current data before you've
+verified it.
 
 ```bash
 cd /opt/profile-portal
-docker compose stop portal
+docker compose stop portal   # no client left connected to profile_portal
+
+# 1. Load the dump into a clean, throwaway database. The live profile_portal is
+#    untouched at this stage.
+docker compose exec -T db psql -U portal postgres -v ON_ERROR_STOP=1 \
+  -c 'DROP DATABASE IF EXISTS profile_portal_restore;' \
+  -c 'CREATE DATABASE profile_portal_restore OWNER portal;'
 
 # gzipped (default)
 gzip -cd backups/profile_portal_20260731-021500.sql.gz \
-  | docker compose exec -T db psql -U portal -v ON_ERROR_STOP=1 profile_portal
+  | docker compose exec -T db psql -U portal -v ON_ERROR_STOP=1 profile_portal_restore
 
 # uncompressed (e.g. a pre-deploy dump)
-docker compose exec -T db psql -U portal -v ON_ERROR_STOP=1 profile_portal \
+docker compose exec -T db psql -U portal -v ON_ERROR_STOP=1 profile_portal_restore \
   < backups/profile_portal_v0.17.15_20260731-021500.sql
+
+# 2. Sanity-check the restored copy (row counts, most recent rows, etc.).
+#    This is where the quarterly restore drill STOPS — validate, then drop
+#    profile_portal_restore without promoting.
+
+# 3. Promote: retire the current database and rename the restored one into its
+#    place. Both renames run from the maintenance DB with the app stopped, so
+#    nothing is connected to either.
+docker compose exec -T db psql -U portal postgres -v ON_ERROR_STOP=1 \
+  -c 'ALTER DATABASE profile_portal RENAME TO profile_portal_old;' \
+  -c 'ALTER DATABASE profile_portal_restore RENAME TO profile_portal;'
 
 docker compose start portal
 docker compose logs -f portal   # confirm `prisma migrate deploy` reports no pending work
-```
-
-For a clean restore into an empty database (the restore-drill path), create a
-fresh database and restore into it rather than layering onto existing rows:
-
-```bash
-docker compose exec -T db psql -U portal postgres \
-  -c 'CREATE DATABASE profile_portal_restore OWNER portal;'
-gzip -cd backups/<dump>.sql.gz \
-  | docker compose exec -T db psql -U portal -v ON_ERROR_STOP=1 profile_portal_restore
+# Once the app is confirmed healthy, drop the retired copy:
+#   docker compose exec -T db psql -U portal postgres -c 'DROP DATABASE profile_portal_old;'
 ```
 
 If the restored dump predates the schema the current image expects, the app's
@@ -582,8 +597,15 @@ image, deploy the matching image tag instead of downgrading the schema.
 # Backup
 docker compose exec db pg_dump -U portal profile_portal > backup_$(date +%Y%m%d).sql
 
-# Restore
-docker compose exec -T db psql -U portal profile_portal < backup_file.sql
+# Restore — replaces the current database. Plain dumps carry no DROP statements,
+# so drop and recreate the target first; otherwise the load fails on existing
+# objects. Stop the app so nothing is connected to profile_portal.
+docker compose stop portal
+docker compose exec -T db psql -U portal postgres -v ON_ERROR_STOP=1 \
+  -c 'DROP DATABASE IF EXISTS profile_portal;' \
+  -c 'CREATE DATABASE profile_portal OWNER portal;'
+docker compose exec -T db psql -U portal -v ON_ERROR_STOP=1 profile_portal < backup_file.sql
+docker compose start portal
 ```
 
 ### Upgrading PostgreSQL

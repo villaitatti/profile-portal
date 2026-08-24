@@ -9,31 +9,10 @@ import {
   TemplateRenderError,
 } from '../templates/render.js';
 import { logger } from '../lib/logger.js';
+import { getFellowsCached } from '../lib/fellows-cache.js';
 import type { AppointeeEmailType } from '@prisma/client';
 
 const router = Router();
-
-let cachedFellows: { contactId: number; firstName: string; lastName: string }[] | null = null;
-let cachedFellowsExpires = 0;
-const FELLOWS_CACHE_TTL_MS = 120_000;
-
-async function getFellowsCached() {
-  const now = Date.now();
-  if (cachedFellows && now < cachedFellowsExpires) return cachedFellows;
-  const fellows = await civicrmService.getFellowsWithContacts();
-  // Cache-poisoning guard, mirroring forms-admin.routes.ts. A transient CiviCRM
-  // hiccup can return 200 with `{ values: [] }`, which the service maps to [];
-  // caching that for 120s labels every row in the email log "Contact #<id>" with
-  // nothing to indicate why. Treat empty as non-cacheable so the next request
-  // retries.
-  if (fellows.length === 0) {
-    logger.warn('emails_admin_fellows_empty_response — not caching');
-    return fellows;
-  }
-  cachedFellows = fellows;
-  cachedFellowsExpires = now + FELLOWS_CACHE_TTL_MS;
-  return fellows;
-}
 
 interface EmailEventRow {
   id: string;
@@ -106,7 +85,7 @@ router.get('/', async (req, res, next) => {
 
     let nameMap: Map<number, string>;
     try {
-      const fellows = await getFellowsCached();
+      const fellows = await getFellowsCached('emails_admin');
       nameMap = new Map(
         fellows.map((f) => [f.contactId, `${f.firstName} ${f.lastName}`.trim()])
       );

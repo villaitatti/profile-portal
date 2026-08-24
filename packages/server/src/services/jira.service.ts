@@ -14,9 +14,36 @@ export function isJiraConfigured(): boolean {
  * trustworthy internal content. Jira treats a backslash as the escape character
  * for its markup metacharacters; `{` and `[` are the ones that start macros and
  * links, and `*`/`_`/`-`/`+`/`?`/`^`/`~` are inline formatting.
+ *
+ * NOTE: this escapes inline metacharacters but NOT line breaks. Callers must
+ * decide how to handle newlines — inline fields strip them, the free-text
+ * message is wrapped verbatim. A newline left in a `\n`-joined description would
+ * otherwise start a new block (a fake `*Full Name:*` line, an `h1.` heading, a
+ * `----` rule) even with the metacharacters escaped.
  */
 function escapeWikiMarkup(value: string): string {
   return value.replace(/[\\{}[\]*_\-+?^~|!]/g, (c) => `\\${c}`);
+}
+
+/**
+ * Single-line fields: collapse all whitespace runs (including any newline the
+ * caller managed to inject) to a single space, then escape inline markup. Used
+ * for the summary and the labelled description fields, none of which are
+ * legitimately multi-line.
+ */
+function escapeInline(value: string): string {
+  return escapeWikiMarkup(value.replace(/\s+/g, ' ').trim());
+}
+
+/**
+ * The free-text message IS legitimately multi-line, so render it verbatim inside
+ * a {noformat} block instead of escaping it character by character. Strip any
+ * {noformat}/{code} tokens from the input first so it cannot close the block and
+ * resume writing markup.
+ */
+function toNoFormatBlock(value: string): string {
+  const neutralised = value.replace(/\{(noformat|code)(:[^}]*)?\}/gi, '');
+  return `{noformat}\n${neutralised}\n{noformat}`;
 }
 
 export async function createHelpTicket(
@@ -32,10 +59,12 @@ export async function createHelpTicket(
   );
 
   const description = [
-    `*Full Name:* ${escapeWikiMarkup(input.fullName)}`,
-    `*Contact Email:* ${escapeWikiMarkup(input.contactEmail)}`,
-    `*Fellowship Year:* ${escapeWikiMarkup(input.fellowshipYear)}`,
-    input.message ? `*Message:* ${escapeWikiMarkup(input.message)}` : '',
+    `*Full Name:* ${escapeInline(input.fullName)}`,
+    `*Contact Email:* ${escapeInline(input.contactEmail)}`,
+    `*Fellowship Year:* ${escapeInline(input.fellowshipYear)}`,
+    // The message is a textarea, so keep its line breaks but render it verbatim
+    // rather than as wiki markup.
+    input.message ? `*Message:*\n${toNoFormatBlock(input.message)}` : '',
   ]
     .filter(Boolean)
     .join('\n');
@@ -53,7 +82,7 @@ export async function createHelpTicket(
         serviceDeskId: env.JIRA_SERVICE_DESK_ID,
         requestTypeId: env.JIRA_REQUEST_TYPE_ID,
         requestFieldValues: {
-          summary: `VIT ID Help Request: ${input.fullName}`,
+          summary: `VIT ID Help Request: ${escapeInline(input.fullName)}`,
           description,
         },
         raiseOnBehalfOf: input.contactEmail,

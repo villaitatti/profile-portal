@@ -78,6 +78,13 @@ interface SendEmailOptions {
    * and the client picks whichever it can render. Omit to send plaintext-only.
    */
   html?: string;
+  /**
+   * Reply-To address. Set only by the appointee-facing emails, whose recipients
+   * (Fellows) may reply — the no-reply Source otherwise dead-ends their reply.
+   * Deliberately NOT applied globally: admin notifications and automation
+   * reports go to internal staff and keep the no-reply Source.
+   */
+  replyTo?: string;
 }
 
 function buildSesSource(fromName?: string): string {
@@ -144,13 +151,10 @@ async function sendEmail(
       ToAddresses: [to],
       ...(options?.bccAddresses?.length ? { BccAddresses: options.bccAddresses } : {}),
     },
-    // Everything ships from the no-reply SES identity, so without a Reply-To an
-    // appointee who answers the VIT ID invitation — which reads as formal
-    // correspondence from a Harvard research center — is replying into a void.
-    // Optional: unset falls back to the previous behaviour.
-    ...(env.APPOINTEE_EMAIL_REPLY_TO
-      ? { ReplyToAddresses: [env.APPOINTEE_EMAIL_REPLY_TO] }
-      : {}),
+    // Reply-To is set per-call, only by the appointee-facing emails (a Fellow
+    // may reply to those, and the Source is no-reply). Admin notifications and
+    // automation reports pass no replyTo and keep the no-reply Source.
+    ...(options?.replyTo ? { ReplyToAddresses: [options.replyTo] } : {}),
     Message: {
       Subject: { Data: subject, Charset: 'UTF-8' },
       Body: messageBody,
@@ -386,6 +390,7 @@ export async function sendBioProjectDescriptionEmail(args: {
     bccAddresses: bccAddresses.length > 0 ? bccAddresses : undefined,
     fromName: env.APPOINTEE_EMAIL_FROM_NAME_BIO,
     html: rendered.html,
+    replyTo: env.APPOINTEE_EMAIL_REPLY_TO || undefined,
   });
 
   return { messageId };
@@ -418,6 +423,7 @@ export async function sendVitIdInvitationEmail(args: {
     bccAddresses: bccAddresses.length > 0 ? bccAddresses : undefined,
     fromName: env.APPOINTEE_EMAIL_FROM_NAME_VIT_ID,
     html: rendered.html,
+    replyTo: env.APPOINTEE_EMAIL_REPLY_TO || undefined,
   });
 
   return { messageId };

@@ -79,22 +79,25 @@ export function DashboardPage() {
         <DashboardPageSkeleton />
       ) : error ? (
         // Distinct from the empty state on purpose: a failed request must not
-        // read as "you have no applications".
-        <EmptyState
-          icon={<AlertCircle className="h-12 w-12 mb-4 text-destructive" />}
-          title="Couldn't load your applications"
-          description="The list is temporarily unavailable. Try again in a moment — your access has not changed."
-          action={
-            <button
-              type="button"
-              onClick={() => void refetch()}
-              disabled={isFetching}
-              className="inline-flex items-center gap-2 rounded-md bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/92 disabled:opacity-50"
-            >
-              {isFetching ? 'Trying again…' : 'Try again'}
-            </button>
-          }
-        />
+        // read as "you have no applications". role="alert" so assistive tech
+        // announces the failure rather than a silent layout swap.
+        <div role="alert">
+          <EmptyState
+            icon={<AlertCircle className="h-12 w-12 mb-4 text-destructive" />}
+            title="Couldn't load your applications"
+            description="The list is temporarily unavailable. Try again in a moment — your access has not changed."
+            action={
+              <button
+                type="button"
+                onClick={() => void refetch()}
+                disabled={isFetching}
+                className="inline-flex items-center gap-2 rounded-md bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/92 disabled:opacity-50"
+              >
+                {isFetching ? 'Trying again…' : 'Try again'}
+              </button>
+            }
+          />
+        </div>
       ) : !apps || apps.length === 0 ? (
         <EmptyState
           icon={<Grid3X3 className="h-12 w-12 mb-4" />}

@@ -18,6 +18,14 @@
 - **Context:** Deliberately deferred during the v0.17.15 production-readiness pass — a major routing bump on launch week costs more risk than the suppressed advisory does. The exception in `pnpm-workspace.yaml` carries the full rationale.
 - **Blocked by:** Nothing.
 
+### Drop the deepmerge-ts audit suppression once Prisma updates its pin
+- **Priority:** P3
+- **What:** GHSA-ggr8-5vv4-36mx (deepmerge-ts <8.0.0) is suppressed in `pnpm-workspace.yaml`'s `auditConfig.ignoreGhsas`. It reaches us only as a transitive dependency of the Prisma CLI (`@prisma/config`), which pins `deepmerge-ts@7.1.5`. Remove the suppression when a Prisma release bumps that pin to the patched 8.x.
+- **Why:** The suppression is sound today — deepmerge-ts runs only during `prisma generate` / `prisma migrate deploy`, its input is our own committed config (never user data), and force-overriding a Prisma-internal dependency to a new major risks breaking migrations at container start. But like any suppression it is a standing claim to re-check.
+- **How:** Periodically `pnpm why deepmerge-ts` after Prisma upgrades; once it resolves to >=8.0.0, delete the `GHSA-ggr8-5vv4-36mx` entry and confirm `pnpm audit --prod` stays green.
+- **Context:** This advisory surfaced spontaneously mid-review (the advisory DB updates continuously) and was blocking the CI `pnpm audit` gate. Exactly the "new upstream advisory blocks deploys" dynamic flagged as L8 in the original readiness review.
+- **Blocked by:** A Prisma release that bumps the pin.
+
 ### Bind SSE tokens to a specific sync run
 - **Priority:** P3
 - **What:** `createSseToken(userId)` mints a 5-minute token that authorises the progress stream for *any* run id, and `sync-admin.routes.ts` discards the `userId` that `verifySseToken` returns.

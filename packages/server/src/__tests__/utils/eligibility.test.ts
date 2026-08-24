@@ -98,6 +98,17 @@ describe('evaluateEligibility', () => {
     expect(result.eligible).toBe(false);
   });
 
+  it('rejects a single fellowship row with unparseable dates even when accepted', () => {
+    // The single-row branch must apply the same date-validity rule as the
+    // multi-row path; otherwise a lone garbage-dated but "accepted" row fell
+    // through classifyFellowship to 'upcoming' and provisioned an account.
+    const result = evaluateEligibility([
+      makeFellowship({ startDate: 'null', endDate: 'null', fellowshipAccepted: true }),
+    ]);
+    expect(result.eligible).toBe(false);
+    expect(result.reason).toBe('single_upcoming_not_accepted');
+  });
+
   it('returns eligible for single past fellowship', () => {
     const ref = new Date('2026-01-01');
     const result = evaluateEligibility([makeFellowship()], ref);
