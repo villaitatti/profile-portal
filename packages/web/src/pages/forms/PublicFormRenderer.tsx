@@ -1,4 +1,6 @@
 import { useId, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import type { FormDef, FormFieldDef, FormSectionIcon } from '@itatti/shared';
 import {
   AlertCircle,
@@ -47,14 +49,16 @@ function resolveDateBound(bound: FormFieldDef['maxDate']): string | undefined {
   return bound === 'today' ? todayInRome() : bound;
 }
 
-function dateConstraintError(field: FormFieldDef, value: unknown): string | null {
+function dateConstraintError(field: FormFieldDef, value: unknown, t: TFunction): string | null {
   if (field.type !== 'date' || typeof value !== 'string' || value === '') return null;
   if (field.minDate && value < field.minDate) {
-    return `Date must be on or after ${field.minDate}`;
+    return t('forms.validation.dateMin', { date: field.minDate });
   }
   const maximum = resolveDateBound(field.maxDate);
   if (maximum && value > maximum) {
-    return field.maxDate === 'today' ? 'Date cannot be in the future' : `Date must be on or before ${maximum}`;
+    return field.maxDate === 'today'
+      ? t('forms.validation.dateFuture')
+      : t('forms.validation.dateMax', { date: maximum });
   }
   return null;
 }
@@ -64,15 +68,14 @@ function dateConstraintError(field: FormFieldDef, value: unknown): string | null
  * when a later refetch of the (now rotated) token fails.
  */
 export function FormSubmittedPanel() {
+  const { t } = useTranslation();
   return (
     <div className="mx-auto max-w-xl rounded-lg border bg-card px-6 py-12 text-center shadow-sm">
       <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
         <CheckCircle2 className="h-9 w-9 text-primary" />
       </div>
-      <h2 className="mb-2 text-2xl font-semibold tracking-tight">Thank you!</h2>
-      <p className="text-muted-foreground">
-        Your form has been submitted successfully. The I Tatti office will review your information. You may now close this window.
-      </p>
+      <h2 className="mb-2 text-2xl font-semibold tracking-tight">{t('forms.thankYouTitle')}</h2>
+      <p className="text-muted-foreground">{t('forms.thankYouBody')}</p>
     </div>
   );
 }
@@ -85,6 +88,7 @@ export function PublicFormRenderer({
   submitIssues,
   isSuccess,
 }: PublicFormRendererProps) {
+  const { t } = useTranslation();
   const [values, setValues] = useState<Record<string, FormValue>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -146,7 +150,7 @@ export function PublicFormRenderer({
           const items = values[field.name];
           const rows = Array.isArray(items) ? items : [];
           if (field.required && rows.length === 0) {
-            newErrors[field.name] = 'This field is required';
+            newErrors[field.name] = t('forms.validation.required');
           }
           rows.forEach((row, rowIndex) => {
             for (const childField of field.fields ?? []) {
@@ -157,10 +161,10 @@ export function PublicFormRenderer({
                 childField.required &&
                 (childValue === undefined || childValue === '' || childValue === false)
               ) {
-                newErrors[errorKey] = 'This field is required';
+                newErrors[errorKey] = t('forms.validation.required');
                 continue;
               }
-              const dateError = dateConstraintError(childField, childValue);
+              const dateError = dateConstraintError(childField, childValue, t);
               if (dateError) newErrors[errorKey] = dateError;
             }
           });
@@ -169,16 +173,16 @@ export function PublicFormRenderer({
         if (field.required) {
           const v = values[field.name];
           if (v === undefined || v === '' || v === false) {
-            newErrors[field.name] = 'This field is required';
+            newErrors[field.name] = t('forms.validation.required');
           }
         }
         if (field.type === 'email' && values[field.name]) {
           const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
           if (!emailRegex.test(String(values[field.name]))) {
-            newErrors[field.name] = 'Please enter a valid email address';
+            newErrors[field.name] = t('forms.validation.emailInvalid');
           }
         }
-        const dateError = dateConstraintError(field, values[field.name]);
+        const dateError = dateConstraintError(field, values[field.name], t);
         if (dateError) newErrors[field.name] = dateError;
       }
     }
@@ -258,7 +262,7 @@ export function PublicFormRenderer({
           className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
         >
           <Send className="h-4 w-4" />
-          {isSubmitting ? 'Submitting...' : 'Submit form'}
+          {isSubmitting ? t('forms.submitting') : t('forms.submit')}
         </button>
       </div>
     </form>
@@ -342,6 +346,7 @@ function FieldRenderer({
   errors: Record<string, string>;
   onChange: (value: FormValue) => void;
 }) {
+  const { t } = useTranslation();
   const reactId = useId();
   const fieldId = `${reactId}-${field.name}`;
   const labelId = `${fieldId}-label`;
@@ -491,8 +496,8 @@ function FieldRenderer({
               displayValue={(value as string) || undefined}
               onSelect={(_, label) => onChange(label)}
               onClear={() => onChange('')}
-              placeholder={field.placeholder || 'Select...'}
-              emptyMessage="No matching options."
+              placeholder={field.placeholder || t('forms.selectPlaceholder')}
+              emptyMessage={t('forms.noMatchingOptions')}
               ariaLabelledBy={labelId}
               ariaDescribedBy={describedBy}
               ariaInvalid={!!error}
@@ -509,7 +514,7 @@ function FieldRenderer({
               options={field.options?.map((opt) => ({ value: opt, label: opt })) ?? []}
               value={(value as string) || ''}
               onSelect={(_, label) => onChange(label)}
-              placeholder={field.placeholder || 'Select...'}
+              placeholder={field.placeholder || t('forms.selectPlaceholder')}
               ariaLabelledBy={labelId}
               ariaDescribedBy={describedBy}
               ariaInvalid={!!error}
@@ -565,10 +570,11 @@ function RepeatableGroupRenderer({
   errors: Record<string, string>;
   onChange: (value: FormValue) => void;
 }) {
+  const { t } = useTranslation();
   const reactId = useId();
   const groupId = `${reactId}-${field.name}`;
   const childFields = field.fields ?? [];
-  const emptyMessage = repeatableGroupEmptyMessage(field);
+  const emptyMessage = repeatableGroupEmptyMessage(field, t);
   const baseInputClass =
     'w-full rounded-md border border-input bg-background px-3.5 py-2.5 text-[0.95rem] ring-offset-background transition-colors placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50';
   const labelClass = 'mb-1.5 block text-sm font-semibold text-foreground';
@@ -607,7 +613,7 @@ function RepeatableGroupRenderer({
           className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
-          {field.addLabel ?? 'Add entry'}
+          {field.addLabel ?? t('forms.group.addEntry')}
         </button>
       </div>
 
@@ -622,16 +628,19 @@ function RepeatableGroupRenderer({
             >
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div className="text-sm font-semibold text-foreground">
-                  {field.itemLabel ?? 'Entry'} {index + 1}
+                  {field.itemLabel ?? t('forms.group.entry')} {index + 1}
                 </div>
                 <button
                   type="button"
                   onClick={() => onChange(value.filter((_, itemIndex) => itemIndex !== index))}
                   className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                  aria-label={`Remove ${(field.itemLabel ?? 'entry').toLowerCase()} ${index + 1}`}
+                  aria-label={t('forms.group.removeItem', {
+                    item: (field.itemLabel ?? t('forms.group.entry')).toLowerCase(),
+                    number: index + 1,
+                  })}
                 >
                   <Trash2 className="h-4 w-4" aria-hidden="true" />
-                  Remove
+                  {t('forms.group.remove')}
                 </button>
               </div>
               <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-12">
@@ -687,8 +696,8 @@ function RepeatableGroupRenderer({
                             displayValue={String(item[childField.name] ?? '') || undefined}
                             onSelect={(_, label) => updateItem(index, childField.name, label)}
                             onClear={() => updateItem(index, childField.name, '')}
-                            placeholder={childField.placeholder || 'Select...'}
-                            emptyMessage="No matching options."
+                            placeholder={childField.placeholder || t('forms.selectPlaceholder')}
+                            emptyMessage={t('forms.noMatchingOptions')}
                             ariaLabelledBy={childLabelId}
                             ariaDescribedBy={describedBy}
                             ariaInvalid={!!childError}
@@ -707,7 +716,7 @@ function RepeatableGroupRenderer({
                             }
                             value={String(item[childField.name] ?? '')}
                             onSelect={(_, label) => updateItem(index, childField.name, label)}
-                            placeholder={childField.placeholder || 'Select...'}
+                            placeholder={childField.placeholder || t('forms.selectPlaceholder')}
                             ariaLabelledBy={childLabelId}
                             ariaDescribedBy={describedBy}
                             ariaInvalid={!!childError}
@@ -772,10 +781,10 @@ function RepeatableGroupRenderer({
   );
 }
 
-function repeatableGroupEmptyMessage(field: FormFieldDef): string {
+function repeatableGroupEmptyMessage(field: FormFieldDef, t: TFunction): string {
   const label = (field.label || field.name).trim();
-  if (!label) return 'No items added.';
-  return `No ${label.toLowerCase()} added.`;
+  if (!label) return t('forms.group.emptyNoLabel');
+  return t('forms.group.empty', { label: label.toLowerCase() });
 }
 
 function RequiredMark() {

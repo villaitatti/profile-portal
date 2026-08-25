@@ -247,9 +247,9 @@ describe('EmailsPage — Sent emails tab — table rendering', () => {
       </Wrapper>
     );
     // Status text appears as both filter buttons and table badges
-    expect(screen.getAllByText('SENT').length).toBeGreaterThanOrEqual(2);
-    expect(screen.getAllByText('FAILED').length).toBeGreaterThanOrEqual(2);
-    expect(screen.getAllByText('PENDING').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('Sent').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('Failed').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('Pending').length).toBeGreaterThanOrEqual(2);
   });
 
   it('formats "claim_auto" triggered-by as "Auto on claim"', () => {
@@ -286,6 +286,14 @@ describe('EmailsPage — Sent emails tab — table rendering', () => {
 
 // ─── Sent Emails Tab — Filters ───────────────────────────────────────────────
 
+// The Base UI Select opens the trigger via keyboard here: its click-through
+// protection ignores mouse clicks that land too soon after a previous
+// pointerup, and jsdom timestamps make consecutive tests look instantaneous.
+async function openSelect(user: ReturnType<typeof userEvent.setup>, name: RegExp) {
+  screen.getByRole('combobox', { name }).focus();
+  await user.keyboard('{Enter}');
+}
+
 describe('EmailsPage — Sent emails tab — filters', () => {
   it('filters by academic year', async () => {
     const user = userEvent.setup();
@@ -296,8 +304,9 @@ describe('EmailsPage — Sent emails tab — filters', () => {
       </Wrapper>
     );
 
-    await user.click(screen.getByRole('combobox', { name: /filter by academic year/i }));
-    await user.click(screen.getByRole('option', { name: '2024-2025' }));
+    await openSelect(user, /filter by academic year/i);
+    // Base UI mounts the select popup asynchronously, so query options with findByRole.
+    await user.click(await screen.findByRole('option', { name: '2024-2025' }));
 
     // Only Elena (2024-2025) should appear
     expect(screen.getByText('Elena Petrova')).toBeInTheDocument();
@@ -314,8 +323,9 @@ describe('EmailsPage — Sent emails tab — filters', () => {
       </Wrapper>
     );
 
-    await user.click(screen.getByRole('combobox', { name: /filter by email type/i }));
-    await user.click(screen.getByRole('option', { name: 'VIT ID Invitation' }));
+    await openSelect(user, /filter by email type/i);
+    // Base UI mounts the select popup asynchronously, so query options with findByRole.
+    await user.click(await screen.findByRole('option', { name: 'VIT ID Invitation' }));
 
     // Only James (VIT_ID_INVITATION) should appear
     expect(screen.getByText('James Chen')).toBeInTheDocument();
@@ -330,7 +340,7 @@ describe('EmailsPage — Sent emails tab — filters', () => {
       </Wrapper>
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'FAILED status filter' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Failed status filter' }));
 
     // Only James (FAILED) should appear in the table
     expect(screen.getByText('James Chen')).toBeInTheDocument();
@@ -346,7 +356,7 @@ describe('EmailsPage — Sent emails tab — filters', () => {
       </Wrapper>
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'SKIPPED status filter' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Skipped status filter' }));
 
     expect(screen.getByText('No emails match these filters')).toBeInTheDocument();
   });
@@ -443,7 +453,7 @@ describe('EmailsPage — Sent emails tab — pagination', () => {
     await user.click(screen.getByRole('button', { name: 'Load more' }));
     await waitFor(() => expect(screen.getByText('Elena Petrova')).toBeInTheDocument());
 
-    await user.click(screen.getByRole('button', { name: 'FAILED status filter' }));
+    await user.click(screen.getByRole('button', { name: 'Failed status filter' }));
 
     await waitFor(() => expect(screen.queryByText('Elena Petrova')).not.toBeInTheDocument());
     expect(screen.getByText('James Chen')).toBeInTheDocument();

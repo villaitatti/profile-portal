@@ -1,5 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation, Trans } from 'react-i18next';
+import { formatHumanDateTime } from '@/lib/dates';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { SearchableCombobox } from '@/components/shared/SearchableCombobox';
@@ -33,17 +35,8 @@ function AtlassianLogo() {
 
 const ATLASSIAN_ADMIN_GROUPS_URL = 'https://admin.atlassian.com/o/7j8d9220-k660-19jk-j9c1-jbba1kc9b2jd/groups';
 
-function formatDateTime(dateStr: string): string {
-  return new Intl.DateTimeFormat('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(dateStr));
-}
-
 export function AtlassianMappingsPage() {
+  const { t, i18n } = useTranslation();
   const {
     data: mappings,
     isLoading: mappingsLoading,
@@ -148,7 +141,7 @@ export function AtlassianMappingsPage() {
         // A duplicate mapping comes back as 409 with a usable message; without
         // this the Add button just did nothing.
         onError: (err) =>
-          toast.error(err instanceof Error ? err.message : 'Failed to add the mapping.'),
+          toast.error(err instanceof Error ? err.message : t('admin.atlassian.mappings.addFailed')),
       }
     );
   };
@@ -160,7 +153,7 @@ export function AtlassianMappingsPage() {
       // Deliberately leaves the dialog open so the admin can retry or cancel
       // rather than being dropped back to a list that still shows the mapping.
       onError: (err) =>
-        toast.error(err instanceof Error ? err.message : 'Failed to delete the mapping.'),
+        toast.error(err instanceof Error ? err.message : t('admin.atlassian.mappings.deleteFailed')),
     });
   };
 
@@ -189,8 +182,8 @@ export function AtlassianMappingsPage() {
   return (
     <div>
       <PageHeader
-        title="Manage Group Mapping"
-        description="Map Auth0 roles to Atlassian managed groups. Only mapped roles will be synced."
+        title={t('admin.atlassian.mappings.title')}
+        description={t('admin.atlassian.mappings.description')}
       />
 
       {loadError && (
@@ -198,20 +191,21 @@ export function AtlassianMappingsPage() {
           <div className="flex items-center gap-2">
             <AlertCircle className="h-5 w-5 flex-shrink-0 text-destructive" />
             <p className="flex-1 text-sm text-destructive">
-              Couldn't load {[
-                mappingsError && 'the existing mappings',
-                rolesError && 'the Auth0 roles',
-                groupsError && 'the Atlassian groups',
-              ]
-                .filter(Boolean)
-                .join(', ')}
-              . What you see below is incomplete — reload before adding or deleting anything.
+              {t('admin.atlassian.mappings.loadError', {
+                items: [
+                  mappingsError && t('admin.atlassian.mappings.loadErrorMappings'),
+                  rolesError && t('admin.atlassian.mappings.loadErrorRoles'),
+                  groupsError && t('admin.atlassian.mappings.loadErrorGroups'),
+                ]
+                  .filter(Boolean)
+                  .join(t('admin.atlassian.mappings.listSeparator')),
+              })}
             </p>
             <button
               onClick={retryLoad}
               className="inline-flex items-center gap-1 rounded-md border border-destructive/30 px-3 py-1.5 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10"
             >
-              Retry
+              {t('common.retry')}
             </button>
           </div>
         </div>
@@ -219,30 +213,34 @@ export function AtlassianMappingsPage() {
 
       {/* Card 1: Add New Mapping */}
       <div className="mb-6 rounded-xl border bg-card p-6">
-        <h2 className="mb-4 text-xl font-semibold tracking-tight">Add New Mapping</h2>
+        <h2 className="mb-4 text-xl font-semibold tracking-tight">{t('admin.atlassian.mappings.addNew')}</h2>
 
         {/* Instructions */}
         <div className="mb-6 rounded-lg border border-border bg-secondary/45 p-5">
           <div className="flex gap-3">
             <Info className="mt-0.5 h-5 w-5 flex-shrink-0 text-primary" />
             <div className="space-y-2 text-[0.95rem] leading-7 text-muted-foreground">
+              <p>{t('admin.atlassian.mappings.instructions1')}</p>
               <p>
-                Select a role from the Auth0 dropdown and a group from the Atlassian Cloud dropdown.
+                <Trans
+                  i18nKey="admin.atlassian.mappings.instructions2"
+                  components={{ strong: <strong /> }}
+                />
               </p>
               <p>
-                If the group you need doesn't exist in the dropdown, type the name (no spaces) and click <strong>Create new: "[name]"</strong>. The group will be created during the next sync.
-              </p>
-              <p>
-                You can view all existing groups in the{' '}
-                <a
-                  href={ATLASSIAN_ADMIN_GROUPS_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-medium underline hover:no-underline"
-                >
-                  Atlassian Cloud admin
-                </a>
-                . Groups synced from Auth0 have a lock icon, while others were created manually. To sync an existing manually-created group, note its members, delete the group in Atlassian Cloud, create a new group from the form below, and sync users from the "Sync Users to Atlassian Cloud" page.
+                <Trans
+                  i18nKey="admin.atlassian.mappings.instructions3"
+                  components={{
+                    adminLink: (
+                      <a
+                        href={ATLASSIAN_ADMIN_GROUPS_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-medium underline hover:no-underline"
+                      />
+                    ),
+                  }}
+                />
               </p>
             </div>
           </div>
@@ -253,14 +251,14 @@ export function AtlassianMappingsPage() {
           <div className="flex items-end gap-3 mb-4">
             <div className="flex-1">
               <label className="mb-1.5 flex items-center text-[0.95rem] font-medium">
-                <Auth0Logo /> Auth0 Role
+                <Auth0Logo /> {t('admin.atlassian.mappings.auth0Role')}
               </label>
               <SearchableCombobox
                 options={roleOptions}
                 value={selectedRoleId}
                 onSelect={handleRoleSelect}
                 onClear={() => { setSelectedRoleId(''); setSelectedRoleName(''); }}
-                placeholder="Select Auth0 role"
+                placeholder={t('admin.atlassian.mappings.selectRole')}
               />
             </div>
 
@@ -268,7 +266,7 @@ export function AtlassianMappingsPage() {
 
             <div className="flex-1">
               <label className="mb-1.5 flex items-center text-[0.95rem] font-medium">
-                <AtlassianLogo /> Atlassian Group
+                <AtlassianLogo /> {t('admin.atlassian.mappings.atlassianGroup')}
               </label>
               <SearchableCombobox
                 options={groupOptions}
@@ -276,18 +274,18 @@ export function AtlassianMappingsPage() {
                 displayValue={isNewGroup ? selectedGroupName : undefined}
                 onSelect={handleGroupSelect}
                 onClear={() => { setSelectedGroupId(null); setSelectedGroupName(''); setIsNewGroup(false); }}
-                placeholder="Select Atlassian group"
+                placeholder={t('admin.atlassian.mappings.selectGroup')}
                 allowCreate
                 onCreateNew={handleGroupCreateNew}
                 disallowChars=" "
-                emptyMessage="No groups found. Type to create a new one."
+                emptyMessage={t('admin.atlassian.mappings.noGroupsFound')}
               />
             </div>
           </div>
 
           {isNewGroup && selectedGroupName && (
             <p className="mb-3 text-[0.82rem] italic text-muted-foreground">
-              New group &ldquo;{selectedGroupName}&rdquo; will be created during sync.
+              {t('admin.atlassian.mappings.newGroupNotice', { name: selectedGroupName })}
             </p>
           )}
 
@@ -297,23 +295,22 @@ export function AtlassianMappingsPage() {
             className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             <Plus className="h-4 w-4" />
-            Add Mapping
+            {t('admin.atlassian.mappings.add')}
           </button>
         </div>
       </div>
 
       {/* Card 2: Group Mappings */}
       <div className="rounded-xl border bg-card p-6">
-        <h2 className="mb-4 text-xl font-semibold tracking-tight">Group Mappings</h2>
+        <h2 className="mb-4 text-xl font-semibold tracking-tight">{t('admin.atlassian.mappings.listTitle')}</h2>
 
         {mappingsError ? (
           <p className="py-8 text-center text-[0.95rem] text-destructive">
-            The mapping list could not be loaded, so it is not shown here. This does not mean no
-            mappings exist — retry above before changing anything.
+            {t('admin.atlassian.mappings.listLoadFailed')}
           </p>
         ) : !hasMappings ? (
           <p className="py-8 text-center text-[0.95rem] text-muted-foreground">
-            No mappings configured. Use the form above to add your first mapping.
+            {t('admin.atlassian.mappings.empty')}
           </p>
         ) : (
           <>
@@ -321,7 +318,7 @@ export function AtlassianMappingsPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <input
                 type="text"
-                placeholder="Filter by Auth0 role or Atlassian group..."
+                placeholder={t('admin.atlassian.mappings.filterPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full rounded-md border bg-background py-2.5 pl-10 pr-4 text-base outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
@@ -330,19 +327,19 @@ export function AtlassianMappingsPage() {
 
             {filteredMappings.length === 0 ? (
               <p className="py-8 text-center text-[0.95rem] text-muted-foreground">
-                No mappings match &ldquo;{searchQuery}&rdquo;.
+                {t('admin.atlassian.mappings.noMatch', { query: searchQuery })}
               </p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-[0.95rem]">
                   <thead>
                     <tr className="border-b text-left">
-                      <SortHeader field="auth0RoleName" label="Auth0 Role" current={sortField} dir={sortDir} onSort={toggleSort} />
-                      <SortHeader field="atlassianGroupName" label="Atlassian Group" current={sortField} dir={sortDir} onSort={toggleSort} />
-                      <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Auth0 Role ID</th>
-                      <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Atlassian Group ID</th>
-                      <SortHeader field="createdBy" label="Added By" current={sortField} dir={sortDir} onSort={toggleSort} />
-                      <SortHeader field="createdAt" label="Added On" current={sortField} dir={sortDir} onSort={toggleSort} />
+                      <SortHeader field="auth0RoleName" label={t('admin.atlassian.mappings.auth0Role')} current={sortField} dir={sortDir} onSort={toggleSort} />
+                      <SortHeader field="atlassianGroupName" label={t('admin.atlassian.mappings.atlassianGroup')} current={sortField} dir={sortDir} onSort={toggleSort} />
+                      <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">{t('admin.atlassian.mappings.colAuth0RoleId')}</th>
+                      <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">{t('admin.atlassian.mappings.colAtlassianGroupId')}</th>
+                      <SortHeader field="createdBy" label={t('admin.atlassian.mappings.colAddedBy')} current={sortField} dir={sortDir} onSort={toggleSort} />
+                      <SortHeader field="createdAt" label={t('admin.atlassian.mappings.colAddedOn')} current={sortField} dir={sortDir} onSort={toggleSort} />
                       <th className="w-12 pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground"></th>
                     </tr>
                   </thead>
@@ -353,17 +350,17 @@ export function AtlassianMappingsPage() {
                         <td className="py-3">{m.atlassianGroupName}</td>
                         <td className="py-3 text-[0.78rem] font-mono text-muted-foreground">{m.auth0RoleId}</td>
                         <td className="py-3 text-[0.78rem] font-mono text-muted-foreground">
-                          {m.atlassianGroupId || <span className="italic">new (will be created)</span>}
+                          {m.atlassianGroupId || <span className="italic">{t('admin.atlassian.mappings.newWillBeCreated')}</span>}
                         </td>
                         <td className="py-3 text-[0.92rem] text-muted-foreground">{m.createdBy || '—'}</td>
                         <td className="whitespace-nowrap py-3 text-[0.92rem] text-muted-foreground">
-                          {formatDateTime(m.createdAt)}
+                          {formatHumanDateTime(m.createdAt, i18n.language)}
                         </td>
                         <td className="py-3">
                           <button
                             onClick={() => setDeleteTarget(m)}
                             className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                            aria-label="Remove mapping"
+                            aria-label={t('admin.atlassian.mappings.remove')}
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -384,7 +381,7 @@ export function AtlassianMappingsPage() {
               className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
             >
               <ArrowRight className="h-4 w-4" />
-              Next: Sync Users
+              {t('admin.atlassian.mappings.nextSyncUsers')}
             </Link>
           </div>
         )}
@@ -394,13 +391,16 @@ export function AtlassianMappingsPage() {
         open={!!deleteTarget}
         onConfirm={handleDeleteConfirm}
         onCancel={() => setDeleteTarget(null)}
-        title="Delete Mapping"
+        title={t('admin.atlassian.mappings.deleteTitle')}
         description={
           deleteTarget
-            ? `Delete this mapping? Auth0 role "${deleteTarget.auth0RoleName}" will no longer sync to Atlassian group "${deleteTarget.atlassianGroupName}".`
+            ? t('admin.atlassian.mappings.deleteDescription', {
+                role: deleteTarget.auth0RoleName,
+                group: deleteTarget.atlassianGroupName,
+              })
             : ''
         }
-        confirmLabel="Delete"
+        confirmLabel={t('common.delete')}
         variant="danger"
       />
     </div>

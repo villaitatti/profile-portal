@@ -4,7 +4,7 @@ import { logger } from '../lib/logger.js';
 import { listUsersByRole } from './auth0.service.js';
 import * as scim from './atlassian-scim.service.js';
 import type { ScimUser, ScimGroup } from './atlassian-scim.service.js';
-import type { RoleGroupMapping } from '@prisma/client';
+import type { RoleGroupMapping } from '../generated/prisma/client.js';
 
 // ── Types ──────────────────────────────────────────────────────────
 

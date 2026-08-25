@@ -175,7 +175,7 @@ describe('FormsSubmissionsPage', () => {
     expect(screen.getByText('Full name')).toBeInTheDocument();
     expect(screen.getAllByText('Maria Bianchi').length).toBeGreaterThanOrEqual(2);
     // Date field renders via the local-date parser.
-    expect(screen.getByText('24 Apr 2026')).toBeInTheDocument();
+    expect(screen.getByText('24 April 2026')).toBeInTheDocument();
   });
 
   it('renders "Contact #<id>" for rows with null contactName (CiviCRM-down fallback)', () => {

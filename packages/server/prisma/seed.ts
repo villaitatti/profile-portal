@@ -1,7 +1,19 @@
-import { PrismaClient } from '@prisma/client';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { config as loadDotenv } from 'dotenv';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient } from '../src/generated/prisma/client.js';
 import { KnownRoles } from '@itatti/shared';
 
-const prisma = new PrismaClient();
+// Standalone script: the Prisma 7 client requires a driver adapter (the
+// schema no longer carries env("DATABASE_URL")), so load the root .env the
+// same way prisma.config.ts does and hand the URL to the adapter.
+const rootEnv = resolve(import.meta.dirname, '../../../.env');
+loadDotenv(existsSync(rootEnv) ? { path: rootEnv, quiet: true } : { quiet: true });
+
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL ?? '' }),
+});
 
 async function main() {
   const count = await prisma.application.count();

@@ -1,23 +1,42 @@
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { navSections, apiAccessRules } from '@/config/navigation';
 import { useUserRoles } from '@/hooks/useUserRoles';
 import { hasAnyRole } from '@itatti/shared';
 import { CheckCircle2, LockKeyhole, ShieldCheck } from 'lucide-react';
 
-function formatAudience(requiredRoles?: string[]): string {
-  if (!requiredRoles || requiredRoles.length === 0) return 'Any authenticated user';
-  if (requiredRoles.length === 1) return `${requiredRoles[0]} only`;
-  return requiredRoles.join(' or ');
+function formatAudience(t: TFunction, requiredRoles?: readonly string[]): string {
+  if (!requiredRoles || requiredRoles.length === 0) return t('admin.permissions.anyAuthenticatedUser');
+  if (requiredRoles.length === 1) return t('admin.permissions.roleOnly', { role: requiredRoles[0] });
+  return requiredRoles.join(t('admin.permissions.roleJoin'));
 }
 
+// The API access rules live in the (untranslated) navigation registry; map
+// their literal label/visibleTo strings to i18n keys, falling back to the raw
+// string for any future rule that has no key yet. Route paths stay technical.
+const API_RULE_LABEL_KEYS: Record<string, string> = {
+  'Authenticated portal': 'admin.permissions.apiRuleAuthenticatedPortal',
+  'VIT ID Administration': 'nav.vitIdAdministration',
+  'Portal Settings': 'nav.portalSettings',
+  'Atlassian Cloud': 'nav.atlassianCloud',
+};
+
+const API_RULE_VISIBLE_TO_KEYS: Record<string, string> = {
+  'Any authenticated Auth0 user': 'admin.permissions.visibleToAnyUser',
+  'fellows-admin or staff-IT': 'admin.permissions.visibleToFellowsAdminOrStaffIT',
+  'staff-IT only': 'admin.permissions.visibleToStaffITOnly',
+};
+
 export function AccessPermissionsPage() {
+  const { t } = useTranslation();
   const userRoles = useUserRoles();
 
   return (
     <div className="mx-auto max-w-6xl space-y-10">
       <PageHeader
-        title="Access & Permissions"
-        description="Read-only reference for who can see each portal section and which API areas enforce the same role boundaries."
+        title={t('admin.permissions.title')}
+        description={t('admin.permissions.description')}
       />
 
       <section className="rounded-xl border bg-card p-6">
@@ -25,26 +44,24 @@ export function AccessPermissionsPage() {
           <div className="max-w-3xl">
             <div className="flex items-center gap-2 text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-primary">
               <LockKeyhole className="h-4 w-4" />
-              Read-only
+              {t('admin.permissions.readOnly')}
             </div>
             <h2 className="mt-3 text-xl font-semibold tracking-tight text-foreground">
-              Auth0 controls login; Auth0 roles control portal permissions
+              {t('admin.permissions.authHeading')}
             </h2>
             <p className="mt-2 text-[0.98rem] leading-7 text-muted-foreground">
-              Users need a valid token from the configured Auth0 tenant and API audience to
-              call protected endpoints. Role claims in that token decide which admin
-              sections and admin APIs they can use.
+              {t('admin.permissions.authBody')}
             </p>
           </div>
           <div className="min-w-64 rounded-lg border bg-secondary/35 p-4">
             <p className="text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-              Your current roles
+              {t('admin.permissions.yourCurrentRoles')}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               {userRoles.length > 0 ? (
                 userRoles.map((role) => <RoleBadge key={role} role={role} />)
               ) : (
-                <span className="text-sm text-muted-foreground">No role claims in this session</span>
+                <span className="text-sm text-muted-foreground">{t('admin.permissions.noRoleClaims')}</span>
               )}
             </div>
           </div>
@@ -53,10 +70,11 @@ export function AccessPermissionsPage() {
 
       <section className="space-y-4">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight text-foreground">Menu Visibility</h2>
+          <h2 className="text-xl font-semibold tracking-tight text-foreground">
+            {t('admin.permissions.menuVisibility')}
+          </h2>
           <p className="mt-1 text-[0.98rem] leading-7 text-muted-foreground">
-            The sidebar reads this same navigation registry, so this table follows the
-            menu users actually see.
+            {t('admin.permissions.menuVisibilityDescription')}
           </p>
         </div>
         <div className="overflow-hidden rounded-xl border bg-card">
@@ -65,16 +83,16 @@ export function AccessPermissionsPage() {
               <thead className="border-b bg-muted/45">
                 <tr>
                   <th className="px-4 py-3 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                    Section
+                    {t('admin.permissions.colSection')}
                   </th>
                   <th className="px-4 py-3 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                    Visible To
+                    {t('admin.permissions.colVisibleTo')}
                   </th>
                   <th className="px-4 py-3 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                    Menu Entries
+                    {t('admin.permissions.colMenuEntries')}
                   </th>
                   <th className="px-4 py-3 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                    Your Access
+                    {t('admin.permissions.colYourAccess')}
                   </th>
                 </tr>
               </thead>
@@ -83,12 +101,12 @@ export function AccessPermissionsPage() {
                   const hasAccess =
                     !section.requiredRoles || hasAnyRole(userRoles, section.requiredRoles);
                   return (
-                    <tr key={section.heading ?? 'base'} className="align-top">
+                    <tr key={section.headingKey ?? 'base'} className="align-top">
                       <td className="px-4 py-4 font-semibold text-foreground">
-                        {section.heading ?? 'Base Navigation'}
+                        {section.headingKey ? t(section.headingKey) : t('admin.permissions.baseNavigation')}
                       </td>
                       <td className="px-4 py-4 text-muted-foreground">
-                        {formatAudience(section.requiredRoles)}
+                        {formatAudience(t, section.requiredRoles)}
                       </td>
                       <td className="px-4 py-4">
                         <div className="flex flex-wrap gap-2">
@@ -97,7 +115,7 @@ export function AccessPermissionsPage() {
                               key={item.path}
                               className="inline-flex items-center rounded-full bg-secondary px-2.5 py-1 text-[0.78rem] font-medium text-secondary-foreground"
                             >
-                              {item.label}
+                              {t(item.labelKey)}
                             </span>
                           ))}
                         </div>
@@ -116,16 +134,24 @@ export function AccessPermissionsPage() {
 
       <section className="space-y-4">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight text-foreground">API Access</h2>
+          <h2 className="text-xl font-semibold tracking-tight text-foreground">
+            {t('admin.permissions.apiAccess')}
+          </h2>
           <p className="mt-1 text-[0.98rem] leading-7 text-muted-foreground">
-            Backend route groups enforce these permissions after JWT verification.
+            {t('admin.permissions.apiAccessDescription')}
           </p>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           {apiAccessRules.map((rule) => (
             <article key={rule.label} className="rounded-xl border bg-card p-5">
-              <h3 className="text-lg font-semibold tracking-tight text-foreground">{rule.label}</h3>
-              <p className="mt-1 text-sm font-medium text-primary">{rule.visibleTo}</p>
+              <h3 className="text-lg font-semibold tracking-tight text-foreground">
+                {API_RULE_LABEL_KEYS[rule.label] ? t(API_RULE_LABEL_KEYS[rule.label]) : rule.label}
+              </h3>
+              <p className="mt-1 text-sm font-medium text-primary">
+                {API_RULE_VISIBLE_TO_KEYS[rule.visibleTo]
+                  ? t(API_RULE_VISIBLE_TO_KEYS[rule.visibleTo])
+                  : rule.visibleTo}
+              </p>
               <ul className="mt-4 space-y-2">
                 {rule.access.map((entry) => (
                   <li
@@ -153,11 +179,13 @@ function RoleBadge({ role }: { role: string }) {
 }
 
 function AccessBadge({ allowed, index }: { allowed: boolean; index: number }) {
+  const { t } = useTranslation();
+
   if (allowed) {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2.5 py-1 text-[0.78rem] font-semibold text-green-700">
         <CheckCircle2 className="h-3.5 w-3.5" />
-        Visible
+        {t('admin.permissions.visible')}
       </span>
     );
   }
@@ -165,8 +193,8 @@ function AccessBadge({ allowed, index }: { allowed: boolean; index: number }) {
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-[0.78rem] font-semibold text-muted-foreground">
       <ShieldCheck className="h-3.5 w-3.5" />
-      Hidden
-      <span className="sr-only">from section {index + 1}</span>
+      {t('admin.permissions.hidden')}
+      <span className="sr-only">{t('admin.permissions.hiddenFromSection', { number: index + 1 })}</span>
     </span>
   );
 }

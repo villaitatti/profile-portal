@@ -1,18 +1,25 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth0 } from '@auth0/auth0-react';
+import { useTranslation } from 'react-i18next';
+import { LogOut, User } from 'lucide-react';
 import { useProfile } from '@/api/profile';
 import { useUserRoles } from '@/hooks/useUserRoles';
 import { hasAnyRole } from '@itatti/shared';
-import { useUIStore } from '@/stores/ui-store';
-import { navSections } from '@/config/navigation';
-import * as Tooltip from '@radix-ui/react-tooltip';
+import { navSections, type NavItem } from '@/config/navigation';
 import {
-  User,
-  ChevronLeft,
-  ChevronRight,
-  LogOut,
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarRail,
+  useSidebar,
+} from '@/components/ui/sidebar';
 import itattiLogo from '@/assets/itatti-logo.png';
 import itattiMarchio from '@/assets/itatti-marchio.png';
 
@@ -21,10 +28,12 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ onNavigate }: AppSidebarProps) {
+  const { t } = useTranslation();
   const { user, logout } = useAuth0();
   const { data: profile } = useProfile();
   const userRoles = useUserRoles();
-  const { sidebarCollapsed, toggleSidebar } = useUIStore();
+  const { pathname } = useLocation();
+  const { isMobile, setOpenMobile } = useSidebar();
   const avatarUrl = profile?.imageUrl || user?.picture;
 
   const visibleSections = navSections.filter(
@@ -32,140 +41,96 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
       !section.requiredRoles || hasAnyRole(userRoles, section.requiredRoles)
   );
 
-  return (
-    <Tooltip.Provider delayDuration={200} skipDelayDuration={0}>
-    <aside
-      className={cn(
-        'relative sticky top-0 flex h-screen flex-col overflow-visible border-r border-sidebar-border bg-sidebar transition-all duration-300',
-        sidebarCollapsed ? 'w-16' : 'w-64'
-      )}
-    >
-      {/* Logo / Header */}
-      <div className="border-b border-sidebar-border px-4 pb-5 pt-6">
-        <div className="flex items-center">
-          {!sidebarCollapsed ? (
-            <img src={itattiLogo} alt="I Tatti" className="h-8 object-contain" />
-          ) : (
-            <img src={itattiMarchio} alt="I Tatti" className="h-8 object-contain mx-auto" />
-          )}
-          <button
-            onClick={toggleSidebar}
-            className={cn(
-              'p-1.5 rounded-md hover:bg-sidebar-accent text-sidebar-foreground transition-colors',
-              sidebarCollapsed ? 'mx-auto' : 'ml-auto'
-            )}
-            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            {sidebarCollapsed ? (
-              <ChevronRight className="h-4 w-4" />
-            ) : (
-              <ChevronLeft className="h-4 w-4" />
-            )}
-          </button>
-        </div>
-        {!sidebarCollapsed && (
-          <h1 className="mt-3 text-[1.05rem] font-semibold tracking-[0.01em] text-primary">
-            Profile Portal
-          </h1>
-        )}
-      </div>
+  // Selecting a destination should also dismiss the mobile drawer.
+  const handleNavigate = () => {
+    if (isMobile) setOpenMobile(false);
+    onNavigate?.();
+  };
 
-      {/* Navigation */}
-      <nav className="flex-1 space-y-3 overflow-visible py-5" role="navigation" aria-label="Main navigation">
-        {visibleSections.map((section, i) => (
-          <div key={i}>
-            {section.heading && !sidebarCollapsed && (
-              <div className="mb-1 px-4">
-                <span className="text-xs font-semibold uppercase tracking-[0.16em] text-sidebar-muted-foreground">
-                  {section.heading}
-                </span>
-              </div>
-            )}
-            {section.heading && sidebarCollapsed && (
-              <div className="mx-3 mb-3 border-t border-sidebar-border" />
-            )}
-            <div className="space-y-0.5">
-              {section.items.map((item) => (
-                <Tooltip.Root key={item.path}>
-                  <Tooltip.Trigger asChild>
-                    <div>
-                      <NavLink
-                        to={item.path}
-                        end={item.end ?? true}
-                        onClick={onNavigate}
-                        aria-label={sidebarCollapsed ? item.label : undefined}
-                        className={({ isActive }) =>
-                          cn(
-                            'group relative mx-2 flex items-center gap-2.5 rounded-md text-[0.95rem] font-medium leading-5 transition-colors duration-150 ease-out',
-                            isActive
-                              ? 'bg-primary px-3.5 py-2.5 text-white shadow-[0_6px_18px_rgba(171,25,45,0.16)]'
-                              : 'px-3.5 py-2 text-sidebar-foreground hover:bg-sidebar-accent',
-                            sidebarCollapsed && 'justify-center px-2.5',
-                            sidebarCollapsed && isActive && 'py-2.5',
-                            sidebarCollapsed && !isActive && 'py-2'
-                          )
+  // Mirrors NavLink's `end` semantics (default true) for the button highlight.
+  const isItemActive = (item: NavItem) =>
+    (item.end ?? true) ? pathname === item.path : pathname.startsWith(item.path);
+
+  const handleLogout = () =>
+    logout({ logoutParams: { returnTo: window.location.origin } });
+
+  return (
+    <Sidebar collapsible="icon">
+      <SidebarHeader>
+        <div className="flex items-center px-2 pt-2">
+          <img
+            src={itattiLogo}
+            alt="I Tatti"
+            className="h-8 object-contain group-data-[collapsible=icon]:hidden"
+          />
+          <img
+            src={itattiMarchio}
+            alt="I Tatti"
+            className="mx-auto hidden h-8 object-contain group-data-[collapsible=icon]:block"
+          />
+        </div>
+        <h1 className="px-2 text-[1.05rem] font-semibold tracking-[0.01em] text-primary group-data-[collapsible=icon]:hidden">
+          {t('common.appName')}
+        </h1>
+      </SidebarHeader>
+      <SidebarContent>
+        <nav aria-label={t('nav.mainNavigation')} className="contents">
+          {visibleSections.map((section, i) => (
+            <SidebarGroup key={section.headingKey ?? i}>
+              {section.headingKey && (
+                <SidebarGroupLabel>{t(section.headingKey)}</SidebarGroupLabel>
+              )}
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {section.items.map((item) => (
+                    <SidebarMenuItem key={item.path}>
+                      <SidebarMenuButton
+                        isActive={isItemActive(item)}
+                        tooltip={t(item.labelKey)}
+                        render={
+                          <NavLink
+                            to={item.path}
+                            end={item.end ?? true}
+                            onClick={handleNavigate}
+                          />
                         }
                       >
-                        <item.icon className="h-[18px] w-[18px] flex-shrink-0" />
-                        {!sidebarCollapsed && <span>{item.label}</span>}
-                      </NavLink>
-                    </div>
-                  </Tooltip.Trigger>
-                  {sidebarCollapsed && (
-                    <Tooltip.Portal>
-                      <Tooltip.Content
-                        side="right"
-                        sideOffset={8}
-                        className="z-50 rounded-md bg-foreground px-2.5 py-1.5 text-xs font-medium text-background shadow-md"
-                      >
-                        {item.label}
-                        <Tooltip.Arrow className="fill-foreground" />
-                      </Tooltip.Content>
-                    </Tooltip.Portal>
-                  )}
-                </Tooltip.Root>
-              ))}
-            </div>
+                        <item.icon aria-hidden />
+                        <span>{t(item.labelKey)}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ))}
+        </nav>
+      </SidebarContent>
+      <SidebarFooter>
+        <div className="flex items-center gap-3 px-1 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 group-data-[collapsible=icon]:hidden">
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="" className="h-8 w-8 rounded-full" />
+            ) : (
+              <User className="h-4 w-4 text-primary" />
+            )}
           </div>
-        ))}
-      </nav>
-
-      {/* User / Footer */}
-      <div className="border-t border-sidebar-border p-4">
-        {!sidebarCollapsed ? (
-          <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-              {avatarUrl ? (
-                <img src={avatarUrl} alt="" className="h-8 w-8 rounded-full" />
-              ) : (
-                <User className="h-4 w-4 text-primary" />
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="truncate text-[0.95rem] font-medium">{user?.name || user?.email}</p>
-            </div>
-            <button
-              onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}
-              className="p-1.5 rounded-md hover:bg-sidebar-accent text-sidebar-muted-foreground transition-colors flex-shrink-0"
-              aria-label="Sign out"
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
-          </div>
-        ) : (
+          <p className="min-w-0 flex-1 truncate text-[0.95rem] font-medium group-data-[collapsible=icon]:hidden">
+            {user?.name || user?.email}
+          </p>
           <button
-            onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}
-            className="p-1.5 rounded-md hover:bg-sidebar-accent text-sidebar-muted-foreground transition-colors mx-auto block"
-            aria-label="Sign out"
+            onClick={handleLogout}
+            className="flex-shrink-0 rounded-md p-1.5 text-sidebar-muted-foreground transition-colors hover:bg-sidebar-accent"
+            aria-label={t('common.signOut')}
           >
             <LogOut className="h-4 w-4" />
           </button>
-        )}
-        {!sidebarCollapsed && (
-          <p className="mt-3 text-xs tracking-[0.04em] text-sidebar-muted-foreground">v{__APP_VERSION__}</p>
-        )}
-      </div>
-    </aside>
-    </Tooltip.Provider>
+        </div>
+        <p className="px-1 pb-1 text-xs tracking-[0.04em] text-sidebar-muted-foreground group-data-[collapsible=icon]:hidden">
+          v{__APP_VERSION__}
+        </p>
+      </SidebarFooter>
+      <SidebarRail />
+    </Sidebar>
   );
 }

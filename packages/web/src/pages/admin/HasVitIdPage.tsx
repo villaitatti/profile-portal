@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { VitIdStatusBadge } from '@/components/shared/VitIdStatusBadge';
 import { useVitIdLookup } from '@/api/vit-id-lookup';
@@ -6,6 +7,7 @@ import { Search, AlertCircle, XCircle } from 'lucide-react';
 import type { Auth0Candidate } from '@itatti/shared';
 
 export function HasVitIdPage() {
+  const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
 
   const handleSearchChange = useCallback(
@@ -26,8 +28,8 @@ export function HasVitIdPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <PageHeader
-        title="Has VIT ID?"
-        description="Check whether someone has a VIT ID account"
+        title={t('fellows.hasVitId.title')}
+        description={t('fellows.hasVitId.description')}
       />
 
       <div className="rounded-xl border bg-card p-6">
@@ -37,8 +39,8 @@ export function HasVitIdPage() {
             type="text"
             value={searchQuery}
             onChange={handleSearchChange}
-            placeholder="Search by name or paste an email address..."
-            aria-label="Search by name or email"
+            placeholder={t('fellows.hasVitId.searchPlaceholder')}
+            aria-label={t('fellows.hasVitId.searchAria')}
             className="w-full rounded-md border bg-background py-2.5 pl-10 pr-4 text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
         </div>
@@ -46,12 +48,12 @@ export function HasVitIdPage() {
         <div className="mt-4">
           {trimmed.length === 0 ? (
             <p className="text-[0.95rem] text-muted-foreground">
-              Type a name or an email address to check.
+              {t('fellows.hasVitId.prompt')}
             </p>
           ) : lookup.isLoading || !dataIsFresh ? (
             <div className="flex items-center gap-2 text-[0.95rem] text-muted-foreground">
               <div className="h-4 w-4 border-2 border-muted-foreground border-t-transparent rounded-full animate-spin" />
-              Searching...
+              {t('fellows.hasVitId.searching')}
             </div>
           ) : lookup.isError ? (
             <ErrorPanel onRetry={() => lookup.refetch()} />
@@ -64,8 +66,7 @@ export function HasVitIdPage() {
 
         {trimmed.length > 0 && !looksLikeEmail && (
           <p className="mt-3 text-[0.82rem] text-muted-foreground">
-            Tip: to check a specific email (including old emails a fellow may
-            have used), paste the full email address.
+            {t('fellows.hasVitId.tip')}
           </p>
         )}
       </div>
@@ -80,13 +81,12 @@ function EmailLookupResult({
   data: import('@itatti/shared').FellowMatch;
   query: string;
 }) {
+  const { t } = useTranslation();
   if (data.status === 'no-account') {
     return (
       <div className="flex items-center gap-2 text-[0.95rem] text-muted-foreground">
         <XCircle className="h-5 w-5" aria-hidden="true" />
-        <span>
-          No account found for &ldquo;{query}&rdquo;. They may not have claimed their VIT ID yet.
-        </span>
+        <span>{t('fellows.hasVitId.noAccountFor', { query })}</span>
       </div>
     );
   }
@@ -107,7 +107,7 @@ function EmailLookupResult({
       </div>
       {matched && (
         <p className="text-[0.95rem]">
-          VIT ID on file under: <span className="font-mono">{matched.email}</span>
+          {t('fellows.hasVitId.vitIdOnFileUnder')} <span className="font-mono">{matched.email}</span>
           {matched.name && (
             <span className="text-muted-foreground"> ({matched.name})</span>
           )}
@@ -124,13 +124,12 @@ function NameSearchResult({
   candidates: Auth0Candidate[];
   query: string;
 }) {
+  const { t } = useTranslation();
   if (candidates.length === 0) {
     return (
       <div className="flex items-center gap-2 text-[0.95rem] text-muted-foreground">
         <XCircle className="h-5 w-5" aria-hidden="true" />
-        <span>
-          No one matching &ldquo;{query}&rdquo; has a VIT ID yet.
-        </span>
+        <span>{t('fellows.hasVitId.noOneMatching', { query })}</span>
       </div>
     );
   }
@@ -138,16 +137,16 @@ function NameSearchResult({
   return (
     <div>
       <p className="mb-3 text-[0.95rem] text-muted-foreground">
-        {candidates.length} match{candidates.length === 1 ? '' : 'es'} for &ldquo;{query}&rdquo;:
+        {t('fellows.hasVitId.matchesFor', { count: candidates.length, query })}
       </p>
       <ul className="divide-y rounded-md border bg-background">
         {candidates.map((c) => (
           <li key={c.userId} className="flex flex-col gap-0.5 px-4 py-3">
-            <span className="font-medium">{c.name ?? '(no name on file)'}</span>
+            <span className="font-medium">{c.name ?? t('fellows.hasVitId.noNameOnFile')}</span>
             <span className="font-mono text-[0.9rem] text-muted-foreground">{c.email}</span>
             {c.civicrmId && (
               <span className="text-[0.8rem] text-muted-foreground/80">
-                civicrm_id: {c.civicrmId}
+                {t('fellows.hasVitId.civicrmId', { id: c.civicrmId })}
               </span>
             )}
           </li>
@@ -158,19 +157,20 @@ function NameSearchResult({
 }
 
 function ErrorPanel({ onRetry }: { onRetry: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
       <div className="flex items-center gap-2">
         <AlertCircle className="h-5 w-5 text-amber-600" />
         <p className="text-sm text-amber-800">
-          Search failed. Try again.
+          {t('fellows.hasVitId.searchFailed')}
         </p>
       </div>
       <button
         onClick={onRetry}
         className="mt-2 text-sm text-amber-700 underline hover:no-underline"
       >
-        Retry
+        {t('common.retry')}
       </button>
     </div>
   );

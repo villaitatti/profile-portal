@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useRef } from 'react';
-import * as Tabs from '@radix-ui/react-tabs';
-import * as Dialog from '@radix-ui/react-dialog';
+import { Trans, useTranslation } from 'react-i18next';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Sheet, SheetClose, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
@@ -19,42 +20,38 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatHumanDateTime } from '@/lib/dates';
+import type { TFunction } from 'i18next';
 
 type StatusFilter = EmailEvent['status'];
 type TypeFilter = EmailEvent['emailType'];
 type SortField = 'enqueuedAt' | 'sentAt';
 type SortDir = 'asc' | 'desc';
 
-function formatDateTime(dateStr: string): string {
-  return new Intl.DateTimeFormat('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(dateStr));
-}
-
-function parseTriggeredBy(raw: string): { label: string; auth0Id?: string } {
-  if (raw === 'claim_auto') return { label: 'Auto on claim' };
+function parseTriggeredBy(
+  raw: string,
+  t: TFunction
+): { label: string; auth0Id?: string } {
+  if (raw === 'claim_auto') return { label: t('fellows.emails.triggeredAuto') };
   if (raw.startsWith('admin_manual:')) {
     const parts = raw.replace('admin_manual:', '').split(':');
     if (parts.length >= 2) {
       const auth0Id = parts[0];
       const name = parts.slice(1).join(':');
-      return { label: `Manual (${name})`, auth0Id };
+      return { label: t('fellows.emails.triggeredManual', { name }), auth0Id };
     }
-    return { label: `Manual (${parts[0]})`, auth0Id: parts[0] };
+    return {
+      label: t('fellows.emails.triggeredManual', { name: parts[0] }),
+      auth0Id: parts[0],
+    };
   }
   return { label: raw };
 }
 
-function formatTriggeredBy(raw: string): string {
-  return parseTriggeredBy(raw).label;
-}
-
-function formatEmailType(type: EmailEvent['emailType']): string {
-  return type === 'VIT_ID_INVITATION' ? 'VIT ID Invitation' : 'Bio & Project';
+function formatEmailType(type: EmailEvent['emailType'], t: TFunction): string {
+  return type === 'VIT_ID_INVITATION'
+    ? t('fellows.emails.typeVitId')
+    : t('fellows.emails.typeBio');
 }
 
 const STATUS_STYLES: Record<EmailEvent['status'], string> = {
@@ -66,12 +63,17 @@ const STATUS_STYLES: Record<EmailEvent['status'], string> = {
 };
 
 function StatusBadge({ status, failureReason }: { status: EmailEvent['status']; failureReason?: string | null }) {
+  const { t } = useTranslation();
   return (
     <span
       className={cn('inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium', STATUS_STYLES[status])}
-      title={status === 'SKIPPED' && failureReason ? `Skipped at dispatch time. Reason: ${failureReason}` : undefined}
+      title={
+        status === 'SKIPPED' && failureReason
+          ? t('fellows.emails.skippedTitle', { reason: failureReason })
+          : undefined
+      }
     >
-      {status}
+      {t(`fellows.emails.status.${status}`)}
     </span>
   );
 }
@@ -79,6 +81,7 @@ function StatusBadge({ status, failureReason }: { status: EmailEvent['status']; 
 // --- Sent Emails Tab ---
 
 function SentEmailsTab() {
+  const { t, i18n } = useTranslation();
   const [yearFilter, setYearFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<TypeFilter | 'all'>('all');
   const [statusFilters, setStatusFilters] = useState<Set<StatusFilter>>(new Set());
@@ -188,18 +191,18 @@ function SentEmailsTab() {
     } catch {
       // The cursor is kept so the same page can be retried; the rows already
       // loaded stay on screen.
-      setLoadMoreError('Could not load more emails.');
+      setLoadMoreError(t('fellows.emails.loadMoreFailed'));
     } finally {
       setLoadingMore(false);
     }
-  }, [nextCursor, loadingMore, getToken, yearFilter, typeFilter, statusParam]);
+  }, [nextCursor, loadingMore, getToken, yearFilter, typeFilter, statusParam, t]);
 
   if (isLoading) return <EmailsSkeleton />;
   if (error) {
     return (
       <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-6 text-center">
         <AlertCircle className="mx-auto mb-2 h-8 w-8 text-destructive" />
-        <p className="text-sm text-destructive">Failed to load emails. Please try again.</p>
+        <p className="text-sm text-destructive">{t('fellows.emails.loadFailed')}</p>
       </div>
     );
   }
@@ -210,8 +213,8 @@ function SentEmailsTab() {
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <input
           type="search"
-          placeholder="Search by name..."
-          aria-label="Search by appointee name"
+          placeholder={t('fellows.emails.searchPlaceholder')}
+          aria-label={t('fellows.emails.searchAria')}
           value={nameSearch}
           onChange={(e) => setNameSearch(e.target.value)}
           className="rounded-md border border-input bg-background px-3 py-1.5 text-sm w-48"
@@ -219,39 +222,39 @@ function SentEmailsTab() {
 
         <SelectDropdown
           id="email-year-filter"
-          ariaLabel="Filter by academic year"
+          ariaLabel={t('fellows.emails.yearFilterAria')}
           options={[
-            { value: 'all', label: 'All years' },
+            { value: 'all', label: t('fellows.emails.allYears') },
             ...academicYears.map((year) => ({ value: year, label: year })),
           ]}
           value={yearFilter}
           allowEmpty={false}
           onSelect={(year) => setYearFilter(year)}
-          placeholder="All years"
+          placeholder={t('fellows.emails.allYears')}
           className="h-9 min-w-[130px] px-3 py-1.5 text-sm"
         />
 
         <SelectDropdown
           id="email-type-filter"
-          ariaLabel="Filter by email type"
+          ariaLabel={t('fellows.emails.typeFilterAria')}
           options={[
-            { value: 'all', label: 'All types' },
-            { value: 'VIT_ID_INVITATION', label: 'VIT ID Invitation' },
-            { value: 'BIO_PROJECT_DESCRIPTION', label: 'Bio & Project' },
+            { value: 'all', label: t('fellows.emails.allTypes') },
+            { value: 'VIT_ID_INVITATION', label: t('fellows.emails.typeVitId') },
+            { value: 'BIO_PROJECT_DESCRIPTION', label: t('fellows.emails.typeBio') },
           ]}
           value={typeFilter}
           allowEmpty={false}
           onSelect={(type) => setTypeFilter(type as TypeFilter | 'all')}
-          placeholder="All types"
+          placeholder={t('fellows.emails.allTypes')}
           className="h-9 min-w-[150px] px-3 py-1.5 text-sm"
         />
 
-        <div className="flex items-center gap-1.5" role="group" aria-label="Filter by status">
+        <div className="flex items-center gap-1.5" role="group" aria-label={t('fellows.emails.statusGroupAria')}>
           {(['PENDING', 'SENDING', 'SENT', 'FAILED', 'SKIPPED'] as StatusFilter[]).map((s) => (
             <button
               key={s}
               onClick={() => toggleStatus(s)}
-              aria-label={`${s} status filter`}
+              aria-label={t('fellows.emails.statusFilterAria', { status: t(`fellows.emails.status.${s}`) })}
               aria-pressed={statusFilters.has(s)}
               className={cn(
                 'rounded-full px-2.5 py-0.5 text-xs font-medium transition-opacity',
@@ -259,7 +262,7 @@ function SentEmailsTab() {
                 statusFilters.size > 0 && !statusFilters.has(s) && 'opacity-40'
               )}
             >
-              {s}
+              {t(`fellows.emails.status.${s}`)}
             </button>
           ))}
         </div>
@@ -268,28 +271,28 @@ function SentEmailsTab() {
       {/* Table */}
       {sorted.length === 0 ? (
         <EmptyState
-          title={hasActiveFilters ? 'No emails match these filters' : 'No emails sent yet'}
+          title={hasActiveFilters ? t('fellows.emails.emptyFilteredTitle') : t('fellows.emails.emptyTitle')}
           description={hasActiveFilters
-            ? 'Try adjusting the year, type, or status filters.'
-            : 'Once invitations or bio requests go out, they\'ll appear here.'}
+            ? t('fellows.emails.emptyFilteredDescription')
+            : t('fellows.emails.emptyDescription')}
         />
       ) : (
         <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full text-sm">
             <thead className="border-b border-border bg-muted/50">
               <tr>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Name</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Year</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Type</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t('fellows.emails.colName')}</th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t('fellows.emails.colYear')}</th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t('fellows.emails.colType')}</th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t('fellows.emails.colStatus')}</th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">
                   <button onClick={() => toggleSort('enqueuedAt')} className="inline-flex items-center gap-1 hover:text-foreground">
-                    Enqueued
+                    {t('fellows.emails.colEnqueued')}
                     {sortField === 'enqueuedAt' && (sortDir === 'desc' ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />)}
                   </button>
                 </th>
-                <th className="hidden px-4 py-3 text-left font-medium text-muted-foreground lg:table-cell">Triggered by</th>
-                <th className="w-10 px-4 py-3"><span className="sr-only">Details</span></th>
+                <th className="hidden px-4 py-3 text-left font-medium text-muted-foreground lg:table-cell">{t('fellows.emails.colTriggeredBy')}</th>
+                <th className="w-10 px-4 py-3"><span className="sr-only">{t('fellows.emails.colDetails')}</span></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -307,16 +310,16 @@ function SentEmailsTab() {
                 >
                   <td className="px-4 py-3 font-medium">{event.appointeeName}</td>
                   <td className="px-4 py-3 text-muted-foreground">{event.academicYear}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{formatEmailType(event.emailType)}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{formatEmailType(event.emailType, t)}</td>
                   <td className="px-4 py-3">
                     <StatusBadge status={event.status} failureReason={event.failureReason} />
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground">{formatDateTime(event.enqueuedAt)}</td>
-                  <td className="hidden px-4 py-3 text-muted-foreground lg:table-cell">{formatTriggeredBy(event.triggeredBy)}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{formatHumanDateTime(event.enqueuedAt, i18n.language)}</td>
+                  <td className="hidden px-4 py-3 text-muted-foreground lg:table-cell">{parseTriggeredBy(event.triggeredBy, t).label}</td>
                   <td className="px-4 py-3 text-muted-foreground">
                     <button
                       type="button"
-                      aria-label={`View details for ${event.appointeeName}`}
+                      aria-label={t('fellows.emails.viewDetailsAria', { name: event.appointeeName })}
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelectedEventId(event.id);
@@ -346,7 +349,11 @@ function SentEmailsTab() {
             disabled={loadingMore}
             className="rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"
           >
-            {loadingMore ? 'Loading...' : loadMoreError ? 'Try again' : 'Load more'}
+            {loadingMore
+              ? t('fellows.emails.loading')
+              : loadMoreError
+                ? t('fellows.emails.tryAgain')
+                : t('fellows.emails.loadMore')}
           </button>
         </div>
       )}
@@ -360,6 +367,7 @@ function SentEmailsTab() {
 // --- Drill-in Drawer ---
 
 function EmailDrawer({ event, onClose }: { event: EmailEvent | null; onClose: () => void }) {
+  const { t, i18n } = useTranslation();
   const { data: preview, isLoading: previewLoading, error: previewError } = useEmailEventPreview(event?.id ?? null);
   const [copied, setCopied] = useState(false);
 
@@ -372,17 +380,19 @@ function EmailDrawer({ event, onClose }: { event: EmailEvent | null; onClose: ()
   }, [event?.sesMessageId]);
 
   return (
-    <Dialog.Root open={!!event} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
-        <Dialog.Content className="fixed right-0 top-0 z-50 flex h-full w-[480px] max-w-[90vw] flex-col border-l border-border bg-background shadow-xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right">
+    <Sheet open={!!event} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <SheetContent
+        side="right"
+        showCloseButton={false}
+        className="w-[480px] max-w-[90vw] gap-0 shadow-xl sm:max-w-[480px]"
+      >
           <div className="flex items-center justify-between border-b border-border px-6 py-4">
-            <Dialog.Title className="text-lg font-semibold">Email Details</Dialog.Title>
-            <Dialog.Close asChild>
-              <button className="rounded-md p-1.5 hover:bg-muted" aria-label="Close">
-                <X className="h-4 w-4" />
-              </button>
-            </Dialog.Close>
+            <SheetTitle className="text-lg font-semibold">{t('fellows.emails.drawerTitle')}</SheetTitle>
+            <SheetClose
+              render={<button className="rounded-md p-1.5 hover:bg-muted" aria-label={t('common.close')} />}
+            >
+              <X className="h-4 w-4" />
+            </SheetClose>
           </div>
 
           {event && (
@@ -391,36 +401,36 @@ function EmailDrawer({ event, onClose }: { event: EmailEvent | null; onClose: ()
               <div className="space-y-3">
                 <div className="flex items-center gap-3">
                   <StatusBadge status={event.status} failureReason={event.failureReason} />
-                  <span className="text-sm text-muted-foreground">{formatEmailType(event.emailType)}</span>
+                  <span className="text-sm text-muted-foreground">{formatEmailType(event.emailType, t)}</span>
                 </div>
                 <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
-                  <dt className="text-muted-foreground">Appointee</dt>
+                  <dt className="text-muted-foreground">{t('fellows.emails.appointee')}</dt>
                   <dd className="font-medium">{event.appointeeName}</dd>
-                  <dt className="text-muted-foreground">Academic year</dt>
+                  <dt className="text-muted-foreground">{t('fellows.emails.academicYear')}</dt>
                   <dd>{event.academicYear}</dd>
-                  <dt className="text-muted-foreground">Enqueued</dt>
-                  <dd>{formatDateTime(event.enqueuedAt)}</dd>
+                  <dt className="text-muted-foreground">{t('fellows.emails.colEnqueued')}</dt>
+                  <dd>{formatHumanDateTime(event.enqueuedAt, i18n.language)}</dd>
                   {event.sentAt && (
                     <>
-                      <dt className="text-muted-foreground">Sent</dt>
-                      <dd>{formatDateTime(event.sentAt)}</dd>
+                      <dt className="text-muted-foreground">{t('fellows.emails.sent')}</dt>
+                      <dd>{formatHumanDateTime(event.sentAt, i18n.language)}</dd>
                     </>
                   )}
                   {event.status === 'FAILED' && (
                     <>
-                      <dt className="text-muted-foreground">Failed</dt>
-                      <dd>{formatDateTime(event.updatedAt)}</dd>
+                      <dt className="text-muted-foreground">{t('fellows.emails.failed')}</dt>
+                      <dd>{formatHumanDateTime(event.updatedAt, i18n.language)}</dd>
                     </>
                   )}
                   {(() => {
-                    const triggered = parseTriggeredBy(event.triggeredBy);
+                    const triggered = parseTriggeredBy(event.triggeredBy, t);
                     return (
                       <>
-                        <dt className="text-muted-foreground">Triggered by</dt>
+                        <dt className="text-muted-foreground">{t('fellows.emails.colTriggeredBy')}</dt>
                         <dd>{triggered.label}</dd>
                         {triggered.auth0Id && (
                           <>
-                            <dt className="text-muted-foreground">Auth0 ID</dt>
+                            <dt className="text-muted-foreground">{t('fellows.emails.auth0Id')}</dt>
                             <dd className="break-all font-mono text-xs">{triggered.auth0Id}</dd>
                           </>
                         )}
@@ -433,7 +443,7 @@ function EmailDrawer({ event, onClose }: { event: EmailEvent | null; onClose: ()
               {/* Failure reason */}
               {event.status === 'FAILED' && event.failureReason && (
                 <div className="rounded-md border border-destructive/20 bg-destructive/5 px-4 py-3">
-                  <p className="text-sm font-medium text-destructive">Failure reason</p>
+                  <p className="text-sm font-medium text-destructive">{t('fellows.emails.failureReason')}</p>
                   <p className="mt-1 text-sm text-destructive/80">{event.failureReason}</p>
                 </div>
               )}
@@ -441,7 +451,7 @@ function EmailDrawer({ event, onClose }: { event: EmailEvent | null; onClose: ()
               {/* SKIPPED reason */}
               {event.status === 'SKIPPED' && event.failureReason && (
                 <div className="rounded-md border border-border bg-muted/50 px-4 py-3">
-                  <p className="text-sm font-medium text-muted-foreground">Skipped reason</p>
+                  <p className="text-sm font-medium text-muted-foreground">{t('fellows.emails.skippedReason')}</p>
                   <p className="mt-1 text-sm">{event.failureReason}</p>
                 </div>
               )}
@@ -449,12 +459,12 @@ function EmailDrawer({ event, onClose }: { event: EmailEvent | null; onClose: ()
               {/* SES message ID */}
               {event.sesMessageId && (
                 <div className="flex items-center gap-2 rounded-md border border-border px-4 py-2.5">
-                  <span className="text-xs text-muted-foreground">SES ID:</span>
+                  <span className="text-xs text-muted-foreground">{t('fellows.emails.sesId')}</span>
                   <code className="flex-1 truncate text-xs">{event.sesMessageId}</code>
                   <button
                     onClick={copyMessageId}
                     className="rounded p-1 hover:bg-muted"
-                    aria-label="Copy SES message ID"
+                    aria-label={t('fellows.emails.copySesAria')}
                   >
                     {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
                   </button>
@@ -463,18 +473,18 @@ function EmailDrawer({ event, onClose }: { event: EmailEvent | null; onClose: ()
 
               {/* Email preview */}
               <div className="space-y-2">
-                <h3 className="text-sm font-medium">Email preview</h3>
+                <h3 className="text-sm font-medium">{t('fellows.emails.previewHeading')}</h3>
                 <p className="text-xs text-muted-foreground">
-                  Re-rendered with current data; may differ from what was originally sent if the appointee's name has changed.
+                  {t('fellows.emails.previewNote')}
                 </p>
                 {preview?.recipientStatus === 'contact_deleted' && (
                   <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                    Original recipient no longer in CiviCRM. Rendered with placeholder name.
+                    {t('fellows.emails.recipientDeleted')}
                   </div>
                 )}
                 {preview?.recipientStatus === 'no_first_name' && (
                   <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                    Original recipient has no first name on file. Rendered with placeholder name.
+                    {t('fellows.emails.recipientNoFirstName')}
                   </div>
                 )}
                 {previewLoading && (
@@ -484,7 +494,9 @@ function EmailDrawer({ event, onClose }: { event: EmailEvent | null; onClose: ()
                 )}
                 {previewError && (
                   <div className="rounded-md border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-                    Failed to load preview: {(previewError as Error).message}
+                    {t('fellows.emails.previewLoadFailed', {
+                      message: (previewError as Error).message,
+                    })}
                   </div>
                 )}
                 {preview && (
@@ -493,7 +505,7 @@ function EmailDrawer({ event, onClose }: { event: EmailEvent | null; onClose: ()
                     sandbox=""
                     className="w-full rounded-md border border-border"
                     style={{ minHeight: '300px' }}
-                    title="Email preview"
+                    title={t('fellows.emails.previewIframeTitle')}
                   />
                 )}
               </div>
@@ -505,32 +517,34 @@ function EmailDrawer({ event, onClose }: { event: EmailEvent | null; onClose: ()
                   className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
-                  Open in Manage Appointees
+                  {t('fellows.emails.openInManage')}
                 </a>
               )}
             </div>
           )}
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+      </SheetContent>
+    </Sheet>
   );
 }
 
 // --- Templates Tab ---
 
 function TemplatesTab() {
+  const { t } = useTranslation();
   const { data: vitPreview, isLoading: vitLoading, error: vitError } = useTemplatePreview('vit-id-invitation');
   const { data: bioPreview, isLoading: bioLoading, error: bioError } = useTemplatePreview('bio-project-description');
 
   return (
     <div className="space-y-6">
       <p className="text-sm text-muted-foreground">
-        These are read-only references. Edits to the templates happen in{' '}
-        <code className="rounded bg-muted px-1.5 py-0.5 text-xs">packages/server/src/templates/emails/</code>.
+        <Trans
+          i18nKey="fellows.emails.templatesNote"
+          components={{ code: <code className="rounded bg-muted px-1.5 py-0.5 text-xs" /> }}
+        />
       </p>
 
       <TemplateCard
-        title="VIT ID Invitation"
+        title={t('fellows.emails.templateVitTitle')}
         subject={vitPreview?.subject}
         html={vitPreview?.html}
         text={vitPreview?.text}
@@ -540,7 +554,7 @@ function TemplatesTab() {
       />
 
       <TemplateCard
-        title="Bio & Project Description"
+        title={t('fellows.emails.templateBioTitle')}
         subject={bioPreview?.subject}
         html={bioPreview?.html}
         text={bioPreview?.text}
@@ -569,15 +583,22 @@ function TemplateCard({
   isLoading: boolean;
   error: Error | null;
 }) {
+  const { t } = useTranslation();
   const [showText, setShowText] = useState(false);
 
   return (
     <div className="rounded-lg border border-border">
       <div className="border-b border-border px-5 py-4">
         <h3 className="text-base font-semibold">{title}</h3>
-        {subject && <p className="mt-1 text-sm text-muted-foreground">Subject: {subject}</p>}
+        {subject && (
+          <p className="mt-1 text-sm text-muted-foreground">
+            {t('fellows.emails.subject', { subject })}
+          </p>
+        )}
         {bcc && bcc.length > 0 && (
-          <p className="mt-1 text-xs text-muted-foreground">BCC: {bcc.join(', ')}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {t('fellows.emails.bcc', { list: bcc.join(', ') })}
+          </p>
         )}
       </div>
       <div className="p-5">
@@ -588,7 +609,7 @@ function TemplateCard({
         )}
         {error && (
           <div className="rounded-md border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-            Failed to load template preview.
+            {t('fellows.emails.templateLoadFailed')}
           </div>
         )}
         {html && (
@@ -598,12 +619,12 @@ function TemplateCard({
               sandbox=""
               className="w-full rounded-md border border-border"
               style={{ minHeight: '400px' }}
-              title={`${title} preview`}
+              title={t('fellows.emails.templatePreviewTitle', { title })}
             />
             {text && (
               <details className="mt-4" open={showText} onToggle={(e) => setShowText((e.target as HTMLDetailsElement).open)}>
                 <summary className="cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground">
-                  Plain-text version
+                  {t('fellows.emails.plainTextVersion')}
                 </summary>
                 <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-4 text-xs">
                   {text}
@@ -620,40 +641,37 @@ function TemplateCard({
 // --- How Emails Work Tab ---
 
 function HowEmailsWorkTab() {
+  const { t } = useTranslation();
+  // Shared inline-markup slots for the Trans-rendered doc paragraphs. codeSend
+  // carries its own children because "sendAfter <= now" cannot live inside a
+  // translation string (the "<=" breaks the tag parser).
+  const markup = {
+    strong: <strong />,
+    code: <code />,
+    codeSend: <code>sendAfter &lt;= now</code>,
+  };
   return (
     <div className="prose prose-sm max-w-none">
-      <p className="text-muted-foreground">
-        This page explains when and how each email type is sent. The trigger logic lives across
-        three service files; this is the human-readable summary.
-      </p>
+      <p className="text-muted-foreground">{t('fellows.emails.how.intro')}</p>
 
       <div className="mt-6 space-y-4">
         {/* VIT ID Invitation */}
         <details open className="rounded-lg border border-border">
           <summary className="cursor-pointer px-5 py-4 text-base font-semibold hover:bg-muted/30">
-            VIT ID Invitation email
+            {t('fellows.emails.how.vitTitle')}
           </summary>
           <div className="space-y-3 border-t border-border px-5 py-4 text-sm leading-relaxed">
             <p>
-              <strong>Manual only.</strong> There is no automatic trigger. The daily cron explicitly
-              skips VIT_ID_INVITATION rows.
+              <Trans i18nKey="fellows.emails.how.vit1" components={markup} />
             </p>
             <p>
-              Sent when an admin clicks <strong>"Send VIT ID email"</strong> on Manage Appointees.
-              The handler runs eligibility checks (appointee has an accepted fellowship for the year,
-              no existing VIT ID, valid CiviCRM primary email, has a first name on file, not in
-              needs-review state), enqueues a row with no delay, and dispatches synchronously.
+              <Trans i18nKey="fellows.emails.how.vit2" components={markup} />
             </p>
             <p>
-              <strong>Why manual?</strong> Eligibility windows differ per appointee
-              (accepted-but-not-yet-arrived vs. arrived vs. departed), and the email body contains
-              a claim CTA that should be a conscious decision by the sender, not an automatic action.
+              <Trans i18nKey="fellows.emails.how.vit3" components={markup} />
             </p>
             <p>
-              <strong>Idempotency:</strong> if a SENT row already exists for this fellowship, the
-              button refuses with "already sent". If a SENDING row exists (another dispatch is
-              in-flight), it returns the in-flight status without duplicating. Resend after
-              FAILED/SKIPPED creates a new row preserving history.
+              <Trans i18nKey="fellows.emails.how.vit4" components={markup} />
             </p>
           </div>
         </details>
@@ -661,44 +679,30 @@ function HowEmailsWorkTab() {
         {/* Bio & Project Description */}
         <details open className="rounded-lg border border-border">
           <summary className="cursor-pointer px-5 py-4 text-base font-semibold hover:bg-muted/30">
-            Bio & Project Description email
+            {t('fellows.emails.how.bioTitle')}
           </summary>
           <div className="space-y-3 border-t border-border px-5 py-4 text-sm leading-relaxed">
             <p>
-              <strong>Both automatic and manual.</strong>
+              <Trans i18nKey="fellows.emails.how.bio1" components={markup} />
             </p>
             <p>
-              <strong>Automatic trigger:</strong> when an appointee successfully claims their portal
-              account through the Auth0 claim flow. The claim handler enqueues the email with a{' '}
-              <strong>24-hour delay</strong> and <code>triggeredBy: 'claim_auto'</code>. The delay
-              gives the appointee time to settle in before being asked to fill in their bio.
+              <Trans i18nKey="fellows.emails.how.bio2" components={markup} />
             </p>
             <p>
-              <strong>Cron dispatch:</strong> the daily appointee-email cron at{' '}
-              <strong>09:00 Europe/Rome timezone</strong> picks up due BIO rows
-              (<code>sendAfter &lt;= now</code>, status = PENDING) and dispatches them. The cron is
-              gated by env var <code>APPOINTEE_EMAIL_CRON_ENABLED</code>.
+              <Trans i18nKey="fellows.emails.how.bio3" components={markup} />
             </p>
             <p>
-              <strong>Manual trigger:</strong> admin clicks <strong>"Send bio email"</strong> on Manage
-              Appointees. Dispatches immediately (no delay), idempotent against any existing
-              PENDING/SENDING row for the same fellowship.
+              <Trans i18nKey="fellows.emails.how.bio4" components={markup} />
             </p>
             <p>
-              <strong>SKIPPED status:</strong> when an enqueued row reaches dispatch time, the
-              eligibility check re-runs against current CiviCRM/Auth0 state. If eligibility has been
-              lost between enqueue and dispatch (e.g., Auth0 account deleted, fellowship withdrawn,
-              primary email removed), the row transitions to SKIPPED with the specific reason. SKIPPED
-              is a non-error: the system correctly decided not to send.
+              <Trans i18nKey="fellows.emails.how.bio5" components={markup} />
             </p>
           </div>
         </details>
 
         {/* Dev redirect note */}
         <div className="rounded-md border border-border bg-muted/30 px-5 py-3 text-sm text-muted-foreground">
-          <strong>Dev/staging note:</strong> in non-production environments, both emails honor{' '}
-          <code>APPOINTEE_EMAIL_REDIRECT_TO</code> — outbound mail goes to the configured dev
-          inbox and the BCC list is dropped.
+          <Trans i18nKey="fellows.emails.how.devNote" components={markup} />
         </div>
       </div>
     </div>
@@ -724,45 +728,49 @@ function EmailsSkeleton() {
 // --- Main Page ---
 
 export function EmailsPage() {
+  const { t } = useTranslation();
   return (
     <div>
       <PageHeader
-        title="Emails"
-        description="Audit trail of sent emails, template previews, and trigger reference."
+        title={t('fellows.emails.title')}
+        description={t('fellows.emails.description')}
       />
 
-      <Tabs.Root defaultValue="sent" className="space-y-6">
-        <Tabs.List className="flex border-b border-border">
-          <Tabs.Trigger
+      <Tabs defaultValue="sent" className="gap-6">
+        <TabsList
+          variant="line"
+          className="h-auto w-full justify-start gap-0 rounded-none border-b border-border p-0"
+        >
+          <TabsTrigger
             value="sent"
-            className="relative px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground data-[state=active]:text-primary data-[state=active]:after:absolute data-[state=active]:after:bottom-0 data-[state=active]:after:left-0 data-[state=active]:after:right-0 data-[state=active]:after:h-[2px] data-[state=active]:after:bg-primary"
+            className="flex-none px-4 py-2.5 after:bg-primary data-active:text-primary"
           >
-            Sent emails
-          </Tabs.Trigger>
-          <Tabs.Trigger
+            {t('fellows.emails.tabSent')}
+          </TabsTrigger>
+          <TabsTrigger
             value="templates"
-            className="relative px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground data-[state=active]:text-primary data-[state=active]:after:absolute data-[state=active]:after:bottom-0 data-[state=active]:after:left-0 data-[state=active]:after:right-0 data-[state=active]:after:h-[2px] data-[state=active]:after:bg-primary"
+            className="flex-none px-4 py-2.5 after:bg-primary data-active:text-primary"
           >
-            Templates
-          </Tabs.Trigger>
-          <Tabs.Trigger
+            {t('fellows.emails.tabTemplates')}
+          </TabsTrigger>
+          <TabsTrigger
             value="how-it-works"
-            className="relative px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground data-[state=active]:text-primary data-[state=active]:after:absolute data-[state=active]:after:bottom-0 data-[state=active]:after:left-0 data-[state=active]:after:right-0 data-[state=active]:after:h-[2px] data-[state=active]:after:bg-primary"
+            className="flex-none px-4 py-2.5 after:bg-primary data-active:text-primary"
           >
-            How emails work
-          </Tabs.Trigger>
-        </Tabs.List>
+            {t('fellows.emails.tabHow')}
+          </TabsTrigger>
+        </TabsList>
 
-        <Tabs.Content value="sent">
+        <TabsContent value="sent">
           <SentEmailsTab />
-        </Tabs.Content>
-        <Tabs.Content value="templates">
+        </TabsContent>
+        <TabsContent value="templates">
           <TemplatesTab />
-        </Tabs.Content>
-        <Tabs.Content value="how-it-works">
+        </TabsContent>
+        <TabsContent value="how-it-works">
           <HowEmailsWorkTab />
-        </Tabs.Content>
-      </Tabs.Root>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

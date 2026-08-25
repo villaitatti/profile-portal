@@ -1,4 +1,4 @@
-import { Prisma, AppointeeEmailStatus, AppointeeEmailType } from '@prisma/client';
+import { Prisma, AppointeeEmailStatus, AppointeeEmailType } from '../generated/prisma/client.js';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import {

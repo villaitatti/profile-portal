@@ -1,14 +1,17 @@
 import { NavLink } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 
 const tabs = [
-  { label: 'Submissions', path: '/admin/forms', end: true },
-  { label: 'Templates', path: '/admin/forms/templates', end: true },
+  { labelKey: 'admin.formsNav.submissions', path: '/admin/forms', end: true },
+  { labelKey: 'admin.formsNav.templates', path: '/admin/forms/templates', end: true },
 ];
 
 export function FormsSectionNav() {
+  const { t } = useTranslation();
+
   return (
-    <nav className="border-b border-border" aria-label="Forms views">
+    <nav className="border-b border-border" aria-label={t('admin.formsNav.ariaLabel')}>
       <div className="flex gap-1">
         {tabs.map((tab) => (
           <NavLink
@@ -23,7 +26,7 @@ export function FormsSectionNav() {
               )
             }
           >
-            {tab.label}
+            {t(tab.labelKey)}
           </NavLink>
         ))}
       </div>

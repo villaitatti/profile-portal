@@ -1,4 +1,6 @@
 import { useState, useMemo } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
+import { formatHumanDateTime } from '@/lib/dates';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -10,17 +12,8 @@ import { Search, ShieldCheck, Info, ExternalLink, AlertCircle } from 'lucide-rea
 type SortField = 'name' | 'email' | 'status' | 'claimedAt';
 type SortDir = 'asc' | 'desc';
 
-function formatDateTime(dateStr: string): string {
-  return new Intl.DateTimeFormat('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(dateStr));
-}
-
 export function ClaimLogPage() {
+  const { t } = useTranslation();
   const { data: claims, isLoading, error } = useClaims();
   const [searchQuery, setSearchQuery] = useState('');
   const [sortField, setSortField] = useState<SortField>('claimedAt');
@@ -76,12 +69,12 @@ export function ClaimLogPage() {
   if (error) {
     return (
       <div>
-        <PageHeader title="Claim Log" />
+        <PageHeader title={t('admin.claimLog.title')} />
         <div className="flex flex-col items-center justify-center py-16 text-destructive">
           <AlertCircle className="h-12 w-12 mb-4" />
-          <h3 className="text-lg font-medium mb-1">Failed to load claims</h3>
+          <h3 className="text-lg font-medium mb-1">{t('admin.claimLog.loadFailedTitle')}</h3>
           <p className="text-sm text-muted-foreground">
-            {error instanceof Error ? error.message : 'An unexpected error occurred'}
+            {error instanceof Error ? error.message : t('admin.claimLog.unexpectedError')}
           </p>
         </div>
       </div>
@@ -91,8 +84,8 @@ export function ClaimLogPage() {
   return (
     <div>
       <PageHeader
-        title="Claim Log"
-        description="Audit trail of all VIT ID claim attempts"
+        title={t('admin.claimLog.title')}
+        description={t('admin.claimLog.description')}
       />
 
       <div className="rounded-xl border bg-card p-6">
@@ -101,21 +94,11 @@ export function ClaimLogPage() {
           <div className="flex gap-3">
             <Info className="mt-0.5 h-5 w-5 flex-shrink-0 text-primary" />
             <div className="space-y-2 text-[0.95rem] leading-7 text-muted-foreground">
+              <p>{t('admin.claimLog.intro1')}</p>
               <p>
-                This log records every successful VIT ID claim. Each entry shows the
-                fellow's name, email, CiviCRM record, fellowship status at the time of
-                claim, and which Auth0 roles were assigned.
+                <Trans i18nKey="admin.claimLog.intro2" components={{ strong: <strong /> }} />
               </p>
-              <p>
-                <strong>Fellowship status:</strong> "Current" means the fellow had an
-                active fellowship during the current academic year at the time they claimed.
-                "Former" means they have at least one fellowship on record but none covering
-                the current academic year.
-              </p>
-              <p>
-                If a claim looks suspicious, check the fellow's CiviCRM record and Auth0
-                account. Contact the person directly if needed.
-              </p>
+              <p>{t('admin.claimLog.intro3')}</p>
             </div>
           </div>
         </div>
@@ -123,8 +106,8 @@ export function ClaimLogPage() {
         {!claims || claims.length === 0 ? (
           <EmptyState
             icon={<ShieldCheck className="h-12 w-12 mb-4" />}
-            title="No claims yet"
-            description="VIT ID claims will appear here as fellows claim their credentials."
+            title={t('admin.claimLog.emptyTitle')}
+            description={t('admin.claimLog.emptyDescription')}
           />
         ) : (
           <>
@@ -132,8 +115,8 @@ export function ClaimLogPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <input
                 type="text"
-                placeholder="Search by name or email..."
-                aria-label="Search claims by name or email"
+                placeholder={t('admin.claimLog.searchPlaceholder')}
+                aria-label={t('admin.claimLog.searchAria')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full rounded-md border bg-background py-2.5 pl-10 pr-4 text-base outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
@@ -142,19 +125,19 @@ export function ClaimLogPage() {
 
             {filtered.length === 0 ? (
               <p className="py-8 text-center text-[0.95rem] text-muted-foreground">
-                No claims match &ldquo;{searchQuery}&rdquo;.
+                {t('admin.claimLog.noMatch', { query: searchQuery })}
               </p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-[0.95rem]">
                   <thead>
                     <tr className="border-b text-left">
-                      <SortHeader field="name" label="Name" current={sortField} dir={sortDir} onSort={toggleSort} />
-                      <SortHeader field="email" label="Email" current={sortField} dir={sortDir} onSort={toggleSort} className="hidden md:table-cell" />
-                      <SortHeader field="status" label="Fellowship Status" current={sortField} dir={sortDir} onSort={toggleSort} />
-                      <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Roles Assigned</th>
-                      <SortHeader field="claimedAt" label="Claimed At" current={sortField} dir={sortDir} onSort={toggleSort} />
-                      <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">Actions</th>
+                      <SortHeader field="name" label={t('admin.claimLog.colName')} current={sortField} dir={sortDir} onSort={toggleSort} />
+                      <SortHeader field="email" label={t('admin.claimLog.colEmail')} current={sortField} dir={sortDir} onSort={toggleSort} className="hidden md:table-cell" />
+                      <SortHeader field="status" label={t('admin.claimLog.colStatus')} current={sortField} dir={sortDir} onSort={toggleSort} />
+                      <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">{t('admin.claimLog.colRoles')}</th>
+                      <SortHeader field="claimedAt" label={t('admin.claimLog.colClaimedAt')} current={sortField} dir={sortDir} onSort={toggleSort} />
+                      <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">{t('admin.claimLog.colActions')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -167,8 +150,8 @@ export function ClaimLogPage() {
             )}
 
             <p className="mt-4 text-sm text-muted-foreground">
-              {claims.length} total claim{claims.length !== 1 ? 's' : ''}
-              {searchQuery.trim() ? `, ${filtered.length} matching` : ''}
+              {t('admin.claimLog.totalClaims', { count: claims.length })}
+              {searchQuery.trim() ? t('admin.claimLog.matching', { count: filtered.length }) : ''}
             </p>
           </>
         )}
@@ -178,6 +161,7 @@ export function ClaimLogPage() {
 }
 
 function ClaimRow({ claim }: { claim: VitIdClaim }) {
+  const { t, i18n } = useTranslation();
   const civicrmUrl = getCivicrmUrl();
 
   return (
@@ -198,15 +182,15 @@ function ClaimRow({ claim }: { claim: VitIdClaim }) {
       <td className="py-3 px-1">
         {claim.hasCurrentFellowship ? (
           <span className="inline-flex items-center rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700">
-            Current
+            {t('admin.claimLog.statusCurrent')}
           </span>
         ) : claim.hasFellowship ? (
           <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-            Former
+            {t('admin.claimLog.statusFormer')}
           </span>
         ) : (
           <span className="inline-flex items-center rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700">
-            No Fellowship
+            {t('admin.claimLog.statusNone')}
           </span>
         )}
       </td>
@@ -223,7 +207,7 @@ function ClaimRow({ claim }: { claim: VitIdClaim }) {
         </div>
       </td>
       <td className="whitespace-nowrap py-3 px-1 text-[0.92rem] text-muted-foreground">
-        {formatDateTime(claim.claimedAt)}
+        {formatHumanDateTime(claim.claimedAt, i18n.language)}
       </td>
       <td className="py-3 px-1">
         {civicrmUrl && (

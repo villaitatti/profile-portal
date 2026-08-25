@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import * as Dialog from '@radix-ui/react-dialog';
+import { useTranslation } from 'react-i18next';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import type { CiviCRMPhone, CreatePhoneInput } from '@itatti/shared';
 
 interface PhoneFormModalProps {
@@ -11,11 +12,12 @@ interface PhoneFormModalProps {
 }
 
 const PHONE_TYPES = [
-  { id: 1, label: 'Landline' },
-  { id: 2, label: 'Mobile' },
+  { id: 1, labelKey: 'profile.phones.types.landline' },
+  { id: 2, labelKey: 'profile.phones.types.mobile' },
 ];
 
 export function PhoneFormModal({ open, onClose, onSave, phone, isSaving }: PhoneFormModalProps) {
+  const { t } = useTranslation();
   const [phoneNumber, setPhoneNumber] = useState('');
   const [phoneTypeId, setPhoneTypeId] = useState(1);
 
@@ -42,68 +44,68 @@ export function PhoneFormModal({ open, onClose, onSave, phone, isSaving }: Phone
   }
 
   return (
-    <Dialog.Root open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgba(29,37,44,0.32)] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 duration-200" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border bg-card p-7 shadow-lg data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=open]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.97] duration-200">
-          <Dialog.Title className="text-xl font-semibold tracking-tight text-foreground">
-            {phone ? 'Edit phone number' : 'Add phone number'}
-          </Dialog.Title>
+    <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
+      <DialogContent
+        showCloseButton={false}
+        className="max-w-[calc(100%-2rem)] gap-0 rounded-xl border bg-card p-7 sm:max-w-md"
+      >
+        <DialogTitle className="text-xl font-semibold tracking-tight text-foreground">
+          {phone ? t('profile.phoneForm.editTitle') : t('profile.phoneForm.addTitle')}
+        </DialogTitle>
 
-          <form onSubmit={handleSubmit} className="mt-5 space-y-4">
-            <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-foreground">
-                Phone number<span className="ml-0.5 text-destructive">*</span>
-              </span>
-              <input
-                type="tel"
-                value={phoneNumber}
-                onChange={(e) => setPhoneNumber(e.target.value)}
-                required
-                placeholder="+1 (555) 123-4567"
-                className="w-full rounded-md border bg-background px-3.5 py-2.5 text-[0.95rem] placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-              />
-            </label>
+        <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-foreground">
+              {t('profile.phoneForm.numberLabel')}<span className="ml-0.5 text-destructive">*</span>
+            </span>
+            <input
+              type="tel"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value)}
+              required
+              placeholder={t('profile.phoneForm.numberPlaceholder')}
+              className="w-full rounded-md border bg-background px-3.5 py-2.5 text-[0.95rem] placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            />
+          </label>
 
-            <fieldset>
-              <legend className="mb-1.5 text-sm font-medium text-foreground">Type</legend>
-              <div className="flex gap-4">
-                {PHONE_TYPES.map((type) => (
-                  <label key={type.id} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="phone-type"
-                      value={type.id}
-                      checked={phoneTypeId === type.id}
-                      onChange={() => setPhoneTypeId(type.id)}
-                      className="h-4 w-4 accent-primary"
-                    />
-                    <span className="text-[0.95rem] text-foreground">{type.label}</span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={isSaving}
-                className="rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isSaving || !phoneNumber.trim()}
-                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSaving ? 'Saving...' : 'Save'}
-              </button>
+          <fieldset>
+            <legend className="mb-1.5 text-sm font-medium text-foreground">{t('profile.phoneForm.typeLabel')}</legend>
+            <div className="flex gap-4">
+              {PHONE_TYPES.map((type) => (
+                <label key={type.id} className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="phone-type"
+                    value={type.id}
+                    checked={phoneTypeId === type.id}
+                    onChange={() => setPhoneTypeId(type.id)}
+                    className="h-4 w-4 accent-primary"
+                  />
+                  <span className="text-[0.95rem] text-foreground">{t(type.labelKey)}</span>
+                </label>
+              ))}
             </div>
-          </form>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+          </fieldset>
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isSaving}
+              className="rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              type="submit"
+              disabled={isSaving || !phoneNumber.trim()}
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSaving ? t('profile.saving') : t('common.save')}
+            </button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

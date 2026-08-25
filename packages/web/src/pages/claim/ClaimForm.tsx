@@ -1,17 +1,21 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { apiFetch } from '@/api/client';
 import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 
+// Schema messages are i18n keys, translated at the render site so the copy
+// follows the active language.
 const claimSchema = z.object({
-  email: z.string().email('Please enter a valid email address'),
+  email: z.string().email('claim.errors.emailInvalid'),
 });
 
 type ClaimFormData = z.infer<typeof claimSchema>;
 
 export function ClaimForm() {
+  const { t } = useTranslation();
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [unreachable, setUnreachable] = useState(false);
@@ -53,22 +57,16 @@ export function ClaimForm() {
     return (
       <div className="rounded-xl border bg-card p-8 text-center">
         <CheckCircle2 className="h-12 w-12 text-green-600 mx-auto mb-4" />
-        <h3 className="text-lg font-semibold mb-2">Request Submitted</h3>
-        <p className="text-muted-foreground">
-          If you are eligible, you'll receive an email with your login
-          credentials within a few minutes. Check your spam folder if you
-          don't see it.
-        </p>
+        <h3 className="text-lg font-semibold mb-2">{t('claim.form.submittedTitle')}</h3>
+        <p className="text-muted-foreground">{t('claim.form.submittedBody')}</p>
       </div>
     );
   }
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="rounded-xl border bg-card p-8">
-      <h2 className="text-xl font-semibold mb-2">Claim your VIT ID</h2>
-      <p className="text-muted-foreground mb-6 text-sm">
-        Enter your email address to check your eligibility and receive your VIT ID credentials.
-      </p>
+      <h2 className="text-xl font-semibold mb-2">{t('claim.form.title')}</h2>
+      <p className="text-muted-foreground mb-6 text-sm">{t('claim.form.description')}</p>
 
       {unreachable && (
         <div
@@ -76,7 +74,7 @@ export function ClaimForm() {
           className="mb-4 flex items-start gap-2 rounded-md border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive"
         >
           <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-          <span>We couldn't reach the server — check your connection and try again.</span>
+          <span>{t('claim.form.unreachable')}</span>
         </div>
       )}
 
@@ -86,19 +84,19 @@ export function ClaimForm() {
             htmlFor="email"
             className="block text-sm font-medium mb-1.5"
           >
-            Email address
+            {t('claim.form.emailLabel')}
           </label>
           <input
             {...register('email')}
             type="email"
             id="email"
-            placeholder="you@example.com"
+            placeholder={t('claim.form.emailPlaceholder')}
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
             disabled={submitting}
           />
-          {errors.email && (
+          {errors.email?.message && (
             <p className="text-sm text-destructive mt-1">
-              {errors.email.message}
+              {t(errors.email.message)}
             </p>
           )}
         </div>
@@ -111,10 +109,10 @@ export function ClaimForm() {
           {submitting ? (
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Processing...
+              {t('claim.form.processing')}
             </>
           ) : (
-            'Claim VIT ID'
+            t('claim.form.submit')
           )}
         </button>
       </div>

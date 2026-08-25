@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import { Prisma } from '@prisma/client';
+import { Prisma } from '../generated/prisma/client.js';
 import { env, isDevMode } from '../env.js';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';

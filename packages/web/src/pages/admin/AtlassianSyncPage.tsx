@@ -1,5 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation, Trans } from 'react-i18next';
+import type { TFunction } from 'i18next';
+import { formatHumanDateTime } from '@/lib/dates';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { LoadingSpinner, SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
@@ -37,6 +40,7 @@ import {
 // ── Progress Bar ───────────────────────────────────────────────────
 
 function ProgressPanel({ progress, startTime }: { progress: SyncProgress | null; startTime: number }) {
+  const { t } = useTranslation();
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
@@ -68,7 +72,8 @@ function ProgressPanel({ progress, startTime }: { progress: SyncProgress | null;
       </div>
       <p className="text-xs text-muted-foreground mt-1">
         {progress.percentage}%
-        {progress.totalSteps > 0 && ` — ${progress.step} of ${progress.totalSteps}`}
+        {progress.totalSteps > 0 &&
+          ` — ${t('admin.atlassian.sync.stepOfTotal', { step: progress.step, total: progress.totalSteps })}`}
       </p>
     </div>
   );
@@ -77,6 +82,7 @@ function ProgressPanel({ progress, startTime }: { progress: SyncProgress | null;
 // ── Diff Preview ───────────────────────────────────────────────────
 
 function DiffPreview({ run }: { run: SyncRunDetail }) {
+  const { t } = useTranslation();
   const diff = run.diff;
   if (!diff) return null;
 
@@ -91,23 +97,29 @@ function DiffPreview({ run }: { run: SyncRunDetail }) {
     return (
       <div className="rounded-xl border bg-card p-6 text-center">
         <CheckCircle2 className="h-8 w-8 text-green-500 mx-auto mb-2" />
-        <p className="font-medium">Everything in sync</p>
-        <p className="text-sm text-muted-foreground">No changes needed.</p>
+        <p className="font-medium">{t('admin.atlassian.sync.everythingInSync')}</p>
+        <p className="text-sm text-muted-foreground">{t('admin.atlassian.sync.noChangesNeeded')}</p>
       </div>
     );
   }
 
   return (
     <div className="rounded-xl border bg-card p-6">
-      <h3 className="text-lg font-semibold mb-4">Proposed Changes ({totalChanges})</h3>
+      <h3 className="text-lg font-semibold mb-4">
+        {t('admin.atlassian.sync.proposedChanges', { count: totalChanges })}
+      </h3>
 
       {diff.groupsToCreate?.length > 0 && (
         <div className="mb-4">
-          <h4 className="text-sm font-medium text-blue-600 mb-1">Groups to Create ({diff.groupsToCreate.length})</h4>
+          <h4 className="text-sm font-medium text-blue-600 mb-1">
+            {t('admin.atlassian.sync.groupsToCreate', { count: diff.groupsToCreate.length })}
+          </h4>
           {diff.groupsToCreate.map((g, i) => (
             <div key={i} className="text-sm py-1 border-b last:border-0">
               <span className="font-mono">{g.name}</span>
-              <span className="text-muted-foreground ml-2">from role: {g.mappedFromRole}</span>
+              <span className="text-muted-foreground ml-2">
+                {t('admin.atlassian.sync.fromRole', { role: g.mappedFromRole })}
+              </span>
             </div>
           ))}
         </div>
@@ -115,7 +127,9 @@ function DiffPreview({ run }: { run: SyncRunDetail }) {
 
       {diff.usersToCreate?.length > 0 && (
         <div className="mb-4">
-          <h4 className="text-sm font-medium text-green-600 mb-1">Users to Create ({diff.usersToCreate.length})</h4>
+          <h4 className="text-sm font-medium text-green-600 mb-1">
+            {t('admin.atlassian.sync.usersToCreate', { count: diff.usersToCreate.length })}
+          </h4>
           {diff.usersToCreate.map((u, i) => (
             <div key={i} className="text-sm py-1 border-b last:border-0">
               {u.name} <span className="text-muted-foreground">({u.email})</span>
@@ -126,7 +140,9 @@ function DiffPreview({ run }: { run: SyncRunDetail }) {
 
       {diff.usersToUpdate?.length > 0 && (
         <div className="mb-4">
-          <h4 className="text-sm font-medium text-amber-600 mb-1">Users to Update ({diff.usersToUpdate.length})</h4>
+          <h4 className="text-sm font-medium text-amber-600 mb-1">
+            {t('admin.atlassian.sync.usersToUpdate', { count: diff.usersToUpdate.length })}
+          </h4>
           {diff.usersToUpdate.map((u, i) => (
             <div key={i} className="text-sm py-1 border-b last:border-0">
               {u.email}:{' '}
@@ -142,7 +158,9 @@ function DiffPreview({ run }: { run: SyncRunDetail }) {
 
       {diff.usersToDeactivate?.length > 0 && (
         <div className="mb-4">
-          <h4 className="text-sm font-medium text-red-600 mb-1">Users to Deactivate ({diff.usersToDeactivate.length})</h4>
+          <h4 className="text-sm font-medium text-red-600 mb-1">
+            {t('admin.atlassian.sync.usersToDeactivate', { count: diff.usersToDeactivate.length })}
+          </h4>
           {diff.usersToDeactivate.map((u, i) => (
             <div key={i} className="text-sm py-1 border-b last:border-0">
               {u.name} <span className="text-muted-foreground">({u.email})</span>
@@ -153,7 +171,9 @@ function DiffPreview({ run }: { run: SyncRunDetail }) {
 
       {diff.membershipChanges?.length > 0 && (
         <div className="mb-4">
-          <h4 className="text-sm font-medium text-purple-600 mb-1">Membership Changes ({diff.membershipChanges.length})</h4>
+          <h4 className="text-sm font-medium text-purple-600 mb-1">
+            {t('admin.atlassian.sync.membershipChanges', { count: diff.membershipChanges.length })}
+          </h4>
           {diff.membershipChanges.map((c, i) => (
             <div key={i} className="text-sm py-1 border-b last:border-0">
               <span className={c.action === 'add' ? 'text-green-600' : 'text-red-600'}>
@@ -175,14 +195,22 @@ function isDryRun(run: { dryRunId: string | null }) {
   return run.dryRunId === null;
 }
 
-function runLabel(run: { status: string; dryRunId: string | null }) {
+function runLabel(t: TFunction, run: { status: string; dryRunId: string | null }) {
+  // Statuses come from the API; translate the known ones and fall back to the
+  // raw value for anything new.
+  const status = t(`admin.status.${run.status}`, run.status);
   if (isDryRun(run)) {
-    return run.status === 'completed' ? 'Dry run completed' : `Dry run ${run.status}`;
+    return run.status === 'completed'
+      ? t('admin.atlassian.sync.dryRunCompleted')
+      : t('admin.atlassian.sync.dryRunStatus', { status });
   }
-  return run.status === 'completed' ? 'Sync completed' : `Sync ${run.status}`;
+  return run.status === 'completed'
+    ? t('admin.atlassian.sync.syncCompleted')
+    : t('admin.atlassian.sync.syncStatus', { status });
 }
 
 function SyncHistory() {
+  const { t, i18n } = useTranslation();
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const { data, isLoading } = useSyncRuns(page);
@@ -205,7 +233,7 @@ function SyncHistory() {
 
   return (
     <div className="rounded-xl border bg-card p-6">
-      <h2 className="text-lg font-semibold mb-4">Sync History</h2>
+      <h2 className="text-lg font-semibold mb-4">{t('admin.atlassian.sync.historyTitle')}</h2>
       <div className="space-y-2">
         {data.runs.map((run) => (
           <div key={run.id} className="border rounded-lg">
@@ -215,12 +243,12 @@ function SyncHistory() {
             >
               {expandedId === run.id ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
               {statusIcon(run)}
-              <span className="text-sm font-medium">{runLabel(run)}</span>
+              <span className="text-sm font-medium">{runLabel(t, run)}</span>
               <span className="text-xs text-muted-foreground">
-                {new Date(run.startedAt).toLocaleString()}
+                {formatHumanDateTime(run.startedAt, i18n.language)}
               </span>
               <span className="text-xs text-muted-foreground ml-auto">
-                by {run.triggeredBy}
+                {t('admin.atlassian.sync.byUser', { user: run.triggeredBy })}
               </span>
               {run.stats && (
                 <span className="text-xs text-muted-foreground">
@@ -233,19 +261,19 @@ function SyncHistory() {
               <div className="border-t p-3 text-sm">
                 {isDryRun(run) && run.status === 'completed' && (
                   <p className="text-xs text-blue-600 font-medium mb-3">
-                    Preview only — no changes were applied to Atlassian Cloud.
+                    {t('admin.atlassian.sync.previewOnly')}
                   </p>
                 )}
 
                 {detail.stats && (
                   <div className="flex flex-wrap gap-4 mb-3 text-xs">
-                    {detail.stats.created > 0 && <span className="inline-flex items-center gap-1 text-green-600"><UserPlus className="h-3 w-3" />+{detail.stats.created} created</span>}
-                    {detail.stats.updated > 0 && <span className="inline-flex items-center gap-1 text-amber-600"><Pencil className="h-3 w-3" />{detail.stats.updated} updated</span>}
-                    {detail.stats.deactivated > 0 && <span className="inline-flex items-center gap-1 text-red-600"><UserMinus className="h-3 w-3" />{detail.stats.deactivated} deactivated</span>}
-                    {detail.stats.groupsCreated > 0 && <span className="inline-flex items-center gap-1 text-blue-600"><FolderPlus className="h-3 w-3" />{detail.stats.groupsCreated} groups created</span>}
-                    {detail.stats.groupsAdded > 0 && <span className="inline-flex items-center gap-1 text-purple-600"><LinkIcon className="h-3 w-3" />+{detail.stats.groupsAdded} memberships</span>}
-                    {detail.stats.groupsRemoved > 0 && <span className="inline-flex items-center gap-1 text-purple-600"><XCircle className="h-3 w-3" />-{detail.stats.groupsRemoved} memberships</span>}
-                    {detail.stats.errors > 0 && <span className="inline-flex items-center gap-1 text-destructive"><AlertCircle className="h-3 w-3" />{detail.stats.errors} errors</span>}
+                    {detail.stats.created > 0 && <span className="inline-flex items-center gap-1 text-green-600"><UserPlus className="h-3 w-3" />{t('admin.atlassian.sync.statCreated', { count: detail.stats.created })}</span>}
+                    {detail.stats.updated > 0 && <span className="inline-flex items-center gap-1 text-amber-600"><Pencil className="h-3 w-3" />{t('admin.atlassian.sync.statUpdated', { count: detail.stats.updated })}</span>}
+                    {detail.stats.deactivated > 0 && <span className="inline-flex items-center gap-1 text-red-600"><UserMinus className="h-3 w-3" />{t('admin.atlassian.sync.statDeactivated', { count: detail.stats.deactivated })}</span>}
+                    {detail.stats.groupsCreated > 0 && <span className="inline-flex items-center gap-1 text-blue-600"><FolderPlus className="h-3 w-3" />{t('admin.atlassian.sync.statGroupsCreated', { count: detail.stats.groupsCreated })}</span>}
+                    {detail.stats.groupsAdded > 0 && <span className="inline-flex items-center gap-1 text-purple-600"><LinkIcon className="h-3 w-3" />{t('admin.atlassian.sync.statMembershipsAdded', { count: detail.stats.groupsAdded })}</span>}
+                    {detail.stats.groupsRemoved > 0 && <span className="inline-flex items-center gap-1 text-purple-600"><XCircle className="h-3 w-3" />{t('admin.atlassian.sync.statMembershipsRemoved', { count: detail.stats.groupsRemoved })}</span>}
+                    {detail.stats.errors > 0 && <span className="inline-flex items-center gap-1 text-destructive"><AlertCircle className="h-3 w-3" />{t('admin.atlassian.sync.statErrors', { count: detail.stats.errors })}</span>}
                   </div>
                 )}
 
@@ -276,7 +304,7 @@ function SyncHistory() {
                   }}
                   className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
                 >
-                  <Download className="h-3 w-3" /> Export JSON
+                  <Download className="h-3 w-3" /> {t('admin.atlassian.sync.exportJson')}
                 </button>
               </div>
             )}
@@ -291,17 +319,17 @@ function SyncHistory() {
             disabled={page === 1}
             className="text-sm px-3 py-1 rounded-md border transition-colors hover:bg-muted disabled:opacity-50"
           >
-            Previous
+            {t('admin.atlassian.sync.previous')}
           </button>
           <span className="text-sm py-1">
-            Page {page} of {Math.ceil(data.total / data.perPage)}
+            {t('admin.atlassian.sync.pageOf', { page, total: Math.ceil(data.total / data.perPage) })}
           </span>
           <button
             onClick={() => setPage((p) => p + 1)}
             disabled={page * data.perPage >= data.total}
             className="text-sm px-3 py-1 rounded-md border transition-colors hover:bg-muted disabled:opacity-50"
           >
-            Next
+            {t('admin.atlassian.sync.next')}
           </button>
         </div>
       )}
@@ -310,6 +338,7 @@ function SyncHistory() {
 }
 
 function HistoryDiffDetail({ diff }: { diff: SyncRunDetail['diff'] }) {
+  const { t } = useTranslation();
   const hasContent =
     diff.usersToCreate?.length > 0 ||
     diff.usersToUpdate?.length > 0 ||
@@ -323,7 +352,7 @@ function HistoryDiffDetail({ diff }: { diff: SyncRunDetail['diff'] }) {
     <div className="space-y-3 mb-3 text-xs">
       {diff.usersToCreate?.length > 0 && (
         <div>
-          <h4 className="font-medium text-green-600 mb-1">Users to create ({diff.usersToCreate.length})</h4>
+          <h4 className="font-medium text-green-600 mb-1">{t('admin.atlassian.sync.historyUsersToCreate', { count: diff.usersToCreate.length })}</h4>
           {diff.usersToCreate.map((u, i) => (
             <div key={i} className="py-0.5">{u.name} <span className="text-muted-foreground">({u.email})</span></div>
           ))}
@@ -331,7 +360,7 @@ function HistoryDiffDetail({ diff }: { diff: SyncRunDetail['diff'] }) {
       )}
       {diff.usersToUpdate?.length > 0 && (
         <div>
-          <h4 className="font-medium text-amber-600 mb-1">Users to update ({diff.usersToUpdate.length})</h4>
+          <h4 className="font-medium text-amber-600 mb-1">{t('admin.atlassian.sync.historyUsersToUpdate', { count: diff.usersToUpdate.length })}</h4>
           {diff.usersToUpdate.map((u, i) => (
             <div key={i} className="py-0.5">
               {u.email}{' '}
@@ -344,7 +373,7 @@ function HistoryDiffDetail({ diff }: { diff: SyncRunDetail['diff'] }) {
       )}
       {diff.usersToDeactivate?.length > 0 && (
         <div>
-          <h4 className="font-medium text-red-600 mb-1">Users to deactivate ({diff.usersToDeactivate.length})</h4>
+          <h4 className="font-medium text-red-600 mb-1">{t('admin.atlassian.sync.historyUsersToDeactivate', { count: diff.usersToDeactivate.length })}</h4>
           {diff.usersToDeactivate.map((u, i) => (
             <div key={i} className="py-0.5">{u.name} <span className="text-muted-foreground">({u.email})</span></div>
           ))}
@@ -352,15 +381,15 @@ function HistoryDiffDetail({ diff }: { diff: SyncRunDetail['diff'] }) {
       )}
       {diff.groupsToCreate?.length > 0 && (
         <div>
-          <h4 className="font-medium text-blue-600 mb-1">Groups to create ({diff.groupsToCreate.length})</h4>
+          <h4 className="font-medium text-blue-600 mb-1">{t('admin.atlassian.sync.historyGroupsToCreate', { count: diff.groupsToCreate.length })}</h4>
           {diff.groupsToCreate.map((g, i) => (
-            <div key={i} className="py-0.5"><span className="font-mono">{g.name}</span> <span className="text-muted-foreground">(from role: {g.mappedFromRole})</span></div>
+            <div key={i} className="py-0.5"><span className="font-mono">{g.name}</span> <span className="text-muted-foreground">{t('admin.atlassian.sync.historyFromRole', { role: g.mappedFromRole })}</span></div>
           ))}
         </div>
       )}
       {diff.membershipChanges?.length > 0 && (
         <div>
-          <h4 className="font-medium text-purple-600 mb-1">Membership changes ({diff.membershipChanges.length})</h4>
+          <h4 className="font-medium text-purple-600 mb-1">{t('admin.atlassian.sync.historyMembershipChanges', { count: diff.membershipChanges.length })}</h4>
           {diff.membershipChanges.map((c, i) => (
             <div key={i} className="py-0.5">
               <span className={c.action === 'add' ? 'text-green-600' : 'text-red-600'}>
@@ -380,13 +409,15 @@ function HistoryDiffDetail({ diff }: { diff: SyncRunDetail['diff'] }) {
 
 type RunKind = 'dry-run' | 'execute';
 
-const RUN_KIND_LABELS: Record<RunKind, string> = {
-  'dry-run': 'Preview failed',
-  execute: 'Sync failed',
+// i18n keys; resolved with t() where rendered.
+const RUN_KIND_LABEL_KEYS: Record<RunKind, string> = {
+  'dry-run': 'admin.atlassian.sync.previewFailed',
+  execute: 'admin.atlassian.sync.syncFailed',
 };
 
 
 export function AtlassianSyncPage() {
+  const { t } = useTranslation();
   const { data: status, isLoading: statusLoading } = useSyncStatus();
   const {
     data: mappings,
@@ -474,7 +505,7 @@ export function AtlassianSyncPage() {
           setProgress((prev) =>
             prev
               ? { ...prev, phase: 'error' }
-              : { phase: 'error', step: 0, totalSteps: 0, percentage: 0, description: 'Run failed' }
+              : { phase: 'error', step: 0, totalSteps: 0, percentage: 0, description: t('admin.atlassian.sync.runFailed') }
           );
           setActiveRunId(null);
           failRun(kind, err);
@@ -482,7 +513,7 @@ export function AtlassianSyncPage() {
       );
       activeUnsubRef.current = unsub;
     },
-    [failRun]
+    [failRun, t]
   );
 
   const handleDryRun = useCallback(async () => {
@@ -499,7 +530,7 @@ export function AtlassianSyncPage() {
       onSuccess: ({ runId }) => {
         setActiveRunId(runId);
         setStartTime(Date.now());
-        setProgress({ phase: 'starting', step: 0, totalSteps: 0, percentage: 0, description: 'Starting dry run...' });
+        setProgress({ phase: 'starting', step: 0, totalSteps: 0, percentage: 0, description: t('admin.atlassian.sync.startingDryRun') });
         startSseSubscription(runId, sseToken, 'dry-run', () => {
           setLastDryRunId(runId);
           setActiveRunId(null);
@@ -509,7 +540,7 @@ export function AtlassianSyncPage() {
       },
       onError: (err) => failRun('dry-run', getErrorMessage(err)),
     });
-  }, [startDryRun, queryClient, getToken, startSseSubscription, failRun, failBeforeStart]);
+  }, [startDryRun, queryClient, getToken, startSseSubscription, failRun, failBeforeStart, t]);
 
   const handleExecute = useCallback(async () => {
     if (!lastDryRunId) return;
@@ -527,7 +558,7 @@ export function AtlassianSyncPage() {
       onSuccess: ({ runId }) => {
         setActiveRunId(runId);
         setStartTime(Date.now());
-        setProgress({ phase: 'starting', step: 0, totalSteps: 0, percentage: 0, description: 'Starting execution...' });
+        setProgress({ phase: 'starting', step: 0, totalSteps: 0, percentage: 0, description: t('admin.atlassian.sync.startingExecution') });
         startSseSubscription(runId, sseToken, 'execute', () => {
           setLastDryRunId(null);
           setActiveRunId(null);
@@ -536,7 +567,7 @@ export function AtlassianSyncPage() {
       },
       onError: (err) => failRun('execute', getErrorMessage(err)),
     });
-  }, [lastDryRunId, executeSyncMutation, queryClient, getToken, startSseSubscription, failRun, failBeforeStart]);
+  }, [lastDryRunId, executeSyncMutation, queryClient, getToken, startSseSubscription, failRun, failBeforeStart, t]);
 
   if (statusLoading || mappingsLoading) return <AtlassianSyncPageSkeleton />;
 
@@ -552,8 +583,8 @@ export function AtlassianSyncPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <PageHeader
-        title="Sync Users to Atlassian Cloud"
-        description="Sync users and groups from Auth0 to Atlassian Cloud"
+        title={t('admin.atlassian.sync.title')}
+        description={t('admin.atlassian.sync.description')}
       />
 
       {!status?.configured && (
@@ -561,7 +592,7 @@ export function AtlassianSyncPage() {
           <div className="flex items-center gap-2">
             <AlertCircle className="h-5 w-5 flex-shrink-0 text-amber-600" />
             <p className="text-sm text-amber-800">
-              Atlassian Cloud sync is not configured yet. Please contact IT to set up the SCIM connection.
+              {t('admin.atlassian.sync.notConfigured')}
             </p>
           </div>
         </div>
@@ -572,10 +603,17 @@ export function AtlassianSyncPage() {
           <div className="flex items-center gap-2">
             <AlertCircle className="h-5 w-5 flex-shrink-0 text-amber-600" />
             <p className="text-sm text-amber-800">
-              No group mappings configured.{' '}
-              <Link to="/admin/atlassian/mappings" className="font-medium underline hover:no-underline">
-                Configure Group Mappings →
-              </Link>
+              <Trans
+                i18nKey="admin.atlassian.sync.noMappings"
+                components={{
+                  mapLink: (
+                    <Link
+                      to="/admin/atlassian/mappings"
+                      className="font-medium underline hover:no-underline"
+                    />
+                  ),
+                }}
+              />
             </p>
           </div>
         </div>
@@ -586,8 +624,7 @@ export function AtlassianSyncPage() {
           <div className="flex items-center gap-2">
             <AlertCircle className="h-5 w-5 flex-shrink-0 text-destructive" />
             <p className="flex-1 text-sm text-destructive">
-              Couldn't load the group mappings, so previewing changes is disabled — a sync
-              without them would look like every user should be removed.
+              {t('admin.atlassian.sync.mappingsUnavailable')}
             </p>
             <button
               onClick={() => void refetchMappings()}
@@ -595,7 +632,7 @@ export function AtlassianSyncPage() {
               className="inline-flex items-center gap-1 rounded-md border border-destructive/30 px-3 py-1.5 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-50"
             >
               <RefreshCw className={`h-3 w-3 ${mappingsFetching ? 'animate-spin' : ''}`} />
-              Retry
+              {t('common.retry')}
             </button>
           </div>
         </div>
@@ -616,7 +653,7 @@ export function AtlassianSyncPage() {
             className="inline-flex items-center gap-2 rounded-md border border-primary px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/5 disabled:opacity-50"
           >
             <RefreshCw className={`h-4 w-4 ${isRunning ? 'animate-spin' : ''}`} />
-            Preview Changes
+            {t('admin.atlassian.sync.previewChanges')}
           </button>
 
           {canExecute && (
@@ -627,11 +664,14 @@ export function AtlassianSyncPage() {
                 className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               >
                 <Play className="h-4 w-4" />
-                Execute Sync
+                {t('admin.atlassian.sync.executeSync')}
               </button>
               {ttlRemaining !== null && (
                 <span className="text-[0.82rem] text-muted-foreground">
-                  Valid for {Math.floor(ttlRemaining / 60000)}m {Math.floor((ttlRemaining % 60000) / 1000)}s
+                  {t('admin.atlassian.sync.validFor', {
+                    minutes: Math.floor(ttlRemaining / 60000),
+                    seconds: Math.floor((ttlRemaining % 60000) / 1000),
+                  })}
                 </span>
               )}
             </>
@@ -639,7 +679,7 @@ export function AtlassianSyncPage() {
 
           {hasMappings && !isRunning && !lastDryRunId && (
             <span className="text-[0.95rem] text-muted-foreground">
-              Preview changes before syncing
+              {t('admin.atlassian.sync.previewFirst')}
             </span>
           )}
         </div>
@@ -657,25 +697,25 @@ export function AtlassianSyncPage() {
               <div className="flex-1">
                 <p className="text-sm font-semibold text-destructive">
                   {runError.started
-                    ? RUN_KIND_LABELS[runError.kind]
+                    ? t(RUN_KIND_LABEL_KEYS[runError.kind])
                     : runError.kind === 'execute'
-                      ? "Couldn't start sync"
-                      : "Couldn't start preview"}
+                      ? t('admin.atlassian.sync.couldntStartSync')
+                      : t('admin.atlassian.sync.couldntStartPreview')}
                 </p>
                 <p className="mt-1 text-sm text-destructive/90">{runError.message}</p>
                 <p className="mt-1 text-sm text-destructive/90">
                   {!runError.started
-                    ? 'The run never started, so nothing was changed in Atlassian Cloud. Try again.'
+                    ? t('admin.atlassian.sync.notStartedBody')
                     : runError.kind === 'execute'
-                      ? 'Some changes may already have been applied. Preview again to see the current state before retrying.'
-                      : 'Nothing was changed in Atlassian Cloud. Preview again to retry.'}
+                      ? t('admin.atlassian.sync.executeFailedBody')
+                      : t('admin.atlassian.sync.previewFailedBody')}
                 </p>
               </div>
               <button
                 onClick={() => setRunError(null)}
                 className="rounded-md border border-destructive/30 px-3 py-1.5 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10"
               >
-                Dismiss
+                {t('admin.atlassian.sync.dismiss')}
               </button>
             </div>
           </div>
@@ -695,22 +735,27 @@ export function AtlassianSyncPage() {
           if (canExecute) handleExecute();
         }}
         onCancel={() => setShowExecuteConfirm(false)}
-        title="Execute Sync to Atlassian Cloud"
+        title={t('admin.atlassian.sync.confirmTitle')}
         description={(() => {
           const parts = dryRunDetail?.diff
             ? [
-                dryRunDetail.diff.usersToCreate?.length && `create ${dryRunDetail.diff.usersToCreate.length} user(s)`,
-                dryRunDetail.diff.usersToUpdate?.length && `update ${dryRunDetail.diff.usersToUpdate.length} user(s)`,
-                dryRunDetail.diff.usersToDeactivate?.length && `deactivate ${dryRunDetail.diff.usersToDeactivate.length} user(s)`,
-                dryRunDetail.diff.groupsToCreate?.length && `create ${dryRunDetail.diff.groupsToCreate.length} group(s)`,
-                dryRunDetail.diff.membershipChanges?.length && `${dryRunDetail.diff.membershipChanges.length} membership change(s)`,
+                dryRunDetail.diff.usersToCreate?.length &&
+                  t('admin.atlassian.sync.partCreateUsers', { count: dryRunDetail.diff.usersToCreate.length }),
+                dryRunDetail.diff.usersToUpdate?.length &&
+                  t('admin.atlassian.sync.partUpdateUsers', { count: dryRunDetail.diff.usersToUpdate.length }),
+                dryRunDetail.diff.usersToDeactivate?.length &&
+                  t('admin.atlassian.sync.partDeactivateUsers', { count: dryRunDetail.diff.usersToDeactivate.length }),
+                dryRunDetail.diff.groupsToCreate?.length &&
+                  t('admin.atlassian.sync.partCreateGroups', { count: dryRunDetail.diff.groupsToCreate.length }),
+                dryRunDetail.diff.membershipChanges?.length &&
+                  t('admin.atlassian.sync.partMembershipChanges', { count: dryRunDetail.diff.membershipChanges.length }),
               ].filter(Boolean)
             : [];
           return parts.length > 0
-            ? `This will apply changes to Atlassian Cloud: ${parts.join(', ')}. This action cannot be undone.`
-            : 'Apply the previewed changes to Atlassian Cloud. This action cannot be undone.';
+            ? t('admin.atlassian.sync.confirmWithParts', { parts: parts.join(', ') })
+            : t('admin.atlassian.sync.confirmNoParts');
         })()}
-        confirmLabel="Execute Sync"
+        confirmLabel={t('admin.atlassian.sync.executeSync')}
         variant="danger"
       />
     </div>

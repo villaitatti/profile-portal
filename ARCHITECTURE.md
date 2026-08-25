@@ -41,9 +41,15 @@ section of `DEPLOYMENT.md` first.
 
 **Why shadcn/ui** (not MUI, Chakra, Mantine):
 - Components are copied into the project — full ownership and customizability
-- Built on Radix UI primitives with a clean, neutral aesthetic
-- Ships a composable Sidebar component with collapse support
+- Built on Base UI primitives (`@base-ui/react`, shadcn style `base-nova`) with a clean, neutral aesthetic — the same house stack as Libra
+- Ships a composable Sidebar component with collapse support (`src/components/ui/sidebar.tsx`, wired in `AppSidebar`)
 - Easy to customize CSS variables for institutional branding
+
+**Theming:** light and dark mode. Semantic color primitives live on `:root`/`.dark` in `src/styles/globals.css` and are bridged to Tailwind utilities via `@theme inline`. The `.dark` class on `<html>` is managed by `ThemeProvider` (`src/lib/theme.tsx`, persisted in localStorage under `profile-portal:theme`) and applied before first paint by `public/theme-init.js` — an external script because the production CSP is `script-src 'self'`.
+
+**i18n:** i18next + react-i18next with inline resources (English default, Italian), composed per area in `src/i18n/config.ts` from `src/i18n/resources/*`. The language choice persists in localStorage (`profile-portal:lang`); toggles live in the app header and the public layout. Human-facing dates render as `02 March 2026` / `02 marzo 2026` via `src/lib/dates.ts`; machine-facing dates stay ISO 8601.
+
+**Backend/toolchain generations (aligned with Libra):** Express 5, Prisma 7 (`prisma-client` generator emitting TypeScript into `src/generated/prisma`, driven by `@prisma/adapter-pg`; datasource URL supplied by `packages/server/prisma.config.ts`), Zod 4 across all packages, Vite 8 (Rolldown).
 
 ## Claim Flow: Backend-Orchestrated
 

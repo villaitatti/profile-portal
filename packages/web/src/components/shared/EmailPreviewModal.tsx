@@ -1,7 +1,13 @@
-import * as Dialog from '@radix-ui/react-dialog';
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Loader2, Lock, AlertCircle, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 
 // ──────────────────────────────────────────────────────────────────────
 // EmailPreviewModal
@@ -53,7 +59,7 @@ interface EmailPreviewModalProps {
 export function EmailPreviewModal({
   open,
   title,
-  confirmLabel = 'Send email',
+  confirmLabel,
   notice,
   preview,
   previewError,
@@ -62,6 +68,8 @@ export function EmailPreviewModal({
   onCancel,
   onConfirm,
 }: EmailPreviewModalProps) {
+  const { t } = useTranslation();
+  const resolvedConfirmLabel = confirmLabel ?? t('fellows.preview.sendEmail');
   const sendDisabled =
     submitting || !preview || !!previewError;
 
@@ -86,117 +94,107 @@ export function EmailPreviewModal({
   }, [sendError]);
 
   return (
-    <Dialog.Root
+    <Dialog
       open={open}
       onOpenChange={(isOpen) => {
         if (!isOpen && !submitting) onCancel();
       }}
     >
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgba(29,37,44,0.32)] data-[state=open]:animate-in data-[state=open]:fade-in-0 duration-200" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-3xl -translate-x-1/2 -translate-y-1/2 rounded-xl border bg-card p-0 shadow-lg data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.98] duration-200 max-h-[92vh] flex flex-col">
-          <header className="border-b px-6 py-4">
-            <Dialog.Title className="text-xl font-semibold tracking-tight text-foreground">
-              {title}
-            </Dialog.Title>
-          </header>
+      <DialogContent
+        showCloseButton={false}
+        className="flex max-h-[92vh] w-full flex-col gap-0 p-0 sm:max-w-3xl"
+      >
+        <header className="border-b px-6 py-4">
+          <DialogTitle className="text-xl font-semibold tracking-tight text-foreground">
+            {title}
+          </DialogTitle>
+        </header>
 
-          {notice && (
-            <InlineBanner
-              tone="warning"
-              icon={<AlertCircle className="h-4 w-4" />}
-            >
-              {notice}
-            </InlineBanner>
-          )}
-
-          {previewError && !previewErrorDismissed && (
-            <InlineBanner
-              tone="destructive"
-              icon={<AlertCircle className="h-4 w-4" />}
-              onDismiss={() => setPreviewErrorDismissed(true)}
-            >
-              {previewError}
-            </InlineBanner>
-          )}
-          {/* Suppress stale sendError while the preview is still loading — a
-              red banner floating above a spinner is confusing when Angela
-              reopens the modal for the same appointee after a failed send. */}
-          {sendError && !previewError && preview !== null && !sendErrorDismissed && (
-            <InlineBanner
-              tone="destructive"
-              icon={<AlertCircle className="h-4 w-4" />}
-              onDismiss={() => setSendErrorDismissed(true)}
-            >
-              {sendError}
-            </InlineBanner>
-          )}
-
-          <section className="border-b px-6 py-4 text-[0.92rem] space-y-1.5">
-            <MetadataRow label="To" value={preview?.to ?? '…'} />
-            <MetadataRow
-              label="BCC"
-              value={
-                preview
-                  ? preview.bcc.length > 0
-                    ? preview.bcc.join(', ')
-                    : '(none)'
-                  : '…'
-              }
-              locked
-            />
-            <MetadataRow label="Subject" value={preview?.subject ?? '…'} />
-          </section>
-
-          <div
-            className="flex-1 min-h-[320px] overflow-auto bg-muted/30 px-6 py-4"
-            aria-busy={preview === null && !previewError}
+        {notice && (
+          <InlineBanner
+            tone="warning"
+            icon={<AlertCircle className="h-4 w-4" />}
           >
-            {preview ? (
-              preview.bodyFormat === 'html' ? (
-                <SandboxedHtml body={preview.body} />
-              ) : (
-                <pre className="whitespace-pre-wrap font-sans text-[0.95rem] leading-6 text-foreground">
-                  {preview.body}
-                </pre>
-              )
-            ) : (
-              // Loading affordance for sighted + AT users. aria-busy on the
-              // parent announces the region as loading; the visually-hidden
-              // <span> gives screen readers a concrete label since the
-              // spinner icon alone isn't announced.
-              <div
-                role="status"
-                className="flex h-full items-center justify-center text-muted-foreground"
-              >
-                <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
-                <span className="sr-only">Loading email preview…</span>
-              </div>
-            )}
-          </div>
+            {notice}
+          </InlineBanner>
+        )}
 
-          <footer className="flex justify-end gap-3 border-t px-6 py-4">
-            <button
-              onClick={onCancel}
-              disabled={submitting}
-              className="rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+        {previewError && !previewErrorDismissed && (
+          <InlineBanner
+            tone="destructive"
+            icon={<AlertCircle className="h-4 w-4" />}
+            onDismiss={() => setPreviewErrorDismissed(true)}
+          >
+            {previewError}
+          </InlineBanner>
+        )}
+        {/* Suppress stale sendError while the preview is still loading — a
+            red banner floating above a spinner is confusing when Angela
+            reopens the modal for the same appointee after a failed send. */}
+        {sendError && !previewError && preview !== null && !sendErrorDismissed && (
+          <InlineBanner
+            tone="destructive"
+            icon={<AlertCircle className="h-4 w-4" />}
+            onDismiss={() => setSendErrorDismissed(true)}
+          >
+            {sendError}
+          </InlineBanner>
+        )}
+
+        <section className="border-b px-6 py-4 text-[0.92rem] space-y-1.5">
+          <MetadataRow label={t('fellows.preview.to')} value={preview?.to ?? '…'} />
+          <MetadataRow
+            label={t('fellows.preview.bcc')}
+            value={
+              preview
+                ? preview.bcc.length > 0
+                  ? preview.bcc.join(', ')
+                  : t('fellows.preview.none')
+                : '…'
+            }
+            locked
+          />
+          <MetadataRow label={t('fellows.preview.subject')} value={preview?.subject ?? '…'} />
+        </section>
+
+        <div
+          className="flex-1 min-h-[320px] overflow-auto bg-muted/30 px-6 py-4"
+          aria-busy={preview === null && !previewError}
+        >
+          {preview ? (
+            preview.bodyFormat === 'html' ? (
+              <SandboxedHtml body={preview.body} />
+            ) : (
+              <pre className="whitespace-pre-wrap font-sans text-[0.95rem] leading-6 text-foreground">
+                {preview.body}
+              </pre>
+            )
+          ) : (
+            // Loading affordance for sighted + AT users. aria-busy on the
+            // parent announces the region as loading; the visually-hidden
+            // <span> gives screen readers a concrete label since the
+            // spinner icon alone isn't announced.
+            <div
+              role="status"
+              className="flex h-full items-center justify-center text-muted-foreground"
             >
-              Cancel
-            </button>
-            <button
-              onClick={() => onConfirm()}
-              disabled={sendDisabled}
-              className={cn(
-                'inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60'
-              )}
-            >
-              {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-              {confirmLabel}
-            </button>
-          </footer>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+              <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+              <span className="sr-only">{t('fellows.preview.loading')}</span>
+            </div>
+          )}
+        </div>
+
+        <footer className="flex justify-end gap-3 border-t px-6 py-4">
+          <Button variant="outline" onClick={onCancel} disabled={submitting}>
+            {t('common.cancel')}
+          </Button>
+          <Button onClick={() => onConfirm()} disabled={sendDisabled}>
+            {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+            {resolvedConfirmLabel}
+          </Button>
+        </footer>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -209,6 +207,7 @@ function MetadataRow({
   value: string;
   locked?: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-start gap-3">
       <span className="min-w-[64px] text-muted-foreground">{label}</span>
@@ -216,10 +215,10 @@ function MetadataRow({
       {locked && (
         <span
           className="inline-flex items-center gap-1 text-[0.75rem] text-muted-foreground"
-          title="BCC list is managed by APPOINTEE_EMAIL_BCC and cannot be edited here."
+          title={t('fellows.preview.lockedTitle')}
         >
           <Lock className="h-3 w-3" />
-          locked
+          {t('fellows.preview.locked')}
         </span>
       )}
     </div>
@@ -238,6 +237,7 @@ function InlineBanner({
   /** When provided, renders a close (X) button that calls onDismiss. */
   onDismiss?: () => void;
 }) {
+  const { t } = useTranslation();
   const liveRegionProps =
     tone === 'warning'
       ? ({ role: 'status', 'aria-live': 'polite' } as const)
@@ -249,7 +249,7 @@ function InlineBanner({
       className={cn(
         'mx-6 mt-4 flex items-start gap-2 rounded-md border px-3 py-2 text-[0.88rem]',
         tone === 'destructive' && 'border-destructive/30 bg-destructive/10 text-destructive',
-        tone === 'warning' && 'border-amber-300 bg-amber-50 text-amber-900'
+        tone === 'warning' && 'border-warning-border bg-warning text-warning-foreground'
       )}
     >
       {icon && <span className="mt-0.5 flex-shrink-0">{icon}</span>}
@@ -258,7 +258,7 @@ function InlineBanner({
         <button
           type="button"
           onClick={onDismiss}
-          aria-label="Dismiss"
+          aria-label={t('fellows.preview.dismiss')}
           className="flex-shrink-0 rounded p-0.5 opacity-70 transition-opacity hover:opacity-100"
         >
           <X className="h-4 w-4" />
@@ -273,8 +273,12 @@ function InlineBanner({
  * iframe shows the full email without its own scrollbar. `allow-same-origin`
  * lets us measure `contentDocument.body.scrollHeight`; sandbox still blocks
  * script execution from the iframe.
+ *
+ * Deliberately `bg-white` (not a theme token): HTML emails are authored
+ * against a white canvas, so the preview must stay white in dark mode too.
  */
 function SandboxedHtml({ body }: { body: string }) {
+  const { t } = useTranslation();
   const ref = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(600);
 
@@ -317,7 +321,7 @@ function SandboxedHtml({ body }: { body: string }) {
       ref={ref}
       srcDoc={body}
       sandbox="allow-same-origin"
-      title="Email preview"
+      title={t('fellows.preview.iframeTitle')}
       className="w-full rounded-md border bg-white"
       style={{ height }}
       onLoad={measure}

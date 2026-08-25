@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Phone, Plus, Pencil, Trash2, RefreshCw, Star } from 'lucide-react';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
@@ -12,12 +13,15 @@ import {
 import { PhoneFormModal } from './PhoneFormModal';
 import type { CiviCRMPhone, CreatePhoneInput, UpdatePhoneInput } from '@itatti/shared';
 
-const PHONE_TYPE_LABELS: Record<string, string> = {
-  Phone: 'Landline',
-  Mobile: 'Mobile',
+// Maps CiviCRM phone-type identifiers to i18n keys; identifiers themselves are
+// API values and stay untranslated.
+const PHONE_TYPE_KEYS: Record<string, string> = {
+  Phone: 'profile.phones.types.landline',
+  Mobile: 'profile.phones.types.mobile',
 };
 
 export function PhoneSection() {
+  const { t } = useTranslation();
   const { data: phones, isLoading, error, refetch } = usePhones();
   const createPhone = useCreatePhone();
   const updatePhone = useUpdatePhone();
@@ -78,17 +82,17 @@ export function PhoneSection() {
       <div className="rounded-xl border bg-card p-6 md:px-8">
         <div className="flex items-center gap-3">
           <Phone className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-lg font-semibold tracking-tight">Phone Numbers</h2>
+          <h2 className="text-lg font-semibold tracking-tight">{t('profile.phones.title')}</h2>
         </div>
         <p className="mt-4 text-[0.95rem] text-muted-foreground">
-          Unable to load phone numbers. Please try again later.
+          {t('profile.phones.loadError')}
         </p>
         <button
           onClick={() => refetch()}
           className="mt-3 inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
         >
           <RefreshCw className="h-3.5 w-3.5" />
-          Retry
+          {t('common.retry')}
         </button>
       </div>
     );
@@ -99,25 +103,25 @@ export function PhoneSection() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Phone className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-lg font-semibold tracking-tight">Phone Numbers</h2>
+          <h2 className="text-lg font-semibold tracking-tight">{t('profile.phones.title')}</h2>
         </div>
         <button
           onClick={handleAdd}
           className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
         >
           <Plus className="h-3.5 w-3.5" />
-          Add phone
+          {t('profile.phones.add')}
         </button>
       </div>
 
       <p className="mt-2 text-[0.88rem] leading-6 text-muted-foreground">
-        <Star className="inline h-3.5 w-3.5 fill-primary text-primary -mt-0.5" /> primary number — how I Tatti will reach you by phone if needed.
+        <Star className="inline h-3.5 w-3.5 fill-primary text-primary -mt-0.5" /> {t('profile.phones.primaryHint')}
       </p>
 
       {phones && phones.length === 0 ? (
         <div className="mt-6 rounded-lg border border-dashed p-6 text-center">
           <p className="text-[0.95rem] text-muted-foreground">
-            No phone numbers on file. Add one so I Tatti can reach you.
+            {t('profile.phones.empty')}
           </p>
         </div>
       ) : (
@@ -130,7 +134,7 @@ export function PhoneSection() {
               <div className="flex items-center gap-3">
                 <span className="text-[0.95rem] leading-6 text-foreground">{phone.phone}</span>
                 <span className="rounded-full bg-muted px-2 py-0.5 text-[0.78rem] font-medium text-muted-foreground">
-                  {PHONE_TYPE_LABELS[phone.phoneType] || phone.phoneType}
+                  {PHONE_TYPE_KEYS[phone.phoneType] ? t(PHONE_TYPE_KEYS[phone.phoneType]) : phone.phoneType}
                 </span>
               </div>
 
@@ -145,7 +149,7 @@ export function PhoneSection() {
                   />
                   <span className={`flex items-center gap-1 ${phone.isPrimary ? 'font-medium text-primary' : 'text-muted-foreground'}`}>
                     {phone.isPrimary && <Star className="h-3.5 w-3.5 fill-current" />}
-                    Primary number
+                    {t('profile.phones.primaryLabel')}
                   </span>
                 </label>
 
@@ -153,7 +157,7 @@ export function PhoneSection() {
                   <button
                     onClick={() => handleEdit(phone)}
                     className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                    title="Edit"
+                    title={t('common.edit')}
                   >
                     <Pencil className="h-4 w-4" />
                   </button>
@@ -161,7 +165,7 @@ export function PhoneSection() {
                     onClick={() => setDeletingId(phone.id)}
                     disabled={phone.isPrimary}
                     className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-destructive disabled:opacity-40 disabled:cursor-not-allowed"
-                    title={phone.isPrimary ? 'Select a different preferred number first' : 'Delete'}
+                    title={phone.isPrimary ? t('profile.phones.deleteDisabledHint') : t('common.delete')}
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -184,9 +188,9 @@ export function PhoneSection() {
         open={deletingId !== null}
         onConfirm={handleDelete}
         onCancel={() => setDeletingId(null)}
-        title="Delete phone number"
-        description="Delete this phone number? This cannot be undone."
-        confirmLabel="Delete"
+        title={t('profile.phones.deleteTitle')}
+        description={t('profile.phones.deleteDescription')}
+        confirmLabel={t('common.delete')}
         variant="danger"
       />
     </div>

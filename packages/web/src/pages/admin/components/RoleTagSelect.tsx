@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Command } from 'cmdk';
-import * as Popover from '@radix-ui/react-popover';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Check, ChevronsUpDown, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useRoles } from '@/api/roles';
@@ -11,6 +12,7 @@ interface RoleTagSelectProps {
 }
 
 export function RoleTagSelect({ value, onChange }: RoleTagSelectProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -52,7 +54,7 @@ export function RoleTagSelect({ value, onChange }: RoleTagSelectProps) {
               <button
                 type="button"
                 onClick={() => removeRole(role)}
-                aria-label={`Remove ${role}`}
+                aria-label={t('admin.roles.remove', { role })}
                 className="hover:bg-primary/20 rounded-full p-0.5"
               >
                 <X className="h-3 w-3" />
@@ -63,38 +65,39 @@ export function RoleTagSelect({ value, onChange }: RoleTagSelectProps) {
       )}
 
       {/* Combobox dropdown */}
-      <Popover.Root open={open} onOpenChange={setOpen}>
-        <Popover.Trigger asChild>
-          <button
-            type="button"
-            role="combobox"
-            aria-expanded={open}
-            className={cn(
-              'flex w-full items-center justify-between rounded-md border bg-background px-3.5 py-2.5 text-[0.95rem] text-left',
-              'hover:bg-accent/50 transition-colors',
-              'focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary'
-            )}
-          >
-            <span className="text-muted-foreground">
-              {isLoading ? 'Loading roles...' : 'Search and select roles...'}
-            </span>
-            <ChevronsUpDown className="h-4 w-4 text-muted-foreground ml-2 flex-shrink-0" />
-          </button>
-        </Popover.Trigger>
+      <Popover open={open} onOpenChange={(isOpen) => setOpen(isOpen)}>
+        <PopoverTrigger
+          render={
+            <button
+              type="button"
+              role="combobox"
+              aria-expanded={open}
+              className={cn(
+                'flex w-full items-center justify-between rounded-md border bg-background px-3.5 py-2.5 text-[0.95rem] text-left',
+                'hover:bg-accent/50 transition-colors',
+                'focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary'
+              )}
+            />
+          }
+        >
+          <span className="text-muted-foreground">
+            {isLoading ? t('admin.roles.loading') : t('admin.roles.searchAndSelect')}
+          </span>
+          <ChevronsUpDown className="h-4 w-4 text-muted-foreground ml-2 flex-shrink-0" />
+        </PopoverTrigger>
 
-        <Popover.Portal>
-          <Popover.Content
-            className="z-50 w-[var(--radix-popover-trigger-width)] rounded-md border bg-popover shadow-md"
-            sideOffset={4}
-            align="start"
-          >
+        <PopoverContent
+          className="block w-(--anchor-width) gap-0 rounded-md border p-0"
+          sideOffset={4}
+          align="start"
+        >
             <Command shouldFilter={false}>
               <div className="flex items-center border-b px-3">
                 <Command.Input
                   ref={inputRef}
                   value={search}
                   onValueChange={setSearch}
-                  placeholder="Search roles..."
+                  placeholder={t('admin.roles.searchPlaceholder')}
                   className="flex h-10 w-full bg-transparent py-2 text-[0.95rem] outline-none placeholder:text-muted-foreground"
                 />
               </div>
@@ -128,14 +131,13 @@ export function RoleTagSelect({ value, onChange }: RoleTagSelectProps) {
 
                 {trimmedSearch && filteredRoles.length === 0 && (
                   <div className="py-4 text-center text-[0.95rem] text-muted-foreground">
-                    No roles found
+                    {t('admin.roles.noneFound')}
                   </div>
                 )}
               </Command.List>
             </Command>
-          </Popover.Content>
-        </Popover.Portal>
-      </Popover.Root>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }

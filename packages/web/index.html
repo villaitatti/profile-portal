@@ -4,6 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/png" href="/itatti-logo-email.png" />
+    <!-- Pre-paint theme bootstrap. External (not inline) because the production
+         CSP allows script-src 'self' only; a synchronous head script still runs
+         before first paint. -->
+    <script src="/theme-init.js"></script>
     <link rel="preconnect" href="https://use.typekit.net" crossorigin />
     <!--
       Typekit is preloaded, not linked as a stylesheet: a render-blocking

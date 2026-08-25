@@ -1,4 +1,5 @@
 import { useAuth0 } from '@auth0/auth0-react';
+import { useTranslation } from 'react-i18next';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -9,19 +10,20 @@ import { LoginMethodBadge } from '@/components/shared/LoginMethodBadge';
 import { Link } from 'react-router-dom';
 
 export function DashboardPage() {
+  const { t } = useTranslation();
   const { user } = useAuth0();
   const { data: profile } = useProfile();
   const { data: apps, isLoading, error, isFetching, refetch } = useApplications();
 
   const fullName = profile
     ? `${profile.firstName} ${profile.lastName}`
-    : user?.name || 'there';
+    : user?.name || t('dashboard.fallbackName');
 
   return (
     <div className="mx-auto max-w-6xl space-y-12">
       <PageHeader
-        title="Dashboard"
-        description="Access your profile and the services available to you."
+        title={t('dashboard.title')}
+        description={t('dashboard.description')}
       />
 
       {/* Profile card */}
@@ -48,7 +50,7 @@ export function DashboardPage() {
           className="inline-flex flex-shrink-0 items-center gap-2 rounded-md bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/92"
         >
           <ArrowRight className="h-4 w-4" />
-          <span>View My Profile</span>
+          <span>{t('dashboard.viewProfile')}</span>
         </Link>
       </div>
 
@@ -57,21 +59,21 @@ export function DashboardPage() {
 
       {/* Applications */}
       <div className="max-w-4xl">
-        <h2 className="text-[1.65rem] font-semibold tracking-tight text-foreground">Web Applications</h2>
+        <h2 className="text-[1.65rem] font-semibold tracking-tight text-foreground">{t('dashboard.apps.title')}</h2>
         <div className="mt-3 mb-5 h-px w-12 bg-primary/35" />
         <p className="max-w-3xl text-[1.05rem] leading-7 text-muted-foreground">
-          These are some of the web applications and services available to you.
+          {t('dashboard.apps.intro')}
         </p>
         <p className="mt-2 max-w-3xl text-[1.05rem] leading-7 text-muted-foreground">
-          Depending on the application, you may need to sign in with your VIT ID or Harvard Key credentials.
+          {t('dashboard.apps.introSignIn')}
         </p>
         <div className="mt-6 grid max-w-4xl grid-cols-1 gap-x-10 gap-y-4 text-[1.02rem] leading-7 md:grid-cols-[auto_1fr] md:items-center">
           <LoginMethodBadge method="vit-id" />
-          <span className="text-muted-foreground">Your VIT ID is used to access services specific to I Tatti and it is active indefinitely.</span>
+          <span className="text-muted-foreground">{t('dashboard.apps.vitIdInfo')}</span>
           <LoginMethodBadge method="harvard-key" />
-          <span className="text-muted-foreground">Harvard Key is your login to access all Harvard online services and it is only active during your Harvard appointment.</span>
+          <span className="text-muted-foreground">{t('dashboard.apps.harvardKeyInfo')}</span>
           <LoginMethodBadge method="none" />
-          <span className="text-muted-foreground">Publicly accessible and do not require any login.</span>
+          <span className="text-muted-foreground">{t('dashboard.apps.noneInfo')}</span>
         </div>
       </div>
 
@@ -84,8 +86,8 @@ export function DashboardPage() {
         <div role="alert">
           <EmptyState
             icon={<AlertCircle className="h-12 w-12 mb-4 text-destructive" />}
-            title="Couldn't load your applications"
-            description="The list is temporarily unavailable. Try again in a moment — your access has not changed."
+            title={t('dashboard.apps.errorTitle')}
+            description={t('dashboard.apps.errorDescription')}
             action={
               <button
                 type="button"
@@ -93,7 +95,7 @@ export function DashboardPage() {
                 disabled={isFetching}
                 className="inline-flex items-center gap-2 rounded-md bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/92 disabled:opacity-50"
               >
-                {isFetching ? 'Trying again…' : 'Try again'}
+                {isFetching ? t('dashboard.apps.tryingAgain') : t('dashboard.apps.tryAgain')}
               </button>
             }
           />
@@ -101,8 +103,8 @@ export function DashboardPage() {
       ) : !apps || apps.length === 0 ? (
         <EmptyState
           icon={<Grid3X3 className="h-12 w-12 mb-4" />}
-          title="No applications available"
-          description="There are no applications configured for your roles."
+          title={t('dashboard.apps.emptyTitle')}
+          description={t('dashboard.apps.emptyDescription')}
         />
       ) : (
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
@@ -140,8 +142,8 @@ export function DashboardPage() {
                 )}
 
                 <div className="absolute inset-0 flex items-end justify-center bg-gradient-to-t from-black/50 via-black/20 to-transparent opacity-0 transition-opacity duration-250 [transition-timing-function:var(--ease-out-quart)] group-hover:opacity-100">
-                  <span className="mb-4 inline-flex translate-y-2 items-center gap-1.5 rounded-full bg-white/95 px-4 py-1.5 text-sm font-semibold text-foreground shadow-sm backdrop-blur-sm transition-transform duration-250 [transition-timing-function:var(--ease-out-quart)] group-hover:translate-y-0">
-                    Visit
+                  <span className="mb-4 inline-flex translate-y-2 items-center gap-1.5 rounded-full bg-card/95 px-4 py-1.5 text-sm font-semibold text-card-foreground shadow-sm backdrop-blur-sm transition-transform duration-250 [transition-timing-function:var(--ease-out-quart)] group-hover:translate-y-0">
+                    {t('dashboard.apps.visit')}
                     <ExternalLink className="h-3.5 w-3.5" />
                   </span>
                 </div>

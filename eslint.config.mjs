@@ -11,6 +11,8 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/dist/**',
       '**/coverage/**',
+      // Prisma 7 generated client (see packages/server/prisma/schema.prisma)
+      'packages/server/src/generated/**',
       '**/.vite/**',
       '**/.vite-temp/**',
       '**/*.tsbuildinfo',

@@ -46,7 +46,7 @@ vi.mock('../../services/atlassian-scim.service.js', () => ({
 
 import { computeDiff } from '../../services/atlassian-sync.service.js';
 import type { ScimUser, ScimGroup } from '../../services/atlassian-scim.service.js';
-import type { RoleGroupMapping } from '@prisma/client';
+import type { RoleGroupMapping } from '../../generated/prisma/client.js';
 
 // ── Helpers ────────────────────────────────────────────────────────
 

@@ -1,7 +1,14 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import * as Popover from '@radix-ui/react-popover';
-import * as Dialog from '@radix-ui/react-dialog';
+import { useTranslation } from 'react-i18next';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
@@ -25,6 +32,7 @@ import {
 } from '@/api/fellows';
 import { useGenerateFormInvitation, useMarkNominationSent } from '@/api/forms';
 import { getCivicrmUrl } from '@/config/runtime';
+import { formatHumanDate, formatHumanDateTime } from '@/lib/dates';
 import { getCurrentAcademicYear } from './utils/academic-year';
 import {
   Users,
@@ -57,35 +65,36 @@ import { getFormsForFellowship } from '@itatti/shared';
 
 type FilterTab = 'all' | AppointmentCategory;
 
-const APPOINTMENT_TABS: { key: FilterTab; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'full-year-fellow', label: 'Full Year Fellows' },
-  { key: 'term-fellow', label: 'Term Fellows' },
-  { key: 'visiting-professor', label: 'Visiting Professors' },
-  { key: 'artist-in-residence', label: 'Artist in Residence' },
-  { key: 'directors-appointment', label: "Director's Appts" },
-  { key: 'post-doctoral', label: 'Post-Doctoral' },
-  { key: 'research-associate', label: 'Research Associates' },
+const APPOINTMENT_TABS: { key: FilterTab; labelKey: string }[] = [
+  { key: 'all', labelKey: 'fellows.tabs.all' },
+  { key: 'full-year-fellow', labelKey: 'fellows.tabs.fullYearFellow' },
+  { key: 'term-fellow', labelKey: 'fellows.tabs.termFellow' },
+  { key: 'visiting-professor', labelKey: 'fellows.tabs.visitingProfessor' },
+  { key: 'artist-in-residence', labelKey: 'fellows.tabs.artistInResidence' },
+  { key: 'directors-appointment', labelKey: 'fellows.tabs.directorsAppointment' },
+  { key: 'post-doctoral', labelKey: 'fellows.tabs.postDoctoral' },
+  { key: 'research-associate', labelKey: 'fellows.tabs.researchAssociate' },
 ];
 
-const STATUS_PILLS: { key: AppointeeStatus; label: string; tone: string }[] = [
-  { key: 'nominated', label: 'Nominated', tone: 'bg-slate-200 text-slate-800' },
-  { key: 'nomination-sent', label: 'Nomination Sent', tone: 'bg-slate-100 text-slate-700' },
-  { key: 'form-submitted', label: 'Form Submitted', tone: 'bg-indigo-50 text-indigo-700' },
-  { key: 'accepted', label: 'Accepted', tone: 'bg-blue-50 text-blue-700' },
-  { key: 'vit-id-sent', label: 'VIT ID Sent', tone: 'bg-amber-50 text-amber-700' },
-  { key: 'vit-id-claimed', label: 'VIT ID Claimed', tone: 'bg-lime-50 text-lime-700' },
-  { key: 'enrolled', label: 'Enrolled', tone: 'bg-green-50 text-green-700' },
+const STATUS_PILLS: { key: AppointeeStatus; labelKey: string; tone: string }[] = [
+  { key: 'nominated', labelKey: 'fellows.status.nominated', tone: 'bg-muted text-foreground' },
+  { key: 'nomination-sent', labelKey: 'fellows.status.nominationSent', tone: 'bg-muted text-muted-foreground' },
+  { key: 'form-submitted', labelKey: 'fellows.status.formSubmitted', tone: 'bg-indigo-50 text-indigo-700' },
+  { key: 'accepted', labelKey: 'fellows.status.accepted', tone: 'bg-blue-50 text-blue-700' },
+  { key: 'vit-id-sent', labelKey: 'fellows.status.vitIdSent', tone: 'bg-amber-50 text-amber-700' },
+  { key: 'vit-id-claimed', labelKey: 'fellows.status.vitIdClaimed', tone: 'bg-lime-50 text-lime-700' },
+  { key: 'enrolled', labelKey: 'fellows.status.enrolled', tone: 'bg-green-50 text-green-700' },
 ];
 
-const VIT_ID_PILLS: { key: VitIdStatus; label: string; tone: string }[] = [
-  { key: 'active', label: 'Active', tone: 'bg-green-50 text-green-700' },
-  { key: 'active-different-email', label: 'Different Email', tone: 'bg-amber-50 text-amber-700' },
-  { key: 'needs-review', label: 'Needs Review', tone: 'bg-amber-50 text-amber-800' },
-  { key: 'no-account', label: 'No Account', tone: 'bg-red-50 text-red-700' },
+const VIT_ID_PILLS: { key: VitIdStatus; labelKey: string; tone: string }[] = [
+  { key: 'active', labelKey: 'fellows.filters.vitPills.active', tone: 'bg-green-50 text-green-700' },
+  { key: 'active-different-email', labelKey: 'fellows.filters.vitPills.differentEmail', tone: 'bg-amber-50 text-amber-700' },
+  { key: 'needs-review', labelKey: 'fellows.filters.vitPills.needsReview', tone: 'bg-amber-50 text-amber-800' },
+  { key: 'no-account', labelKey: 'fellows.filters.vitPills.noAccount', tone: 'bg-red-50 text-red-700' },
 ];
 
 export function FellowsManagementPage() {
+  const { t } = useTranslation();
   const currentYear = getCurrentAcademicYear();
   const [selectedYear, setSelectedYear] = useState<string>(currentYear);
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
@@ -186,14 +195,14 @@ export function FellowsManagementPage() {
     return (
       <div>
         <PageHeader
-          title="Manage Appointees"
-          description="Track the onboarding lifecycle of current and past appointees."
+          title={t('fellows.manage.title')}
+          description={t('fellows.manage.description')}
         />
         <div className="flex flex-col items-center justify-center py-16 text-destructive">
           <AlertCircle className="h-12 w-12 mb-4" />
-          <h3 className="text-lg font-medium mb-1">Failed to load appointees</h3>
+          <h3 className="text-lg font-medium mb-1">{t('fellows.manage.loadFailed')}</h3>
           <p className="text-sm text-muted-foreground">
-            {error instanceof Error ? error.message : 'An unexpected error occurred'}
+            {error instanceof Error ? error.message : t('fellows.manage.unexpectedError')}
           </p>
         </div>
       </div>
@@ -205,16 +214,16 @@ export function FellowsManagementPage() {
   return (
     <div className="px-2 sm:px-4">
       <PageHeader
-        title="Manage Appointees"
-        description="Track the onboarding lifecycle of current and past appointees."
+        title={t('fellows.manage.title')}
+        description={t('fellows.manage.description')}
       />
 
       <div className="mb-6 flex items-center justify-between gap-4">
         <h2 className="text-[1.25rem] font-semibold tracking-tight text-foreground">
-          {selectedYear} Appointees
+          {t('fellows.manage.yearAppointees', { year: selectedYear })}
         </h2>
         <SelectDropdown
-          ariaLabel="Academic year"
+          ariaLabel={t('fellows.manage.academicYear')}
           options={(academicYears.length > 0 ? academicYears : [currentYear]).map((year) => ({
             value: year,
             label: year,
@@ -251,7 +260,7 @@ export function FellowsManagementPage() {
                   : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
-              {tab.label}
+              {t(tab.labelKey)}
               <span
                 className={`ml-1.5 inline-flex items-center rounded-full px-1.5 py-0.5 text-[0.75rem] ${
                   activeTab === tab.key
@@ -269,7 +278,7 @@ export function FellowsManagementPage() {
       {/* Filters Card */}
       <div className="mb-4 rounded-xl border bg-card p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-foreground">Filters</h3>
+          <h3 className="text-sm font-semibold text-foreground">{t('fellows.filters.title')}</h3>
           {(selectedStatuses.length > 0 || selectedVitIdStatuses.length > 0) && (
             <button
               onClick={() => {
@@ -279,14 +288,14 @@ export function FellowsManagementPage() {
               className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             >
               <X className="h-3 w-3" />
-              Clear
+              {t('fellows.filters.clear')}
             </button>
           )}
         </div>
 
         <div className="mb-3">
           <span className="mb-1.5 block text-[0.75rem] font-medium text-muted-foreground">
-            Appointee Status
+            {t('fellows.filters.appointeeStatus')}
           </span>
           <div className="flex flex-wrap gap-2">
             {STATUS_PILLS.map((pill) => {
@@ -300,7 +309,7 @@ export function FellowsManagementPage() {
                     isActive ? pill.tone : 'bg-muted/60 text-muted-foreground hover:bg-muted'
                   }`}
                 >
-                  {pill.label} ({statusCounts[pill.key]})
+                  {t(pill.labelKey)} ({statusCounts[pill.key]})
                 </button>
               );
             })}
@@ -309,7 +318,7 @@ export function FellowsManagementPage() {
 
         <div>
           <span className="mb-1.5 block text-[0.75rem] font-medium text-muted-foreground">
-            VIT ID Status
+            {t('fellows.filters.vitIdStatus')}
           </span>
           <div className="flex flex-wrap gap-2">
             {VIT_ID_PILLS.map((pill) => {
@@ -323,7 +332,7 @@ export function FellowsManagementPage() {
                     isActive ? pill.tone : 'bg-muted/60 text-muted-foreground hover:bg-muted'
                   }`}
                 >
-                  {pill.label} ({vitIdStatusCounts[pill.key]})
+                  {t(pill.labelKey)} ({vitIdStatusCounts[pill.key]})
                 </button>
               );
             })}
@@ -337,7 +346,7 @@ export function FellowsManagementPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input
             type="text"
-            placeholder="Search by name or email..."
+            placeholder={t('fellows.manage.searchPlaceholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full rounded-md border bg-background py-2.5 pl-10 pr-4 text-base outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
@@ -349,15 +358,15 @@ export function FellowsManagementPage() {
       {filteredFellows.length === 0 ? (
         <EmptyState
           icon={<Users className="h-12 w-12 mb-4" />}
-          title="No appointees found"
+          title={t('fellows.manage.emptyTitle')}
           description={
             searchQuery && (selectedStatuses.length > 0 || selectedVitIdStatuses.length > 0 || activeTab !== 'all')
-              ? 'Try adjusting your search or filters.'
+              ? t('fellows.manage.emptyAdjustSearchOrFilters')
               : searchQuery
-                ? 'Try adjusting your search query.'
+                ? t('fellows.manage.emptyAdjustSearch')
                 : selectedStatuses.length > 0 || selectedVitIdStatuses.length > 0 || activeTab !== 'all'
-                  ? 'No appointees match the current filters.'
-                  : `No appointees on file for ${selectedYear}.`
+                  ? t('fellows.manage.emptyNoMatchFilters')
+                  : t('fellows.manage.emptyNoneForYear', { year: selectedYear })
           }
         />
       ) : (
@@ -438,11 +447,12 @@ function BioEmailPill({
   sendCount: number;
   targetAcademicYear: string | null;
 }) {
+  const { t, i18n } = useTranslation();
   if (status === 'none') {
     return (
       <span
         className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-[0.8rem] font-medium text-muted-foreground"
-        title="No bio & project description email on record for this fellowship year"
+        title={t('fellows.bioEmail.noneTitle')}
       >
         —
       </span>
@@ -454,33 +464,40 @@ function BioEmailPill({
         className="inline-flex items-center rounded-full bg-warning px-2.5 py-0.5 text-[0.8rem] font-medium text-warning-foreground"
         title={
           targetAcademicYear
-            ? `Bio email queued for ${targetAcademicYear} — will be sent by the daily cron`
-            : 'Bio email queued — will be sent by the daily cron'
+            ? t('fellows.bioEmail.pendingTitleYear', { year: targetAcademicYear })
+            : t('fellows.bioEmail.pendingTitle')
         }
       >
-        Pending
+        {t('fellows.bioEmail.pending')}
       </span>
     );
   }
   if (status === 'sent') {
-    const verb = sendCount > 1 ? 'Re-sent' : 'Sent';
+    const resent = sendCount > 1;
     const label = sentAt
-      ? `${verb} ${new Date(sentAt).toLocaleDateString(undefined, {
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric',
-        })}`
-      : verb;
+      ? t(resent ? 'fellows.bioEmail.resentOn' : 'fellows.bioEmail.sentOn', {
+          date: formatHumanDate(sentAt, i18n.language),
+        })
+      : t(resent ? 'fellows.bioEmail.resent' : 'fellows.bioEmail.sent');
+    const sentDateTime = sentAt ? formatHumanDateTime(sentAt, i18n.language) : null;
+    const title = targetAcademicYear
+      ? sentDateTime
+        ? t(resent ? 'fellows.bioEmail.titleResentYearOn' : 'fellows.bioEmail.titleSentYearOn', {
+            year: targetAcademicYear,
+            date: sentDateTime,
+          })
+        : t(resent ? 'fellows.bioEmail.titleResentYear' : 'fellows.bioEmail.titleSentYear', {
+            year: targetAcademicYear,
+          })
+      : sentDateTime
+        ? t(resent ? 'fellows.bioEmail.titleResentOn' : 'fellows.bioEmail.titleSentOn', {
+            date: sentDateTime,
+          })
+        : t(resent ? 'fellows.bioEmail.titleResent' : 'fellows.bioEmail.titleSent');
     return (
       <span
         className="inline-flex items-center rounded-full bg-green-50 px-2.5 py-0.5 text-[0.8rem] font-medium text-green-700"
-        title={
-          targetAcademicYear
-            ? `Bio email ${sendCount > 1 ? 're-sent' : 'sent'} for ${targetAcademicYear}${sentAt ? ` on ${new Date(sentAt).toLocaleString()}` : ''}`
-            : sentAt
-              ? `Bio email ${sendCount > 1 ? 're-sent' : 'sent'} on ${new Date(sentAt).toLocaleString()}`
-              : `Bio email ${sendCount > 1 ? 're-sent' : 'sent'}`
-        }
+        title={title}
       >
         {label}
       </span>
@@ -489,44 +506,46 @@ function BioEmailPill({
   return (
     <span
       className="inline-flex items-center rounded-full bg-red-50 px-2.5 py-0.5 text-[0.8rem] font-medium text-red-700"
-      title="Last bio email attempt failed — use the send button to retry"
+      title={t('fellows.bioEmail.failedTitle')}
     >
-      Failed
+      {t('fellows.bioEmail.failed')}
     </span>
   );
 }
 
-const BIO_EMAIL_ERROR_MESSAGES: Record<SendBioEmailReason, string> = {
-  no_vit_id: 'This appointee has not claimed a VIT ID yet.',
-  no_matching_fellowship: 'No current or upcoming fellowship matches the requested year.',
-  fellowship_not_accepted: 'The fellowship for the target year is not marked as accepted.',
-  no_primary_email: 'No primary email is on file for this appointee.',
-  already_sent: 'The bio email has already been sent for this fellowship year.',
-  civicrm_unavailable: 'CiviCRM is temporarily unavailable. Try again in a moment.',
-  email_send_failed: 'The email service rejected the message. Check SES configuration and sender verification, then try again.',
+// Reason → i18n key maps; translated with t() at usage time so the copy
+// follows the active language.
+const BIO_EMAIL_ERROR_KEYS: Record<SendBioEmailReason, string> = {
+  no_vit_id: 'fellows.errors.noVitId',
+  no_matching_fellowship: 'fellows.errors.noMatchingFellowship',
+  fellowship_not_accepted: 'fellows.errors.fellowshipNotAccepted',
+  no_primary_email: 'fellows.errors.noPrimaryEmail',
+  already_sent: 'fellows.errors.bioAlreadySent',
+  civicrm_unavailable: 'fellows.errors.civicrmUnavailable',
+  email_send_failed: 'fellows.errors.emailSendFailed',
 };
 
-const VIT_ID_EMAIL_ERROR_MESSAGES: Record<SendVitIdEmailReason, string> = {
-  no_matching_fellowship: 'No current or upcoming fellowship matches the requested year.',
-  fellowship_not_accepted: 'The fellowship for the target year is not marked as accepted.',
-  no_primary_email: 'No primary email is on file for this appointee.',
-  missing_first_name: 'This appointee is missing a first name in CiviCRM. Update the record and try again.',
-  already_has_vit_id: 'This appointee already has a VIT ID. Use the bio email flow instead.',
-  needs_review: 'Resolve the VIT ID Status data conflict before sending.',
-  already_sent: 'The VIT ID invitation has already been sent for this fellowship year.',
-  civicrm_unavailable: 'CiviCRM is temporarily unavailable. Try again in a moment.',
-  email_send_failed: 'The email service rejected the message. Check SES configuration and sender verification, then try again.',
+const VIT_ID_EMAIL_ERROR_KEYS: Record<SendVitIdEmailReason, string> = {
+  no_matching_fellowship: 'fellows.errors.noMatchingFellowship',
+  fellowship_not_accepted: 'fellows.errors.fellowshipNotAccepted',
+  no_primary_email: 'fellows.errors.noPrimaryEmail',
+  missing_first_name: 'fellows.errors.missingFirstName',
+  already_has_vit_id: 'fellows.errors.alreadyHasVitId',
+  needs_review: 'fellows.errors.needsReview',
+  already_sent: 'fellows.errors.vitIdAlreadySent',
+  civicrm_unavailable: 'fellows.errors.civicrmUnavailable',
+  email_send_failed: 'fellows.errors.emailSendFailed',
 };
 
 // Preview-specific reasons (contact_not_found is a 404 unique to the preview
 // endpoint; civicrm_unavailable + no_primary_email + missing_first_name reuse
 // the send-side copy but are repeated here so the Record is exhaustive and
 // future reason additions surface as TS errors).
-const EMAIL_PREVIEW_ERROR_MESSAGES: Record<EmailPreviewReason, string> = {
-  missing_first_name: 'This appointee is missing a first name in CiviCRM. Update the record and try again.',
-  no_primary_email: 'No primary email is on file for this appointee.',
-  contact_not_found: 'This appointee no longer exists in CiviCRM — refresh the page and try again.',
-  civicrm_unavailable: 'CiviCRM is temporarily unavailable. Try again in a moment.',
+const EMAIL_PREVIEW_ERROR_KEYS: Record<EmailPreviewReason, string> = {
+  missing_first_name: 'fellows.errors.missingFirstName',
+  no_primary_email: 'fellows.errors.noPrimaryEmail',
+  contact_not_found: 'fellows.errors.contactNotFound',
+  civicrm_unavailable: 'fellows.errors.civicrmUnavailable',
 };
 
 function formatLabel(value?: string): string {
@@ -534,15 +553,6 @@ function formatLabel(value?: string): string {
   return value
     .replace(/_/g, ' ')
     .replace(/(^|\s)\w/g, (c) => c.toUpperCase());
-}
-
-function formatDate(dateStr: string): string {
-  // "24 Apr 2026" — unambiguous for the EU/US mixed audience here.
-  return new Date(dateStr).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
 }
 
 function todayInputValue(): string {
@@ -608,6 +618,7 @@ type ActiveNominationSent = {
 };
 
 function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEntry[]; paginate: boolean }) {
+  const { t, i18n } = useTranslation();
   // Default sort: appointment asc → lastName asc. Groups fellows by role type
   // (Fellow, Visiting Fellow, Visiting Professor, ...), then alphabetical
   // within each group. Amber/red badges carry the attention signal.
@@ -747,7 +758,7 @@ function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEntry[]; 
         ? fellow.vitIdInvitation.targetAcademicYear
         : fellow.bioEmail.targetAcademicYear;
     if (!targetYear) {
-      setSendError('No target academic year available for this appointee.');
+      setSendError(t('fellows.send.noTargetYear'));
       return;
     }
 
@@ -761,10 +772,13 @@ function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEntry[]; 
         });
         const label = `${fellow.firstName} ${fellow.lastName}`;
         if (result.status === 'SENT') {
-          toast.success(`VIT ID invitation sent to ${label}.`);
+          toast.success(t('fellows.send.vitIdSentTo', { name: label }));
         } else {
           toast.success(
-            `VIT ID invitation queued for ${label} (status: ${result.status.toLowerCase()}).`
+            t('fellows.send.vitIdQueued', {
+              name: label,
+              status: result.status.toLowerCase(),
+            })
           );
         }
         setActiveSend(null);
@@ -778,12 +792,15 @@ function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEntry[]; 
         if (result.status === 'SENT') {
           toast.success(
             mode === 'resend'
-              ? `Bio email re-sent to ${label}.`
-              : `Bio email sent to ${label}.`
+              ? t('fellows.send.bioResentTo', { name: label })
+              : t('fellows.send.bioSentTo', { name: label })
           );
         } else {
           toast.success(
-            `${mode === 'resend' ? 'Bio email re-send' : 'Bio email'} queued for ${label} (status: ${result.status.toLowerCase()}).`
+            t(mode === 'resend' ? 'fellows.send.bioResendQueued' : 'fellows.send.bioQueued', {
+              name: label,
+              status: result.status.toLowerCase(),
+            })
           );
         }
         setActiveSend(null);
@@ -793,17 +810,19 @@ function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEntry[]; 
       // this matches the design-review decision (inline banner > toast close).
       if (err instanceof SendVitIdEmailError) {
         setSendError(
-          VIT_ID_EMAIL_ERROR_MESSAGES[err.reason] ||
-            `Failed to send VIT ID invitation (${err.reason}).`
+          VIT_ID_EMAIL_ERROR_KEYS[err.reason]
+            ? t(VIT_ID_EMAIL_ERROR_KEYS[err.reason])
+            : t('fellows.send.vitIdFailedFallback', { reason: err.reason })
         );
       } else if (err instanceof SendBioEmailError) {
         setSendError(
-          BIO_EMAIL_ERROR_MESSAGES[err.reason] ||
-            `Failed to send bio email (${err.reason}).`
+          BIO_EMAIL_ERROR_KEYS[err.reason]
+            ? t(BIO_EMAIL_ERROR_KEYS[err.reason])
+            : t('fellows.send.bioFailedFallback', { reason: err.reason })
         );
       } else {
         setSendError(
-          err instanceof Error ? err.message : 'Failed to send email.'
+          err instanceof Error ? err.message : t('fellows.send.genericFailed')
         );
       }
     } finally {
@@ -813,19 +832,19 @@ function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEntry[]; 
 
   return (
     <>
-      <div className="overflow-x-auto rounded-xl border bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30" tabIndex={0} role="region" aria-label="Appointees table">
+      <div className="overflow-x-auto rounded-xl border bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30" tabIndex={0} role="region" aria-label={t('fellows.manage.tableAria')}>
         <table className="w-full text-[0.95rem]">
           <thead>
             <tr className="border-b bg-muted/50">
-              <SortHeader field="name" label="Name" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
-              <SortHeader field="appointeeStatus" label="Appointee Status" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
-              <SortHeader field="appointment" label="Appointment" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
-              <SortHeader field="fellowship" label="Fellowship Type" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
-              <SortHeader field="form" label="Form" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
-              <SortHeader field="status" label="VIT ID Status" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
-              <SortHeader field="bioEmail" label="Bio Email" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
+              <SortHeader field="name" label={t('fellows.table.name')} sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
+              <SortHeader field="appointeeStatus" label={t('fellows.table.appointeeStatus')} sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
+              <SortHeader field="appointment" label={t('fellows.table.appointment')} sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
+              <SortHeader field="fellowship" label={t('fellows.table.fellowshipType')} sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
+              <SortHeader field="form" label={t('fellows.table.form')} sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
+              <SortHeader field="status" label={t('fellows.table.vitIdStatus')} sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
+              <SortHeader field="bioEmail" label={t('fellows.table.bioEmail')} sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
               <th className="px-3 py-3 text-center text-[0.75rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                Actions
+                {t('fellows.table.actions')}
               </th>
             </tr>
           </thead>
@@ -854,15 +873,26 @@ function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEntry[]; 
         onConfirm={handleConfirmSend}
         title={
           activeSend?.kind === 'vit_id_invitation'
-            ? `Send VIT ID invitation to ${activeSend.fellow.firstName} ${activeSend.fellow.lastName}`
+            ? t('fellows.send.vitIdTitle', {
+                name: `${activeSend.fellow.firstName} ${activeSend.fellow.lastName}`,
+              })
             : activeSend
-              ? `${activeSend.mode === 'resend' ? 'Re-send' : 'Send'} bio email to ${activeSend.fellow.firstName} ${activeSend.fellow.lastName}`
+              ? t(
+                  activeSend.mode === 'resend'
+                    ? 'fellows.send.bioResendTitle'
+                    : 'fellows.send.bioTitle',
+                  { name: `${activeSend.fellow.firstName} ${activeSend.fellow.lastName}` }
+                )
               : ''
         }
-        confirmLabel="Send email"
+        confirmLabel={t('fellows.send.confirm')}
         notice={
           activeSend?.kind === 'bio_project_description' && activeSend.mode === 'resend'
-            ? `This bio email was already sent${activeSend.fellow.bioEmail.sentAt ? ` on ${new Date(activeSend.fellow.bioEmail.sentAt).toLocaleDateString()}` : ''}. Review the email before re-sending it.`
+            ? activeSend.fellow.bioEmail.sentAt
+              ? t('fellows.send.resendNoticeDate', {
+                  date: formatHumanDate(activeSend.fellow.bioEmail.sentAt, i18n.language),
+                })
+              : t('fellows.send.resendNotice')
             : null
         }
         preview={
@@ -879,8 +909,11 @@ function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEntry[]; 
         previewError={
           previewQuery.error
             ? previewQuery.error instanceof EmailPreviewError
-              ? EMAIL_PREVIEW_ERROR_MESSAGES[previewQuery.error.reason] ||
-                `Preview failed: ${previewQuery.error.reason}`
+              ? EMAIL_PREVIEW_ERROR_KEYS[previewQuery.error.reason]
+                ? t(EMAIL_PREVIEW_ERROR_KEYS[previewQuery.error.reason])
+                : t('fellows.send.previewFailedFallback', {
+                    reason: previewQuery.error.reason,
+                  })
               : (previewQuery.error as Error).message
             : null
         }
@@ -902,12 +935,14 @@ function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEntry[]; 
               nominationSentOn,
             });
             toast.success(
-              `Nomination sent date saved for ${activeNominationSent.fellow.firstName} ${activeNominationSent.fellow.lastName}.`
+              t('fellows.dialogs.nominationSaved', {
+                name: `${activeNominationSent.fellow.firstName} ${activeNominationSent.fellow.lastName}`,
+              })
             );
             setActiveNominationSent(null);
           } catch (err) {
             toast.error(
-              err instanceof Error ? err.message : 'Failed to save nomination sent date.'
+              err instanceof Error ? err.message : t('fellows.errors.saveNominationFailed')
             );
           }
         }}
@@ -929,7 +964,11 @@ function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEntry[]; 
       {paginate && totalPages > 1 && (
         <div className="mt-4 flex items-center justify-between text-sm">
           <span className="text-muted-foreground">
-            Showing {(page - 1) * FELLOWS_PER_PAGE + 1}–{Math.min(page * FELLOWS_PER_PAGE, sorted.length)} of {sorted.length}
+            {t('fellows.table.showing', {
+              from: (page - 1) * FELLOWS_PER_PAGE + 1,
+              to: Math.min(page * FELLOWS_PER_PAGE, sorted.length),
+              total: sorted.length,
+            })}
           </span>
           <div className="flex gap-2">
             <button
@@ -937,14 +976,14 @@ function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEntry[]; 
               disabled={page === 1}
               className="rounded-md border px-3 py-1 text-sm transition-colors hover:bg-muted disabled:opacity-50"
             >
-              Previous
+              {t('fellows.table.previous')}
             </button>
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
               className="rounded-md border px-3 py-1 text-sm transition-colors hover:bg-muted disabled:opacity-50"
             >
-              Next
+              {t('fellows.table.next')}
             </button>
           </div>
         </div>
@@ -995,11 +1034,8 @@ function formLinkForToken(token: string): string {
   return `${window.location.origin}/forms/${token}`;
 }
 
-function formLinkCopiedMessage(fellow: FellowDashboardEntry): string {
-  return `Form link for Appointee ${fellow.firstName} ${fellow.lastName} copied`;
-}
-
 function useCopyFormLink(fellow: FellowDashboardEntry) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const resetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1019,7 +1055,11 @@ function useCopyFormLink(fellow: FellowDashboardEntry) {
     try {
       await navigator.clipboard.writeText(formLinkForToken(token));
       setCopied(true);
-      toast.success(formLinkCopiedMessage(fellow));
+      toast.success(
+        t('fellows.form.linkCopied', {
+          name: `${fellow.firstName} ${fellow.lastName}`,
+        })
+      );
       if (resetTimeoutRef.current) clearTimeout(resetTimeoutRef.current);
       resetTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
       return true;
@@ -1027,7 +1067,7 @@ function useCopyFormLink(fellow: FellowDashboardEntry) {
       if (options.onCopyFailure) {
         options.onCopyFailure();
       } else {
-        toast.error(options.failureMessage ?? 'Failed to copy link.');
+        toast.error(options.failureMessage ?? t('fellows.form.copyFailed'));
       }
       return false;
     }
@@ -1043,6 +1083,7 @@ function CopyFormLinkButton({
   fellow: FellowDashboardEntry;
   invitation: FormInvitationSummaryEntry;
 }) {
+  const { t } = useTranslation();
   const { copied, copyFormLink } = useCopyFormLink(fellow);
 
   return (
@@ -1051,8 +1092,10 @@ function CopyFormLinkButton({
       onClick={() => {
         void copyFormLink(invitation.token);
       }}
-      title="Copy form link"
-      aria-label={`Copy form link for ${fellow.firstName} ${fellow.lastName}`}
+      title={t('fellows.form.copyLink')}
+      aria-label={t('fellows.form.copyLinkAria', {
+        name: `${fellow.firstName} ${fellow.lastName}`,
+      })}
       className="inline-flex h-7 w-7 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
     >
       {copied ? (
@@ -1065,43 +1108,47 @@ function CopyFormLinkButton({
 }
 
 function FormStatusCell({ fellow }: { fellow: FellowDashboardEntry }) {
+  const { t, i18n } = useTranslation();
   const configuredForm = getPrimaryConfiguredForm(fellow);
   const invitation = getFormInvitation(fellow);
 
-  let label = 'Ready';
+  let label = t('fellows.form.ready');
   let tone = 'bg-muted text-muted-foreground';
-  let description =
-    'A form is configured for this appointment type. Generate the link, then paste it into Angela’s nomination email.';
+  let description = t('fellows.form.readyDescription');
   let subLabel: string | null = null;
   let canCopy = false;
 
   if (!configuredForm) {
-    label = 'Not configured';
+    label = t('fellows.form.notConfigured');
     tone = 'bg-red-50 text-red-700';
-    description = `${formatLabel(fellow.appointment) || 'This appointment type'} has no Profile Portal form configured yet. Add a form mapping before generating links for this fellowship.`;
+    description = t('fellows.form.notConfiguredDescription', {
+      appointment: formatLabel(fellow.appointment) || t('fellows.form.thisAppointmentType'),
+    });
   } else if (invitation?.status === 'submitted') {
-    label = 'Submitted';
+    label = t('fellows.form.submitted');
     tone = 'bg-green-50 text-green-700';
-    description =
-      'The appointee submitted the form. The appointee lifecycle can now move to Form Submitted.';
-    subLabel = invitation.submittedAt ? `on ${formatDate(invitation.submittedAt)}` : null;
+    description = t('fellows.form.submittedDescription');
+    subLabel = invitation.submittedAt
+      ? t('fellows.form.onDate', {
+          date: formatHumanDate(invitation.submittedAt, i18n.language),
+        })
+      : null;
   } else if (invitation?.status === 'expired') {
-    label = 'Expired';
+    label = t('fellows.form.expired');
     tone = 'bg-muted text-muted-foreground';
-    description =
-      'This form link is expired. Reset or generate a new link before sending.';
+    description = t('fellows.form.expiredDescription');
   } else if (invitation?.nominationSentAt) {
-    label = 'Waiting';
+    label = t('fellows.form.waiting');
     tone = 'bg-amber-50 text-amber-700';
-    description =
-      'Angela marked the nomination email as sent. The portal is waiting for the appointee to submit the form.';
-    subLabel = `sent ${formatDate(invitation.nominationSentAt)}`;
+    description = t('fellows.form.waitingDescription');
+    subLabel = t('fellows.form.sentDate', {
+      date: formatHumanDate(invitation.nominationSentAt, i18n.language),
+    });
     canCopy = true;
   } else if (invitation) {
-    label = 'Link Generated';
-    tone = 'bg-slate-100 text-slate-700';
-    description =
-      'The private form link exists. Copy it into Angela’s nomination email, then mark Nomination sent from the Actions menu.';
+    label = t('fellows.form.linkGenerated');
+    tone = 'bg-muted text-muted-foreground';
+    description = t('fellows.form.linkGeneratedDescription');
     canCopy = true;
   }
 
@@ -1122,37 +1169,37 @@ function FormStatusCell({ fellow }: { fellow: FellowDashboardEntry }) {
           </span>
         )}
       </div>
-      <Popover.Root>
-        <Popover.Trigger asChild>
-          <button
-            type="button"
-            aria-label="View form status details"
-            className="mt-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-          >
-            <Info className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
-        </Popover.Trigger>
-        <Popover.Portal>
-          <Popover.Content
-            sideOffset={6}
-            className="z-50 w-72 rounded-lg border bg-card p-4 text-[0.88rem] leading-5 text-foreground shadow-lg data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 duration-150"
-          >
-            <div className="mb-1 font-semibold text-sm">Form Status</div>
-            <p className="text-muted-foreground">{description}</p>
-            {configuredForm && (
-              <p className="mt-3 text-[0.82rem] text-muted-foreground">
-                Configured form: {configuredForm.title}
-              </p>
-            )}
-            <Popover.Arrow className="fill-card" />
-          </Popover.Content>
-        </Popover.Portal>
-      </Popover.Root>
+      <Popover>
+        <PopoverTrigger
+          render={
+            <button
+              type="button"
+              aria-label={t('fellows.form.statusPopoverAria')}
+              className="mt-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          }
+        >
+          <Info className="h-3.5 w-3.5" aria-hidden="true" />
+        </PopoverTrigger>
+        <PopoverContent
+          sideOffset={6}
+          className="block w-72 gap-0 rounded-lg border bg-card p-4 text-[0.88rem] leading-5 text-foreground shadow-lg"
+        >
+          <div className="mb-1 font-semibold text-sm">{t('fellows.form.statusPopoverTitle')}</div>
+          <p className="text-muted-foreground">{description}</p>
+          {configuredForm && (
+            <p className="mt-3 text-[0.82rem] text-muted-foreground">
+              {t('fellows.form.configuredForm', { title: configuredForm.title })}
+            </p>
+          )}
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }
 
 function FormLinkMenuItem({ fellow }: { fellow: FellowDashboardEntry }) {
+  const { t, i18n } = useTranslation();
   const generateMutation = useGenerateFormInvitation();
   const { copied, copyFormLink } = useCopyFormLink(fellow);
   const configuredForm = getPrimaryConfiguredForm(fellow);
@@ -1171,14 +1218,16 @@ function FormLinkMenuItem({ fellow }: { fellow: FellowDashboardEntry }) {
       });
       token = result.token;
     } catch {
-      toast.error('Failed to generate form link.');
+      toast.error(t('fellows.form.generateFailed'));
       return;
     }
 
     await copyFormLink(token, {
       onCopyFailure: () =>
         toast.success(
-          `Form link generated for ${fellow.firstName} ${fellow.lastName}. Copy it from the button.`
+          t('fellows.form.generatedCopyManually', {
+            name: `${fellow.firstName} ${fellow.lastName}`,
+          })
         ),
     });
   }
@@ -1190,95 +1239,100 @@ function FormLinkMenuItem({ fellow }: { fellow: FellowDashboardEntry }) {
 
   if (!configuredForm) {
     return (
-      <DropdownMenu.Item
+      <DropdownMenuItem
         disabled
-        className="flex cursor-default items-start gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground outline-none data-[disabled]:opacity-100"
+        className="cursor-default items-start px-3 text-muted-foreground data-[disabled]:opacity-100"
       >
         <AlertTriangle className="mt-0.5 h-4 w-4 text-destructive" />
         <span className="flex flex-col">
-          <span className="font-medium text-foreground">No form configured</span>
+          <span className="font-medium text-foreground">{t('fellows.form.noFormConfigured')}</span>
           <span className="text-xs leading-5">
-            {formatLabel(fellow.appointment) || 'This appointment type'} has no form yet.
+            {t('fellows.form.noFormYet', {
+              appointment:
+                formatLabel(fellow.appointment) || t('fellows.form.thisAppointmentType'),
+            })}
           </span>
         </span>
-      </DropdownMenu.Item>
+      </DropdownMenuItem>
     );
   }
 
   if (existingInvitation?.status === 'submitted') {
     return (
-      <DropdownMenu.Item
+      <DropdownMenuItem
         disabled
-        className="flex cursor-default items-center gap-2 rounded-md px-3 py-2 text-sm text-green-700 outline-none data-[disabled]:opacity-100"
+        className="cursor-default px-3 text-green-700 data-[disabled]:opacity-100"
       >
         <Check className="h-4 w-4" />
         <span className="flex flex-col">
-          <span className="font-medium">Form done</span>
+          <span className="font-medium">{t('fellows.form.formDone')}</span>
           {existingInvitation.submittedAt && (
             <span className="text-xs text-muted-foreground">
-              Submitted {formatDate(existingInvitation.submittedAt)}
+              {t('fellows.form.submittedOn', {
+                date: formatHumanDate(existingInvitation.submittedAt, i18n.language),
+              })}
             </span>
           )}
         </span>
-      </DropdownMenu.Item>
+      </DropdownMenuItem>
     );
   }
 
   if (existingInvitation?.status === 'expired') {
     return (
-      <DropdownMenu.Item
+      <DropdownMenuItem
         disabled={generateMutation.isPending}
-        onSelect={(event) => {
-          event.preventDefault();
+        closeOnClick={false}
+        onClick={() => {
           void handleGenerate();
         }}
-        className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-foreground outline-none transition-colors focus:bg-muted data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
+        className="px-3 font-medium text-foreground data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
       >
         {generateMutation.isPending ? (
           <Loader2 className="h-4 w-4 animate-spin text-indigo-700" />
         ) : (
           <Repeat2 className="h-4 w-4 text-indigo-700" />
         )}
-        <span>Generate new form link</span>
-      </DropdownMenu.Item>
+        <span>{t('fellows.form.generateNewLink')}</span>
+      </DropdownMenuItem>
     );
   }
 
   if (existingInvitation) {
     return (
-      <DropdownMenu.Item
-        onSelect={(event) => {
-          event.preventDefault();
+      <DropdownMenuItem
+        closeOnClick={false}
+        onClick={() => {
           void handleCopy();
         }}
-        className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-foreground outline-none transition-colors focus:bg-muted"
+        className="px-3 font-medium text-foreground"
       >
         {copied ? (
           <Check className="h-4 w-4 text-green-700" />
         ) : (
           <Copy className="h-4 w-4 text-indigo-700" />
         )}
-        <span>{copied ? 'Copied!' : 'Copy form link'}</span>
-      </DropdownMenu.Item>
+        <span>{copied ? t('fellows.form.copied') : t('fellows.form.copyLink')}</span>
+      </DropdownMenuItem>
     );
   }
 
   return (
-    <DropdownMenu.Item
+    <DropdownMenuItem
       disabled={generateMutation.isPending}
-      onSelect={(event) => {
-        event.preventDefault();
+      closeOnClick={false}
+      onClick={() => {
         void handleGenerate();
       }}
-      className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-foreground outline-none transition-colors focus:bg-muted data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
+      className="px-3 font-medium text-foreground data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
     >
       {generateMutation.isPending ? (
         <Loader2 className="h-4 w-4 animate-spin text-indigo-700" />
       ) : (
         <FileText className="h-4 w-4 text-indigo-700" />
       )}
-      <span>Generate form link</span>
-    </DropdownMenu.Item>
+      <span>{t('fellows.form.generateLink')}</span>
+    </DropdownMenuItem>
   );
 }
 
@@ -1296,6 +1350,7 @@ function FellowActionsMenu({
   ) => void;
   onNominationSentClick: (invitation: FormInvitationSummaryEntry) => void;
 }) {
+  const { t } = useTranslation();
   const formInvitation = getFormInvitation(fellow);
   const civicrmUrl = getCivicrmUrl();
   const canMarkNominationSent =
@@ -1304,117 +1359,116 @@ function FellowActionsMenu({
     !formInvitation.nominationSentAt;
 
   return (
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger asChild>
-        <button
-          type="button"
-          className="inline-flex h-10 w-10 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          aria-label={`Open actions for ${fellow.firstName} ${fellow.lastName}`}
-        >
-          <MoreHorizontal className="h-4 w-4" />
-        </button>
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Portal>
-        <DropdownMenu.Content
-          align="end"
-          collisionPadding={8}
-          sideOffset={6}
-          className="z-50 min-w-[15rem] rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg data-[side=bottom]:animate-in data-[side=bottom]:slide-in-from-top-1 data-[side=top]:animate-in data-[side=top]:slide-in-from-bottom-1"
-        >
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <button
+            type="button"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            aria-label={t('fellows.actions.openMenuAria', {
+              name: `${fellow.firstName} ${fellow.lastName}`,
+            })}
+          />
+        }
+      >
+        <MoreHorizontal className="h-4 w-4" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" sideOffset={6} className="min-w-[15rem]">
           <FormLinkMenuItem fellow={fellow} />
 
           {canMarkNominationSent && (
-            <DropdownMenu.Item
+            <DropdownMenuItem
               disabled={isPending}
-              onSelect={() => {
+              onClick={() => {
                 if (formInvitation) onNominationSentClick(formInvitation);
               }}
-              className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-foreground outline-none transition-colors focus:bg-muted data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
+              className="px-3 font-medium text-foreground data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
             >
               <CalendarCheck className="h-4 w-4 text-primary" />
-              <span>Nomination sent</span>
-            </DropdownMenu.Item>
+              <span>{t('fellows.actions.nominationSent')}</span>
+            </DropdownMenuItem>
           )}
 
           {fellow.vitIdInvitation.canManuallySend && (
-            <DropdownMenu.Item
+            <DropdownMenuItem
               disabled={isPending}
-              onSelect={() => onSendClick('vit_id_invitation')}
-              className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-foreground outline-none transition-colors focus:bg-muted data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
+              onClick={() => onSendClick('vit_id_invitation')}
+              className="px-3 font-medium text-foreground data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
             >
               {isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin text-primary" />
               ) : (
                 <UserPlus className="h-4 w-4 text-primary" />
               )}
-              <span>Send VIT ID email</span>
-            </DropdownMenu.Item>
+              <span>{t('fellows.actions.sendVitIdEmail')}</span>
+            </DropdownMenuItem>
           )}
 
           {fellow.status === 'needs-review' && (
-            <DropdownMenu.Item
+            <DropdownMenuItem
               disabled
-              className="flex cursor-default items-start gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground outline-none data-[disabled]:opacity-100"
+              className="cursor-default items-start px-3 text-muted-foreground data-[disabled]:opacity-100"
             >
               <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-700" />
               <span className="flex flex-col">
-                <span className="font-medium text-foreground">Send disabled</span>
+                <span className="font-medium text-foreground">{t('fellows.actions.sendDisabled')}</span>
                 <span className="text-xs leading-5">
-                  Resolve the VIT ID status conflict first.
+                  {t('fellows.actions.resolveConflictFirst')}
                 </span>
               </span>
-            </DropdownMenu.Item>
+            </DropdownMenuItem>
           )}
 
           {fellow.bioEmail.canManuallySend && (
-            <DropdownMenu.Item
+            <DropdownMenuItem
               disabled={isPending}
-              onSelect={() => onSendClick('bio_project_description')}
-              className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-foreground outline-none transition-colors focus:bg-muted data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
+              onClick={() => onSendClick('bio_project_description')}
+              className="px-3 font-medium text-foreground data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
             >
               {isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Mail className="h-4 w-4" />
               )}
-              <span>Send bio email</span>
-            </DropdownMenu.Item>
+              <span>{t('fellows.actions.sendBioEmail')}</span>
+            </DropdownMenuItem>
           )}
 
           {fellow.bioEmail.status === 'sent' && fellow.bioEmail.targetAcademicYear && (
-            <DropdownMenu.Item
+            <DropdownMenuItem
               disabled={isPending}
-              onSelect={() => onSendClick('bio_project_description', 'resend')}
-              className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-amber-900 outline-none transition-colors focus:bg-amber-50 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
+              onClick={() => onSendClick('bio_project_description', 'resend')}
+              className="px-3 font-medium text-amber-900 data-highlighted:bg-amber-50 data-highlighted:text-amber-900 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 dark:text-amber-500 dark:data-highlighted:bg-amber-950 dark:data-highlighted:text-amber-500"
             >
               {isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Repeat2 className="h-4 w-4" />
               )}
-              <span>Re-send bio email</span>
-            </DropdownMenu.Item>
+              <span>{t('fellows.actions.resendBioEmail')}</span>
+            </DropdownMenuItem>
           )}
 
           {civicrmUrl && (
             <>
-              <DropdownMenu.Separator className="my-1 h-px bg-border" />
-              <DropdownMenu.Item asChild>
-                <a
-                  href={`${civicrmUrl}/civicrm/contact/view?reset=1&cid=${fellow.civicrmId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-primary outline-none transition-colors focus:bg-muted"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  <span>Open in CiviCRM</span>
-                </a>
-              </DropdownMenu.Item>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                render={
+                  <a
+                    href={`${civicrmUrl}/civicrm/contact/view?reset=1&cid=${fellow.civicrmId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  />
+                }
+                className="px-3 font-medium text-primary data-highlighted:text-primary"
+              >
+                <ExternalLink className="h-4 w-4" />
+                <span>{t('fellows.actions.openInCivicrm')}</span>
+              </DropdownMenuItem>
             </>
           )}
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
-    </DropdownMenu.Root>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -1432,6 +1486,7 @@ function FellowRow({
   ) => void;
   onNominationSentClick: (invitation: FormInvitationSummaryEntry) => void;
 }) {
+  const { t } = useTranslation();
   const isPending = pendingContactId === fellow.civicrmId;
   return (
     <tr className="hover:bg-muted/30">
@@ -1457,7 +1512,7 @@ function FellowRow({
             </div>
             <div className="text-[0.82rem] leading-5 text-muted-foreground truncate" title={fellow.email || undefined}>
               {fellow.email || (
-                <span className="italic text-muted-foreground/60">No email</span>
+                <span className="italic text-muted-foreground/60">{t('fellows.table.noEmail')}</span>
               )}
             </div>
           </div>
@@ -1468,7 +1523,7 @@ function FellowRow({
           status={fellow.appointeeStatus}
           subLabel={
             fellow.vitIdInvitation.status === 'failed'
-              ? 'Last send failed'
+              ? t('fellows.table.lastSendFailed')
               : undefined
           }
           subLabelTone="destructive"
@@ -1495,7 +1550,7 @@ function FellowRow({
           />
           {fellow.status === 'active-different-email' && fellow.matched && (
             <span className="text-[0.82rem] leading-5 text-muted-foreground">
-              VIT ID on file under:{' '}
+              {t('fellows.table.vitIdOnFileUnder')}{' '}
               <span className="font-mono break-all whitespace-normal">
                 {fellow.matched.email}
               </span>
@@ -1515,7 +1570,7 @@ function FellowRow({
                     </span>
                     {c.civicrmId && (
                       <span className="text-muted-foreground/70">
-                        (civicrm_id: {c.civicrmId})
+                        {t('fellows.table.civicrmId', { id: c.civicrmId })}
                       </span>
                     )}
                   </li>
@@ -1557,6 +1612,7 @@ function ConfirmResendDialog({
   onCancel: () => void;
   onConfirm: () => Promise<void> | void;
 }) {
+  const { t } = useTranslation();
   if (!open) return null;
 
   return (
@@ -1575,16 +1631,13 @@ function ConfirmResendDialog({
             id="confirm-resend-title"
             className="text-lg font-semibold tracking-tight text-foreground"
           >
-            Re-send bio email?
+            {t('fellows.dialogs.resendTitle')}
           </h2>
         </div>
         <div className="space-y-3 px-5 py-4 text-[0.95rem] leading-6 text-muted-foreground">
-          <p>
-            This bio email has already been sent to {fellowName}. Sending again
-            will deliver another copy to the recipient.
-          </p>
+          <p>{t('fellows.dialogs.resendBody', { name: fellowName })}</p>
           <p className="font-medium text-foreground">
-            Are you sure you want to send it again?
+            {t('fellows.dialogs.resendConfirmQuestion')}
           </p>
         </div>
         <div className="flex justify-end gap-3 border-t px-5 py-4">
@@ -1594,16 +1647,16 @@ function ConfirmResendDialog({
             disabled={submitting}
             className="rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Cancel
+            {t('common.cancel')}
           </button>
           <button
             type="button"
             onClick={() => onConfirm()}
             disabled={submitting}
-            className="inline-flex items-center gap-2 rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-amber-50 transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-            Send again
+            {t('fellows.dialogs.sendAgain')}
           </button>
         </div>
       </div>
@@ -1624,6 +1677,7 @@ function NominationSentDialog({
   onCancel: () => void;
   onConfirm: (nominationSentOn: string) => Promise<void> | void;
 }) {
+  const { t } = useTranslation();
   const [nominationSentOn, setNominationSentOn] = useState(todayInputValue());
 
   useEffect(() => {
@@ -1633,25 +1687,20 @@ function NominationSentDialog({
   const fellowName = fellow ? `${fellow.firstName} ${fellow.lastName}` : '';
 
   return (
-    <Dialog.Root
+    <Dialog
       open={open}
       onOpenChange={(isOpen) => {
         if (!isOpen) onCancel();
       }}
     >
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-[60] bg-[rgba(29,37,44,0.38)] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 duration-150" />
-        <Dialog.Content
-          aria-labelledby="nomination-sent-title"
-          className="fixed left-1/2 top-1/2 z-[61] w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border bg-card shadow-lg data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.97] duration-150"
-        >
+      <DialogContent
+        showCloseButton={false}
+        className="block max-w-[calc(100vw-2rem)] gap-0 rounded-lg border bg-card p-0 sm:max-w-md"
+      >
           <div className="border-b px-5 py-4">
-            <Dialog.Title
-              id="nomination-sent-title"
-              className="text-lg font-semibold tracking-tight text-foreground"
-            >
-              Nomination sent
-            </Dialog.Title>
+            <DialogTitle className="text-lg font-semibold tracking-tight text-foreground">
+              {t('fellows.dialogs.nominationTitle')}
+            </DialogTitle>
           </div>
           {fellow && (
             <form
@@ -1662,13 +1711,11 @@ function NominationSentDialog({
             >
               <div className="space-y-4 px-5 py-4">
                 <p className="text-[0.95rem] leading-6 text-muted-foreground">
-                  Record when the nomination email was sent to {fellowName}. The
-                  appointee status will move forward and the form will show as
-                  waiting for submission.
+                  {t('fellows.dialogs.nominationBody', { name: fellowName })}
                 </p>
                 <label className="block space-y-2">
                   <span className="text-sm font-medium text-foreground">
-                    Nomination sent on
+                    {t('fellows.dialogs.nominationDateLabel')}
                   </span>
                   <input
                     type="date"
@@ -1687,7 +1734,7 @@ function NominationSentDialog({
                   disabled={submitting}
                   className="rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="submit"
@@ -1695,13 +1742,12 @@ function NominationSentDialog({
                   className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Save
+                  {t('common.save')}
                 </button>
               </div>
             </form>
           )}
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+      </DialogContent>
+    </Dialog>
   );
 }

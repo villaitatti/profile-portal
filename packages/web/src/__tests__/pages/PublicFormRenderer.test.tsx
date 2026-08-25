@@ -132,7 +132,9 @@ describe('PublicFormRenderer', () => {
 
     await user.click(screen.getByRole('combobox', { name: 'Title' }));
 
-    expect(screen.getByRole('option', { name: 'Dr.' })).toBeInTheDocument();
+    // Base UI opens the select popup on the next animation frame, so the
+    // options appear asynchronously after the click.
+    expect(await screen.findByRole('option', { name: 'Dr.' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Prof.' })).toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/search select title/i)).not.toBeInTheDocument();
   });
@@ -318,7 +320,9 @@ describe('PublicFormRenderer', () => {
     expect(screen.queryByLabelText('If other, please indicate')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('combobox', { name: /What will your status be/ }));
-    await user.click(screen.getByRole('option', { name: 'Other' }));
+    // Base UI opens the select popup on the next animation frame, so the
+    // options appear asynchronously after the click.
+    await user.click(await screen.findByRole('option', { name: 'Other' }));
 
     const otherField = screen.getByLabelText('If other, please indicate');
     expect(otherField).toBeInTheDocument();
