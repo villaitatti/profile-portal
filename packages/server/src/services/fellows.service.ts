@@ -7,7 +7,7 @@ import {
 import { buildAuth0Maps, reconcile, type LadderFellow } from './vit-id-match.js';
 import { computeAppointeeStatus, type EmailEventStatus } from './appointee-status.js';
 import { academicYearLabelForFellowship } from '../utils/eligibility.js';
-import { AppointeeEmailStatus, AppointeeEmailType } from '@prisma/client';
+import { AppointeeEmailStatus, AppointeeEmailType } from '../generated/prisma/client.js';
 import { env } from '../env.js';
 import { logger } from '../lib/logger.js';
 import { getFormDef } from '@itatti/shared';

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useFormRegistry } from '@/api/forms';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
@@ -12,6 +13,7 @@ import type { FormDef, FormFieldDef, FormSectionDef } from '@itatti/shared';
 type TemplateTab = 'active' | 'retired';
 
 export function FormsTemplatesPage() {
+  const { t } = useTranslation();
   const { data: registry, isLoading } = useFormRegistry();
   const [tab, setTab] = useState<TemplateTab>('active');
 
@@ -35,8 +37,8 @@ export function FormsTemplatesPage() {
   return (
     <div>
       <PageHeader
-        title="Forms"
-        description="Review submitted appointee forms and inspect the templates used during nomination."
+        title={t('fellows.forms.title')}
+        description={t('fellows.forms.description')}
       />
       <FormsSectionNav />
 
@@ -53,11 +55,15 @@ export function FormsTemplatesPage() {
         ) : forms.length === 0 ? (
           <EmptyState
             icon={<FileText className="h-12 w-12 mb-4" />}
-            title={tab === 'active' ? 'No active templates' : 'No retired templates'}
+            title={
+              tab === 'active'
+                ? t('fellows.forms.templates.emptyActiveTitle')
+                : t('fellows.forms.templates.emptyRetiredTitle')
+            }
             description={
               tab === 'active'
-                ? 'Active form templates will appear here once configured.'
-                : 'Retired templates are kept for archived submissions. None yet.'
+                ? t('fellows.forms.templates.emptyActiveDescription')
+                : t('fellows.forms.templates.emptyRetiredDescription')
             }
           />
         ) : (
@@ -83,13 +89,14 @@ function TemplateTabs({
   activeCount: number;
   retiredCount: number;
 }) {
+  const { t } = useTranslation();
   const tabs: { value: TemplateTab; label: string; count: number }[] = [
-    { value: 'active', label: 'Active', count: activeCount },
-    { value: 'retired', label: 'Retired', count: retiredCount },
+    { value: 'active', label: t('fellows.forms.templates.active'), count: activeCount },
+    { value: 'retired', label: t('fellows.forms.templates.retired'), count: retiredCount },
   ];
 
   return (
-    <nav className="border-b border-border" aria-label="Template status">
+    <nav className="border-b border-border" aria-label={t('fellows.forms.templates.statusNavAria')}>
       <div className="flex gap-1">
         {tabs.map(({ value, label, count }) => {
           const isActive = tab === value;
@@ -116,6 +123,7 @@ function TemplateTabs({
 }
 
 function FormCard({ form }: { form: FormDef }) {
+  const { t } = useTranslation();
   return (
     <div className="rounded-lg border bg-card p-6">
       <div className="flex items-start justify-between mb-4">
@@ -127,7 +135,7 @@ function FormCard({ form }: { form: FormDef }) {
           <p className="mt-0.5 font-mono text-xs text-muted-foreground">{form.id}</p>
           {!isActiveFormDef(form) && (
             <p className="mt-1 text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
-              Retired template kept for archived submissions
+              {t('fellows.forms.templates.retiredKept')}
             </p>
           )}
           {form.description && (
@@ -142,7 +150,9 @@ function FormCard({ form }: { form: FormDef }) {
                 : 'bg-muted text-muted-foreground'
             }`}
           >
-            {isActiveFormDef(form) ? 'Active' : 'Retired'}
+            {isActiveFormDef(form)
+              ? t('fellows.forms.templates.statusActive')
+              : t('fellows.forms.templates.statusRetired')}
           </span>
           {form.appointmentTypes.map((type) => (
             <span
@@ -202,8 +212,10 @@ function FormCard({ form }: { form: FormDef }) {
       </div>
 
       <div className="mt-4 pt-3 border-t text-xs text-muted-foreground">
-        {form.sections.reduce((acc, s) => acc + s.fields.length, 0)} fields across{' '}
-        {form.sections.length} sections
+        {t('fellows.forms.templates.fieldsAcrossSections', {
+          fields: form.sections.reduce((acc, s) => acc + s.fields.length, 0),
+          sections: form.sections.length,
+        })}
       </div>
     </div>
   );

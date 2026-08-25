@@ -73,7 +73,7 @@ describe('CallbackPage', () => {
 
     renderCallback();
 
-    expect(screen.getByRole('status', { name: 'Loading page' })).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Loading…' })).toBeInTheDocument();
     expect(screen.queryByText('dashboard')).not.toBeInTheDocument();
   });
 

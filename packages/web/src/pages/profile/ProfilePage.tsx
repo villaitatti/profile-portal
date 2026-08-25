@@ -1,4 +1,5 @@
 import { useAuth0 } from '@auth0/auth0-react';
+import { useTranslation } from 'react-i18next';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { useProfile } from '@/api/profile';
@@ -8,6 +9,7 @@ import { AddressSection } from './AddressSection';
 import { PhoneSection } from './PhoneSection';
 
 export function ProfilePage() {
+  const { t } = useTranslation();
   const { user } = useAuth0();
   const { data: profile, isLoading, error } = useProfile();
 
@@ -16,9 +18,9 @@ export function ProfilePage() {
   if (error) {
     return (
       <div className="mx-auto max-w-6xl space-y-6">
-        <PageHeader title="My Profile" />
+        <PageHeader title={t('profile.title')} />
         <div className="rounded-xl border bg-card p-8 text-center text-[0.98rem] leading-7 text-muted-foreground">
-          <p>Unable to load profile information. Please try again later.</p>
+          <p>{t('profile.loadError')}</p>
         </div>
       </div>
     );
@@ -26,13 +28,13 @@ export function ProfilePage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <PageHeader title="My Profile" />
+      <PageHeader title={t('profile.title')} />
 
       <div className="grid max-w-5xl grid-cols-1 gap-6 md:grid-cols-2">
         <div className="rounded-xl border bg-card p-6 md:px-8">
           <div className="flex items-center gap-3">
             <User className="h-5 w-5 text-muted-foreground" />
-            <h2 className="text-lg font-semibold tracking-tight">Name</h2>
+            <h2 className="text-lg font-semibold tracking-tight">{t('profile.name.title')}</h2>
           </div>
           <div className="mt-4 flex items-center gap-4">
             <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">

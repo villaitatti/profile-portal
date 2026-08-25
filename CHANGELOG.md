@@ -1,5 +1,43 @@
 # Changelog
 
+## [0.19.0] - 24 August 2026 - Italian & English interface, current-generation platform
+
+### Added
+- **The portal speaks Italian and English.** Every screen — dashboard, profile, the public claim and form pages, and all administration areas — is fully translated. The language toggles from the header (and on public pages), follows you across visits, and defaults to English. Domain terms (VIT ID, Harvard Key, CiviCRM) stay untranslated by design, and content that comes from external systems (form definitions, email bodies, Atlassian group names) is shown as-is.
+- **Dates are now unambiguous everywhere.** Human-facing dates render as `24 August 2026` in English and `24 agosto 2026` in Italian — day-month-year with the month spelled out, never a numeric format that reads differently in Europe and the US. Machine-facing dates (API payloads, form submissions) remain ISO 8601.
+
+### Changed
+- **The platform moved to current-generation foundations**, matching Libra: Express 5 (with async error handling built in), Prisma 7 (the new TypeScript client generator with the PostgreSQL driver adapter — no more architecture-specific engine copying in the Docker image), Zod 4 across all packages, and Vite 8 (Rolldown) with noticeably faster builds. Also refreshed: express-rate-limit 8, jwks-rsa 4, lucide-react 1.x, jsdom 30, dotenv 17.
+- **Rate limiting is IPv6-safe.** The per-client key now masks IPv6 addresses to their /56 allocation, so a visitor cannot dodge limits by rotating addresses inside their own block.
+
+### Fixed
+- The theme now truly follows the operating system until a person explicitly toggles it — previously the first visit silently pinned whatever the OS preferred that day.
+- Switching to Italian updates the page's declared language, so screen readers, spellcheck, and browser translation treat the content as Italian.
+- Submission detail values (Yes/No, entry labels, dates), email status badges and filter chips, and the searchable-combobox prompts are now translated; the PDF export keeps its canonical English format by design.
+- Submission dates render as `24 April 2026` instead of the abbreviated `24 Apr 2026`, matching the date convention everywhere else.
+- The seed script works again under Prisma 7 (it now supplies the required driver adapter).
+- Authenticated pages no longer nest two `<main>` landmarks, and the sidebar's screen-reader announcements are localized.
+
+### Internal
+- Removed the obsolete `path-to-regexp` security pin (an Express 4-era CVE fix that broke Express 5's router) after verifying the new resolution is clean.
+- The Prisma migration flow was verified end-to-end in the production container: `prisma.config.ts` now carries the datasource URL, the CLI loads it at startup, and `migrate deploy` runs as before.
+- Libra received the reverse ports in villaitatti/libra#20: this repo's ESLint flat config, hardened CI (SHA-pinned actions, version-consistency gate, audit), and a fix for its VERSION/package.json drift.
+
+## [0.18.0] - 24 August 2026 - House stack alignment: shadcn/ui on Base UI, dark mode
+
+### Added
+- **Dark mode.** The portal now ships light and dark themes. The choice follows the operating-system preference by default, can be toggled from the header, is remembered across visits, and is applied before first paint so there is no flash of the wrong theme on load. Every surface — sidebar, dialogs, menus, tables, status badges — carries dark-aware colors derived from the I Tatti palette.
+- **A real design system.** The interface now builds on shadcn/ui components (the Base UI distribution, style `base-nova`) — the same house stack as Libra — instead of hand-assembled primitives. A full component library lives in the project (`buttons, dialogs, menus, popovers, selects, tabs, tables, tooltips, sheets, and more`), so future screens compose from a consistent, accessible kit.
+
+### Changed
+- **The sidebar is the shadcn collapsible sidebar.** It collapses to an icon rail (with tooltips for every destination), can be resized by dragging its edge, toggles with ⌘B, remembers its state across visits, and becomes a proper slide-in drawer on phones. Navigation sections and role-based visibility are unchanged.
+- **Dialogs and menus were rebuilt on the new components.** Confirmation prompts are now true alert dialogs (announced correctly to screen readers), the email-details panel is a proper slide-in sheet, and dropdown menus, comboboxes, and filter selects share one visual language in both themes.
+- **UI primitives moved from Radix UI to Base UI.** All ten `@radix-ui/*` packages were removed, along with the now-unneeded client-state library; the interface state that mattered (sidebar collapse) is handled by the sidebar component itself.
+
+### Internal
+- Design tokens were restructured: semantic color primitives live on `:root`/`.dark` and bridge to Tailwind utilities via `@theme inline`, so re-skinning the app means overriding one block of variables. The theme bootstrap is an external script (`public/theme-init.js`) because the production CSP forbids inline scripts.
+- `ARCHITECTURE.md` now documents the Base UI foundation and the theming design.
+
 ## [0.17.15] - 31 July 2026 - Launch hardening: crash safety, backups, monitoring
 
 ### Added

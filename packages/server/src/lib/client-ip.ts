@@ -1,4 +1,5 @@
 import type { Request } from 'express';
+import { ipKeyGenerator } from 'express-rate-limit';
 
 /**
  * Resolves the client IP for abuse controls (rate limiting).
@@ -17,10 +18,13 @@ import type { Request } from 'express';
  * `req.ip`, which is not spoofable but also not meaningful behind a proxy.
  */
 export function rateLimitKey(req: Request): string {
+  // ipKeyGenerator masks IPv6 addresses to their /56 so one user cannot mint a
+  // fresh bucket per address inside their own /64 allocation; IPv4 passes
+  // through unchanged.
   const cfConnectingIp = req.headers['cf-connecting-ip'];
   if (typeof cfConnectingIp === 'string') {
     const trimmed = cfConnectingIp.trim();
-    if (trimmed.length > 0) return trimmed;
+    if (trimmed.length > 0) return ipKeyGenerator(trimmed);
   }
 
   // Deliberately `req.socket.remoteAddress`, NOT `req.ip`.
@@ -36,5 +40,6 @@ export function rateLimitKey(req: Request): string {
   // strictly more restrictive than intended, never less. That is the correct
   // direction to fail for an abuse control, and in production the
   // CF-Connecting-IP branch above is what actually runs.
-  return req.socket.remoteAddress ?? 'unknown';
+  const socketAddress = req.socket.remoteAddress;
+  return socketAddress ? ipKeyGenerator(socketAddress) : 'unknown';
 }

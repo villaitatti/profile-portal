@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import Cropper from 'react-easy-crop';
 import type { Area } from 'react-easy-crop';
-import * as Dialog from '@radix-ui/react-dialog';
+import { Dialog, DialogClose, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { ImagePlus, Loader2, Trash2, Images, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { uploadImage, useUploadToken } from '@/api/uploads';
@@ -58,6 +59,7 @@ async function getCroppedImg(imageSrc: string, cropArea: Area): Promise<Blob> {
 }
 
 export function ImageUploader({ value, blurPlaceholder, onChange, onClear }: ImageUploaderProps) {
+  const { t } = useTranslation();
   const [isDragging, setIsDragging] = useState(false);
   const [cropModalOpen, setCropModalOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
@@ -77,7 +79,7 @@ export function ImageUploader({ value, blurPlaceholder, onChange, onClear }: Ima
 
   const handleFileSelect = (file: File) => {
     if (!file.type.startsWith('image/')) {
-      setError('Please select an image file');
+      setError(t('admin.images.selectImageFile'));
       return;
     }
     setError(null);
@@ -89,7 +91,7 @@ export function ImageUploader({ value, blurPlaceholder, onChange, onClear }: Ima
       setCropModalOpen(true);
     };
     reader.onerror = () => {
-      setError('Failed to read file');
+      setError(t('admin.images.readFileFailed'));
       setImageSrc(null);
     };
     reader.readAsDataURL(file);
@@ -132,7 +134,7 @@ export function ImageUploader({ value, blurPlaceholder, onChange, onClear }: Ima
       setCropModalOpen(false);
       setImageSrc(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed');
+      setError(err instanceof Error ? err.message : t('admin.images.uploadFailed'));
     } finally {
       setIsUploading(false);
     }
@@ -149,7 +151,7 @@ export function ImageUploader({ value, blurPlaceholder, onChange, onClear }: Ima
         <div className="relative rounded-md border overflow-hidden">
           <img
             src={value}
-            alt="Preview"
+            alt={t('admin.images.previewAlt')}
             className="w-full h-40 object-cover"
             style={
               blurPlaceholder
@@ -161,7 +163,7 @@ export function ImageUploader({ value, blurPlaceholder, onChange, onClear }: Ima
             type="button"
             onClick={onClear}
             className="absolute top-2 right-2 rounded-full bg-destructive p-1.5 text-destructive-foreground shadow-sm hover:bg-destructive/90 transition-colors"
-            aria-label="Remove image"
+            aria-label={t('admin.images.removeImage')}
           >
             <Trash2 className="h-4 w-4" />
           </button>
@@ -170,7 +172,7 @@ export function ImageUploader({ value, blurPlaceholder, onChange, onClear }: Ima
         <div
           role="button"
           tabIndex={0}
-          aria-label="Upload image — drag and drop or click to browse"
+          aria-label={t('admin.images.dropzoneAria')}
           onClick={() => fileInputRef.current?.click()}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
@@ -190,10 +192,10 @@ export function ImageUploader({ value, blurPlaceholder, onChange, onClear }: Ima
         >
           <ImagePlus className="h-8 w-8 text-muted-foreground" />
           <p className="text-[0.95rem] text-muted-foreground">
-            Drag and drop an image, or click to browse
+            {t('admin.images.dropzoneText')}
           </p>
           <p className="text-[0.78rem] text-muted-foreground">
-            Image will be cropped to 16:9
+            {t('admin.images.cropHint')}
           </p>
         </div>
       )}
@@ -214,7 +216,7 @@ export function ImageUploader({ value, blurPlaceholder, onChange, onClear }: Ima
             className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[0.78rem] font-medium hover:bg-muted/50 transition-colors"
           >
             <ImagePlus className="h-3.5 w-3.5" />
-            Replace
+            {t('admin.images.replace')}
           </button>
         )}
         <button
@@ -223,7 +225,7 @@ export function ImageUploader({ value, blurPlaceholder, onChange, onClear }: Ima
           className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[0.78rem] font-medium hover:bg-muted/50 transition-colors"
         >
           <Images className="h-3.5 w-3.5" />
-          Browse gallery
+          {t('admin.images.browseGallery')}
         </button>
       </div>
 
@@ -232,23 +234,23 @@ export function ImageUploader({ value, blurPlaceholder, onChange, onClear }: Ima
       )}
 
       {/* Crop Modal */}
-      <Dialog.Root open={cropModalOpen} onOpenChange={setCropModalOpen}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-lg bg-background p-6 shadow-lg">
+      <Dialog open={cropModalOpen} onOpenChange={(isOpen) => setCropModalOpen(isOpen)}>
+        <DialogContent showCloseButton={false} className="block max-w-[calc(100%-2rem)] gap-0 p-6 sm:max-w-lg">
             <div className="flex items-center justify-between mb-4">
-              <Dialog.Title className="text-lg font-semibold">
-                Crop image
-              </Dialog.Title>
-              <Dialog.Close asChild>
-                <button
-                  type="button"
-                  className="rounded-full p-1 hover:bg-muted transition-colors"
-                  aria-label="Close"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </Dialog.Close>
+              <DialogTitle className="text-lg font-semibold">
+                {t('admin.images.cropTitle')}
+              </DialogTitle>
+              <DialogClose
+                render={
+                  <button
+                    type="button"
+                    className="rounded-full p-1 hover:bg-muted transition-colors"
+                    aria-label={t('common.close')}
+                  />
+                }
+              >
+                <X className="h-4 w-4" />
+              </DialogClose>
             </div>
 
             <div className="relative h-64 w-full rounded-md overflow-hidden bg-muted">
@@ -266,7 +268,7 @@ export function ImageUploader({ value, blurPlaceholder, onChange, onClear }: Ima
             </div>
 
             <div className="mt-4 flex items-center gap-2">
-              <label className="text-[0.78rem] text-muted-foreground">Zoom</label>
+              <label className="text-[0.78rem] text-muted-foreground">{t('admin.images.zoom')}</label>
               <input
                 type="range"
                 min={1}
@@ -279,14 +281,16 @@ export function ImageUploader({ value, blurPlaceholder, onChange, onClear }: Ima
             </div>
 
             <div className="mt-4 flex justify-end gap-2">
-              <Dialog.Close asChild>
-                <button
-                  type="button"
-                  className="rounded-md border px-4 py-2 text-[0.95rem] font-medium hover:bg-muted/50 transition-colors"
-                >
-                  Cancel
-                </button>
-              </Dialog.Close>
+              <DialogClose
+                render={
+                  <button
+                    type="button"
+                    className="rounded-md border px-4 py-2 text-[0.95rem] font-medium hover:bg-muted/50 transition-colors"
+                  />
+                }
+              >
+                {t('common.cancel')}
+              </DialogClose>
               <button
                 type="button"
                 onClick={handleCropConfirm}
@@ -296,16 +300,15 @@ export function ImageUploader({ value, blurPlaceholder, onChange, onClear }: Ima
                 {isUploading ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Uploading...
+                    {t('admin.images.uploading')}
                   </>
                 ) : (
-                  'Crop & upload'
+                  t('admin.images.cropAndUpload')
                 )}
               </button>
             </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+        </DialogContent>
+      </Dialog>
 
       {/* Gallery Modal */}
       <ImageGallery

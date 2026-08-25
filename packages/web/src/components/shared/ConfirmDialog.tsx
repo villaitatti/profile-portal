@@ -1,5 +1,14 @@
-import * as Dialog from '@radix-ui/react-dialog';
-import { cn } from '@/lib/utils';
+import { useTranslation } from 'react-i18next';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -17,41 +26,34 @@ export function ConfirmDialog({
   onCancel,
   title,
   description,
-  confirmLabel = 'Confirm',
+  confirmLabel,
   variant = 'default',
 }: ConfirmDialogProps) {
+  const { t } = useTranslation();
   return (
-    <Dialog.Root open={open} onOpenChange={(isOpen) => { if (!isOpen) onCancel(); }}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgba(29,37,44,0.32)] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 duration-200" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border bg-card p-7 shadow-lg data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=open]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.97] duration-200">
-          <Dialog.Title className="text-xl font-semibold tracking-tight text-foreground">
-            {title}
-          </Dialog.Title>
-          <Dialog.Description className="mt-3 text-[0.95rem] leading-7 text-muted-foreground">
-            {description}
-          </Dialog.Description>
-          <div className="mt-6 flex justify-end gap-3">
-            <button
-              onClick={onCancel}
-              className="rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={onConfirm}
-              className={cn(
-                'rounded-md px-4 py-2 text-sm font-medium text-white transition-colors',
-                variant === 'danger'
-                  ? 'bg-destructive hover:bg-destructive/90'
-                  : 'bg-primary hover:bg-primary/90'
-              )}
-            >
-              {confirmLabel}
-            </button>
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+    <AlertDialog
+      open={open}
+      onOpenChange={(isOpen) => {
+        if (!isOpen) onCancel();
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          {/* No onClick: closing routes through onOpenChange above, so an
+              explicit handler here would call onCancel twice per click. */}
+          <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+          <AlertDialogAction
+            variant={variant === 'danger' ? 'destructive' : 'default'}
+            onClick={onConfirm}
+          >
+            {confirmLabel ?? t('common.confirm')}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

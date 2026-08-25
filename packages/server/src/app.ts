@@ -69,7 +69,8 @@ if (process.env.NODE_ENV === 'production') {
   const { resolve } = await import('path');
   const webDist = resolve(process.cwd(), 'packages/web/dist');
   app.use(express.static(webDist));
-  app.get('*', (_req, res) => {
+  // Express 5 requires named wildcards; '/*splat' is the old '*' catch-all.
+  app.get('/*splat', (_req, res) => {
     res.sendFile(resolve(webDist, 'index.html'));
   });
 }

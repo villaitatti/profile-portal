@@ -1,4 +1,5 @@
 import { useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import {
@@ -12,6 +13,7 @@ import { ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export function AppFormPage() {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const isEdit = Boolean(id);
@@ -31,19 +33,19 @@ export function AppFormPage() {
         { id: Number(id), ...input },
         {
           onSuccess: () => {
-            toast.success('Application updated');
+            toast.success(t('admin.apps.updated'));
             navigate('/admin/apps');
           },
-          onError: () => toast.error('Failed to update application'),
+          onError: () => toast.error(t('admin.apps.updateFailed')),
         }
       );
     } else {
       createApp.mutate(input, {
         onSuccess: () => {
-          toast.success('Application created');
+          toast.success(t('admin.apps.created'));
           navigate('/admin/apps');
         },
-        onError: () => toast.error('Failed to create application'),
+        onError: () => toast.error(t('admin.apps.createFailed')),
       });
     }
   };
@@ -58,16 +60,14 @@ export function AppFormPage() {
           className="inline-flex items-center gap-1.5 text-[0.95rem] text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to catalog
+          {t('admin.apps.backToCatalog')}
         </Link>
       </div>
 
       <PageHeader
-        title={isEdit ? 'Edit Application' : 'Add Application'}
+        title={isEdit ? t('admin.apps.editTitle') : t('admin.apps.addApplication')}
         description={
-          isEdit
-            ? 'Update the application details'
-            : 'Add a new internal application to the portal'
+          isEdit ? t('admin.apps.editDescription') : t('admin.apps.addDescription')
         }
       />
 
@@ -89,7 +89,7 @@ export function AppFormPage() {
             }
             onSubmit={handleSubmit}
             isSubmitting={createApp.isPending || updateApp.isPending}
-            submitLabel={isEdit ? 'Update Application' : 'Create Application'}
+            submitLabel={isEdit ? t('admin.apps.updateSubmit') : t('admin.apps.createSubmit')}
           />
         </div>
       </div>

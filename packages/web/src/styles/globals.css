@@ -1,41 +1,127 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-@theme {
-  /* I Tatti brand colors */
-  /* Crimson: #ab192d | Anthracite: #1d252c | Light grey: #e5eaec | Medium grey: #b3bec5 */
+@custom-variant dark (&:is(.dark *));
 
-  --color-background: #eef1f3;
-  --color-foreground: #1d252c;
-  --color-card: #f8f9fb;
-  --color-card-foreground: #1d252c;
-  --color-popover: #f8f9fb;
-  --color-popover-foreground: #1d252c;
-  --color-primary: #ab192d;
-  --color-primary-foreground: #fafbfc;
-  --color-secondary: #e5eaec;
-  --color-secondary-foreground: #2a353e;
-  --color-muted: #e0e5e8;
-  --color-muted-foreground: #556170;
-  --color-accent: #dce1e5;
-  --color-accent-foreground: #1d252c;
-  --color-destructive: #b83a47;
-  --color-destructive-foreground: #fafbfc;
-  --color-warning: #f5efd9;
-  --color-warning-foreground: #6b4f1d;
-  --color-warning-border: #e4d7a6;
-  --color-border: #cfd5db;
-  --color-input: #bcc4cc;
-  --color-ring: #ab192d;
+/* I Tatti brand colors
+   Crimson: #ab192d | Anthracite: #1d252c | Light grey: #e5eaec | Medium grey: #b3bec5
 
-  --color-sidebar: #e5eaec;
-  --color-sidebar-foreground: #1d252c;
-  --color-sidebar-border: #cfd5db;
-  --color-sidebar-accent: #d8dee3;
-  --color-sidebar-accent-foreground: #1d252c;
-  --color-sidebar-primary: #ab192d;
-  --color-sidebar-primary-foreground: #fafbfc;
-  --color-sidebar-muted-foreground: #6b7685;
+   Primitives live on :root/.dark; the @theme inline block below bridges them to
+   Tailwind utilities (bg-background, text-primary, …), so overriding the
+   primitives re-skins the whole app. */
+:root {
+  color-scheme: light;
+  --background: #eef1f3;
+  --foreground: #1d252c;
+  --card: #f8f9fb;
+  --card-foreground: #1d252c;
+  --popover: #f8f9fb;
+  --popover-foreground: #1d252c;
+  --primary: #ab192d;
+  --primary-foreground: #fafbfc;
+  --secondary: #e5eaec;
+  --secondary-foreground: #2a353e;
+  --muted: #e0e5e8;
+  --muted-foreground: #556170;
+  --accent: #dce1e5;
+  --accent-foreground: #1d252c;
+  --destructive: #b83a47;
+  --destructive-foreground: #fafbfc;
+  --warning: #f5efd9;
+  --warning-foreground: #6b4f1d;
+  --warning-border: #e4d7a6;
+  --border: #cfd5db;
+  --input: #bcc4cc;
+  --ring: #ab192d;
+  --radius: 0.375rem;
+  --sidebar: #e5eaec;
+  --sidebar-foreground: #1d252c;
+  --sidebar-border: #cfd5db;
+  --sidebar-accent: #d8dee3;
+  --sidebar-accent-foreground: #1d252c;
+  --sidebar-primary: #ab192d;
+  --sidebar-primary-foreground: #fafbfc;
+  --sidebar-muted-foreground: #6b7685;
+  --sidebar-ring: #ab192d;
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+}
 
+/* Dark theme: cool anthracite surfaces from the brand palette. The `.dark`
+   class is set on <html> by ThemeProvider (and before first paint by
+   public/theme-init.js, an external script because the CSP is script-src
+   'self'). True crimson only reaches ~2:1 on these surfaces, so primary is
+   lifted for contrast and carries a dark label instead of white. */
+.dark {
+  color-scheme: dark;
+  --background: oklch(0.21 0.013 240);
+  --foreground: oklch(0.93 0.008 240);
+  --card: oklch(0.25 0.014 240);
+  --card-foreground: oklch(0.93 0.008 240);
+  --popover: oklch(0.25 0.014 240);
+  --popover-foreground: oklch(0.93 0.008 240);
+  --primary: oklch(0.62 0.165 18);
+  --primary-foreground: oklch(0.17 0.03 15);
+  --secondary: oklch(0.3 0.014 240);
+  --secondary-foreground: oklch(0.9 0.01 240);
+  --muted: oklch(0.29 0.013 240);
+  --muted-foreground: oklch(0.69 0.014 240);
+  --accent: oklch(0.31 0.014 240);
+  --accent-foreground: oklch(0.93 0.008 240);
+  --destructive: oklch(0.64 0.16 20);
+  --destructive-foreground: oklch(0.98 0.004 240);
+  --warning: oklch(0.28 0.045 84);
+  --warning-foreground: oklch(0.87 0.09 84);
+  --warning-border: oklch(0.38 0.055 84);
+  --border: oklch(0.32 0.013 240);
+  --input: oklch(0.37 0.013 240);
+  --ring: oklch(0.62 0.165 18);
+  --sidebar: oklch(0.185 0.012 240);
+  --sidebar-foreground: oklch(0.92 0.008 240);
+  --sidebar-border: oklch(0.27 0.012 240);
+  --sidebar-accent: oklch(0.27 0.013 240);
+  --sidebar-accent-foreground: oklch(0.94 0.008 240);
+  --sidebar-primary: oklch(0.62 0.165 18);
+  --sidebar-primary-foreground: oklch(0.17 0.03 15);
+  --sidebar-muted-foreground: oklch(0.66 0.013 240);
+  --sidebar-ring: oklch(0.62 0.165 18);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-border: var(--warning-border);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-muted-foreground: var(--sidebar-muted-foreground);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Explicit radius steps (not the shadcn calc scale) to preserve the app's
+     existing corner rounding exactly. */
   --radius-sm: 0.125rem;
   --radius-md: 0.25rem;
   --radius-lg: 0.375rem;
@@ -66,10 +152,6 @@
     outline-offset: 2px;
     transition: outline-offset 150ms cubic-bezier(0.25, 1, 0.5, 1);
   }
-}
-
-:root {
-  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 @keyframes card-enter {

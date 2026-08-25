@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { Download, FileText, Inbox, Landmark } from 'lucide-react';
 import { useFormInvitations, useFormResponse, useFormRegistry } from '@/api/forms';
@@ -10,6 +11,8 @@ import { SelectDropdown } from '@/components/shared/SelectDropdown';
 import { FormsSectionNav } from '@/pages/admin/components/FormsSectionNav';
 import { getVisibleSections, isRetiredFormTitle } from '@/lib/form-render';
 import { cn } from '@/lib/utils';
+import { formatHumanDate } from '@/lib/dates';
+import type { TFunction } from 'i18next';
 import type { AdminFormInvitation } from '@/api/forms';
 import type { FormDef } from '@itatti/shared';
 
@@ -39,6 +42,7 @@ import type { FormDef } from '@itatti/shared';
 const SEARCH_DEBOUNCE_MS = 250;
 
 export function FormsSubmissionsPage() {
+  const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Raw filter state — URL is the source of truth; search state carries a
@@ -192,8 +196,8 @@ export function FormsSubmissionsPage() {
   return (
     <div>
       <PageHeader
-        title="Forms"
-        description="Review submitted appointee forms and inspect the templates used during nomination."
+        title={t('fellows.forms.title')}
+        description={t('fellows.forms.description')}
       />
       <FormsSectionNav />
 
@@ -217,15 +221,15 @@ export function FormsSubmissionsPage() {
         ) : items.length === 0 ? (
           <EmptyState
             icon={<Inbox className="h-12 w-12 mb-4" />}
-            title="No submissions yet"
-            description="Once appointees start submitting nomination forms, they will appear here."
+            title={t('fellows.forms.emptyTitle')}
+            description={t('fellows.forms.emptyDescription')}
           />
         ) : (
           <>
             {/* Announce filter-result count changes to assistive tech (WCAG 4.1.3).
                 Keeping this visually hidden avoids visual duplication of the list. */}
             <div role="status" aria-live="polite" className="sr-only">
-              {filterSummary(filteredItems.length, items.length)}
+              {filterSummary(filteredItems.length, items.length, t)}
             </div>
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr,3fr]">
               <SubmissionList
@@ -275,6 +279,7 @@ function FilterBar({
   search,
   onSearchChange,
 }: FilterBarProps) {
+  const { t } = useTranslation();
   const formTitleFor = (id: string): string => formTitlesByType.get(id) ?? id;
   // Explicit id/htmlFor pairs so the labels remain associated with the inputs
   // even if the JSX structure later changes and the implicit wrap is lost.
@@ -289,7 +294,7 @@ function FilterBar({
     <div className="flex flex-wrap items-end gap-4">
       <div className="flex flex-col gap-1 text-sm">
         <label id={yearLabelId} htmlFor={yearId} className="text-muted-foreground">
-          Academic year
+          {t('fellows.forms.academicYear')}
         </label>
         <SelectDropdown
           id={yearId}
@@ -300,14 +305,14 @@ function FilterBar({
           }))}
           value={year}
           onSelect={(optionYear) => onYearChange(optionYear)}
-          placeholder="All years"
+          placeholder={t('fellows.forms.allYears')}
           className="h-10 min-w-[140px] rounded border px-2 text-sm"
         />
       </div>
 
       <div className="flex flex-col gap-1 text-sm">
         <label id={formTypeLabelId} htmlFor={formTypeId} className="text-muted-foreground">
-          Form
+          {t('fellows.forms.formLabel')}
         </label>
         <SelectDropdown
           id={formTypeId}
@@ -318,21 +323,21 @@ function FilterBar({
           }))}
           value={formType}
           onSelect={(type) => onFormTypeChange(type)}
-          placeholder="All forms"
+          placeholder={t('fellows.forms.allForms')}
           className="h-10 min-w-[180px] rounded border px-2 text-sm"
         />
       </div>
 
       <div className="flex flex-col gap-1 text-sm flex-1 min-w-[200px]">
         <label htmlFor={searchId} className="text-muted-foreground">
-          Search
+          {t('common.search')}
         </label>
         <input
           id={searchId}
           type="search"
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Name or form title"
+          placeholder={t('fellows.forms.searchPlaceholder')}
           className="h-10 rounded border bg-background px-2 text-sm"
         />
       </div>
@@ -351,6 +356,7 @@ interface SubmissionListProps {
 }
 
 function SubmissionList({ items, selectedId, onSelect }: SubmissionListProps) {
+  const { t, i18n } = useTranslation();
   // Roving-tabindex pattern: only the currently-selected row has tabIndex=0.
   // Arrow keys move selection AND roving focus WITHIN the list; Enter (or
   // click) activates and moves page focus to the detail pane heading.
@@ -407,7 +413,7 @@ function SubmissionList({ items, selectedId, onSelect }: SubmissionListProps) {
         role="status"
         className="rounded-lg border bg-card p-8 text-center text-sm text-muted-foreground"
       >
-        No submissions match these filters.
+        {t('fellows.forms.noMatchFilters')}
       </div>
     );
   }
@@ -425,7 +431,7 @@ function SubmissionList({ items, selectedId, onSelect }: SubmissionListProps) {
       ref={listRef}
       role="listbox"
       className="space-y-2 rounded-lg border bg-card p-2"
-      aria-label="Form submissions"
+      aria-label={t('fellows.forms.listAria')}
     >
       {items.map((inv, index) => (
         <li
@@ -445,14 +451,14 @@ function SubmissionList({ items, selectedId, onSelect }: SubmissionListProps) {
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
               <div className="font-medium text-sm truncate">
-                {displayName(inv)}
+                {displayName(inv, t)}
               </div>
               <div className="text-xs text-muted-foreground truncate">
                 {inv.formTitle}
               </div>
               <div className="text-xs text-muted-foreground mt-1">
                 {inv.submittedAt
-                  ? `${formatSubmittedDate(inv.submittedAt)} · ${inv.academicYear}`
+                  ? `${formatHumanDate(inv.submittedAt, i18n.language)} · ${inv.academicYear}`
                   : inv.academicYear}
               </div>
             </div>
@@ -469,13 +475,14 @@ function SubmissionList({ items, selectedId, onSelect }: SubmissionListProps) {
 // ──────────────────────────────────────────────────────────────────────────
 
 function DetailPane({ invitation }: { invitation: AdminFormInvitation | null }) {
+  const { t, i18n } = useTranslation();
   const { data: registry } = useFormRegistry();
   const { data: response, isLoading, isError } = useFormResponse(invitation?.id ?? null);
 
   if (!invitation) {
     return (
       <div className="rounded-lg border bg-card p-8 text-center text-sm text-muted-foreground">
-        Select a submission to view the response.
+        {t('fellows.forms.selectPrompt')}
       </div>
     );
   }
@@ -495,11 +502,13 @@ function DetailPane({ invitation }: { invitation: AdminFormInvitation | null }) 
             {invitation.formTitle}
           </h2>
           <div className="text-sm text-muted-foreground mt-1">
-            {displayName(invitation)} · {invitation.academicYear}
+            {displayName(invitation, t)} · {invitation.academicYear}
           </div>
           {invitation.submittedAt && (
             <div className="text-xs text-muted-foreground mt-1">
-              Submitted {formatSubmittedDate(invitation.submittedAt)}
+              {t('fellows.forms.submittedOn', {
+                date: formatHumanDate(invitation.submittedAt, i18n.language),
+              })}
             </div>
           )}
         </div>
@@ -511,17 +520,17 @@ function DetailPane({ invitation }: { invitation: AdminFormInvitation | null }) 
           role="status"
           className="rounded-md border border-warning-border bg-warning p-4 text-sm text-warning-foreground"
         >
-          This form is no longer in the registry. The PDF cannot be regenerated.
+          {t('fellows.forms.retiredNotice')}
         </div>
       ) : isLoading ? (
         <LoadingSpinner />
       ) : isError || !response ? (
         <div className="text-sm text-destructive">
-          Could not load response data.
+          {t('fellows.forms.responseLoadFailed')}
         </div>
       ) : !formDef ? (
         <div className="text-sm text-muted-foreground">
-          Form definition missing — cannot render fields.
+          {t('fellows.forms.missingDefinition')}
         </div>
       ) : (
         <DetailFields
@@ -540,12 +549,18 @@ function DetailFields({
   formDef: FormDef;
   data: Record<string, unknown>;
 }) {
-  const sections = getVisibleSections(formDef, data);
+  const { t, i18n } = useTranslation();
+  const sections = getVisibleSections(formDef, data, {
+    lang: i18n.language,
+    yes: t('common.yes'),
+    no: t('common.no'),
+    entry: t('forms.group.entry'),
+  });
 
   if (sections.length === 0) {
     return (
       <div className="text-sm text-muted-foreground">
-        This response has no visible fields.
+        {t('fellows.forms.noVisibleFields')}
       </div>
     );
   }
@@ -576,8 +591,8 @@ function DetailFields({
 // ──────────────────────────────────────────────────────────────────────────
 
 const PDF_DOWNLOADS = [
-  { kind: 'memorandum' as const, label: 'Memorandum', icon: FileText },
-  { kind: 'grants-resources' as const, label: 'Grant Information', icon: Landmark },
+  { kind: 'memorandum' as const, labelKey: 'fellows.forms.memorandum', icon: FileText },
+  { kind: 'grants-resources' as const, labelKey: 'fellows.forms.grantInformation', icon: Landmark },
 ];
 
 const GRANT_SECTION_TITLES = new Set(['Grants & Resources', 'Grant Information']);
@@ -600,13 +615,14 @@ function PdfButtons({
   invitation: AdminFormInvitation;
   variant: 'icon' | 'button';
 }) {
+  const { t } = useTranslation();
   const { data: registry } = useFormRegistry();
   const download = useDownloadFormPdf();
   const retired = isRetiredFormTitle(invitation.formTitle);
   const formDef = registry?.find((f) => f.id === invitation.formType);
   const pdfDownloads = PDF_DOWNLOADS.map((pdf) => ({
     ...pdf,
-    label: pdfDownloadLabel(pdf.kind, formDef, pdf.label),
+    label: pdfDownloadLabel(pdf.kind, formDef, t(pdf.labelKey)),
   }));
 
   if (variant === 'icon') {
@@ -630,8 +646,16 @@ function PdfButtons({
                 });
               }}
               disabled={retired}
-              aria-label={`Download ${pdf.label} PDF for ${displayName(invitation)}, ${invitation.formTitle}`}
-              title={retired ? 'PDF unavailable for retired forms' : `Download ${pdf.label} PDF`}
+              aria-label={t('fellows.forms.downloadPdfAria', {
+                label: pdf.label,
+                name: displayName(invitation, t),
+                form: invitation.formTitle,
+              })}
+              title={
+                retired
+                  ? t('fellows.forms.pdfUnavailableRetired')
+                  : t('fellows.forms.downloadPdfTitle', { label: pdf.label })
+              }
               className={cn(
                 // p-2 gives 32px on fine pointers; pointer-coarse:p-4 bumps to 48px
                 // so touch users clear WCAG 2.5.5 Target Size (AAA) without
@@ -667,7 +691,11 @@ function PdfButtons({
             });
           }}
           disabled={retired}
-          aria-label={`Download ${pdf.label} PDF for ${displayName(invitation)}, ${invitation.formTitle}`}
+          aria-label={t('fellows.forms.downloadPdfAria', {
+            label: pdf.label,
+            name: displayName(invitation, t),
+            form: invitation.formTitle,
+          })}
           className={cn(
             'inline-flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium',
             'hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
@@ -675,7 +703,7 @@ function PdfButtons({
           )}
         >
           <Download className="h-4 w-4" />
-          {pdf.label} PDF
+          {t('fellows.forms.pdfButton', { label: pdf.label })}
         </button>
       ))}
     </div>
@@ -686,10 +714,10 @@ function PdfButtons({
 // Helpers
 // ──────────────────────────────────────────────────────────────────────────
 
-function displayName(inv: AdminFormInvitation): string {
+function displayName(inv: AdminFormInvitation, t: TFunction): string {
   // CiviCRM-down graceful degrade: when contactName could not be resolved
   // server-side, fall back to the stable contact id so the UI stays usable.
-  return inv.contactName ?? `Contact #${inv.contactId}`;
+  return inv.contactName ?? t('fellows.forms.contactFallback', { id: inv.contactId });
 }
 
 /**
@@ -707,21 +735,12 @@ function formTitlesByType(items: AdminFormInvitation[]): Map<string, string> {
   return map;
 }
 
-function formatSubmittedDate(iso: string): string {
-  // submittedAt is an ISO datetime (not a YYYY-MM-DD string), so we use the
-  // existing Intl formatter. Matches the v0.13.3 "24 Apr 2026" convention.
-  return new Date(iso).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
-}
-
 // ──────────────────────────────────────────────────────────────────────────
 // Skeletons + errors
 // ──────────────────────────────────────────────────────────────────────────
 
 function ListSkeleton() {
+  const { t } = useTranslation();
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr,3fr]">
       <ul className="space-y-2 rounded-lg border bg-card p-2" aria-hidden="true">
@@ -734,25 +753,26 @@ function ListSkeleton() {
         ))}
       </ul>
       <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">
-        <FileText className="inline h-4 w-4 mr-2" /> Loading submissions…
+        <FileText className="inline h-4 w-4 mr-2" /> {t('fellows.forms.loadingSubmissions')}
       </div>
     </div>
   );
 }
 
 function ErrorBanner({ onRetry }: { onRetry: () => void }) {
+  const { t } = useTranslation();
   return (
     <div
       role="alert"
       className="rounded-md border border-destructive/50 bg-destructive/10 p-4 text-sm"
     >
-      <div className="font-medium text-destructive mb-1">Could not load submissions.</div>
+      <div className="font-medium text-destructive mb-1">{t('fellows.forms.submissionsLoadFailed')}</div>
       <button
         type="button"
         onClick={onRetry}
         className="underline hover:no-underline text-destructive"
       >
-        Retry
+        {t('common.retry')}
       </button>
     </div>
   );
@@ -763,9 +783,9 @@ function ErrorBanner({ onRetry }: { onRetry: () => void }) {
  * Kept terse so it doesn't overwhelm assistive tech during rapid filter
  * changes (e.g., as the user types in the search box).
  */
-function filterSummary(filtered: number, total: number): string {
+function filterSummary(filtered: number, total: number, t: TFunction): string {
   if (filtered === total) {
-    return `Showing all ${total} submission${total === 1 ? '' : 's'}.`;
+    return t('fellows.forms.showingAll', { count: total });
   }
-  return `Showing ${filtered} of ${total} submission${total === 1 ? '' : 's'}.`;
+  return t('fellows.forms.showingFiltered', { filtered, count: total });
 }

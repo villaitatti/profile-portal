@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { AppointeeEmailStatus, AppointeeEmailType } from '@prisma/client';
+import { AppointeeEmailStatus, AppointeeEmailType } from '../../generated/prisma/client.js';
 
 vi.mock('../../env.js', () => ({
   env: {

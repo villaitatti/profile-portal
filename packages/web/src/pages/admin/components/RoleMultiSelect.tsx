@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useRoles } from '@/api/roles';
 import { Loader2, X } from 'lucide-react';
 
@@ -7,6 +8,7 @@ interface RoleMultiSelectProps {
 }
 
 export function RoleMultiSelect({ value, onChange }: RoleMultiSelectProps) {
+  const { t } = useTranslation();
   const { data: roles, isLoading } = useRoles();
 
   const toggleRole = (roleName: string) => {
@@ -21,7 +23,7 @@ export function RoleMultiSelect({ value, onChange }: RoleMultiSelectProps) {
     return (
       <div className="flex items-center gap-2 text-[0.95rem] text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
-        Loading roles...
+        {t('admin.roles.loading')}
       </div>
     );
   }
@@ -40,7 +42,7 @@ export function RoleMultiSelect({ value, onChange }: RoleMultiSelectProps) {
               <button
                 type="button"
                 onClick={() => toggleRole(role)}
-                aria-label={`Remove ${role}`}
+                aria-label={t('admin.roles.remove', { role })}
                 className="hover:bg-primary/20 rounded-full p-0.5"
               >
                 <X className="h-3 w-3" />
@@ -74,7 +76,7 @@ export function RoleMultiSelect({ value, onChange }: RoleMultiSelectProps) {
           </label>
         ))}
         {(!roles || roles.length === 0) && (
-          <p className="p-3 text-[0.95rem] text-muted-foreground">No roles available</p>
+          <p className="p-3 text-[0.95rem] text-muted-foreground">{t('admin.roles.noneAvailable')}</p>
         )}
       </div>
     </div>

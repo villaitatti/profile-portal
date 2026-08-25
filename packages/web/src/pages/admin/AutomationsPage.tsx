@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
+import { formatHumanDateTime } from '@/lib/dates';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { useAutomationRuns, useStartDryRun, useExecuteAutomation } from '@/api/automations';
@@ -20,23 +22,16 @@ import {
   UserPlus,
 } from 'lucide-react';
 
-const TYPE_LABELS: Record<string, string> = {
-  'end-of-year-cleanup': 'End-of-Year Cleanup',
-  'new-cohort-onboarding': 'New Appointees Onboarding',
-  'backfill': 'Backfill Existing Fellows',
+// i18n keys; resolved with t() where rendered. Unknown run types fall back to
+// the raw type string from the API.
+const TYPE_LABEL_KEYS: Record<string, string> = {
+  'end-of-year-cleanup': 'admin.automations.typeEndOfYear',
+  'new-cohort-onboarding': 'admin.automations.typeNewCohort',
+  'backfill': 'admin.automations.typeBackfill',
 };
 
-function formatDateTime(dateStr: string): string {
-  return new Intl.DateTimeFormat('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(dateStr));
-}
-
 export function AutomationsPage() {
+  const { t } = useTranslation();
   const { data: runs, isLoading, error, refetch } = useAutomationRuns();
 
   if (isLoading) return <AutomationsSkeleton />;
@@ -44,8 +39,8 @@ export function AutomationsPage() {
   return (
     <div>
       <PageHeader
-        title="Appointees Automations"
-        description="Manage automations of academic year transitions in Auth0 and Jira (JSM)"
+        title={t('admin.automations.title')}
+        description={t('admin.automations.description')}
       />
 
       {/* Instructions */}
@@ -54,36 +49,25 @@ export function AutomationsPage() {
           <Info className="mt-0.5 h-5 w-5 flex-shrink-0 text-primary" />
           <div className="space-y-2 text-[0.95rem] leading-7 text-muted-foreground">
             <p>
-              <strong>No action is required on this page.</strong> The automations
-              below run themselves on schedule every July 1 and July 2. This page
-              exists for monitoring past runs and, if something looks wrong, manually
-              previewing or re-running them.
+              <Trans i18nKey="admin.automations.intro1" components={{ strong: <strong /> }} />
             </p>
             <p>
-              <strong>End-of-Year Cleanup</strong> runs automatically on July 1 at 4:00 AM UTC
-              (6:00 AM in Florence). It removes departing fellows from the <em>fellows-current</em>{' '}
-              Auth0 role and the "I Tatti Current Appointees" organizations on both Atlassian Cloud
-              JSM sites (helpdesk and library services). Fellows keep their <em>fellows</em> role
-              (in Auth0) and "Former Appointees" membership (in Jira).
+              <Trans
+                i18nKey="admin.automations.intro2"
+                components={{ strong: <strong />, em: <em /> }}
+              />
             </p>
             <p>
-              <strong>New Appointees Onboarding</strong> runs automatically on July 2 at 4:00 AM UTC
-              (6:00 AM in Florence). It adds arriving fellows (with a VIT ID) to the{' '}
-              <em>fellows-current</em> Auth0 role and the "I Tatti Current Appointees"
-              organizations (in Jira). Fellows without a VIT ID are listed as "pending" in the
-              report and will be automatically assigned to the Auth0 role and added to the
-              organizations once they claim their VIT ID.
+              <Trans
+                i18nKey="admin.automations.intro3"
+                components={{ strong: <strong />, em: <em /> }}
+              />
             </p>
             <p>
-              <strong>Backfill Existing Fellows</strong> is a one-time action. It adds all existing
-              fellows (who claimed their VIT ID before this feature was deployed) to the correct
-              JSM organizations.
+              <Trans i18nKey="admin.automations.intro4" components={{ strong: <strong /> }} />
             </p>
             <p>
-              Each automation has two steps. Click <strong>Preview Changes</strong> first to see
-              exactly which fellows will be affected and what will happen &mdash; nothing is
-              modified at this stage, so it's safe to run in any environment. Then click{' '}
-              <strong>Execute</strong> to apply those changes. Execution only works in production.
+              <Trans i18nKey="admin.automations.intro5" components={{ strong: <strong /> }} />
             </p>
           </div>
         </div>
@@ -93,22 +77,22 @@ export function AutomationsPage() {
       <div className="space-y-6">
         <AutomationCard
           type="end-of-year"
-          title="End-of-Year Cleanup"
-          description="Remove departing fellows from Current Appointees"
+          title={t('admin.automations.typeEndOfYear')}
+          description={t('admin.automations.cardEndOfYearDescription')}
           icon={<CalendarClock className="h-5 w-5 text-primary" />}
-          schedule="July 1, 04:00 UTC"
+          schedule={t('admin.automations.scheduleJuly1')}
         />
         <AutomationCard
           type="new-cohort"
-          title="New Appointees Onboarding"
-          description="Add arriving fellows to Current Appointees"
+          title={t('admin.automations.typeNewCohort')}
+          description={t('admin.automations.cardNewCohortDescription')}
           icon={<UserPlus className="h-5 w-5 text-primary" />}
-          schedule="July 2, 04:00 UTC"
+          schedule={t('admin.automations.scheduleJuly2')}
         />
         <AutomationCard
           type="backfill"
-          title="Backfill Existing Fellows"
-          description="One-time: add pre-existing fellows to JSM organizations"
+          title={t('admin.automations.typeBackfill')}
+          description={t('admin.automations.cardBackfillDescription')}
           icon={<Users className="h-5 w-5 text-primary" />}
         />
       </div>
@@ -118,14 +102,15 @@ export function AutomationsPage() {
         <div className="mt-8 flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           <AlertCircle className="h-4 w-4 flex-shrink-0" />
           <span className="flex-1">
-            Couldn't load automation history:{' '}
-            {error instanceof Error ? error.message : 'Unknown error'}
+            {t('admin.automations.historyLoadError', {
+              message: error instanceof Error ? error.message : t('admin.automations.unknownError'),
+            })}
           </span>
           <button
             onClick={() => refetch()}
             className="inline-flex items-center gap-1 rounded-md border border-amber-300 px-3 py-1.5 text-xs font-medium hover:bg-amber-100"
           >
-            <RefreshCw className="h-3 w-3" /> Retry
+            <RefreshCw className="h-3 w-3" /> {t('common.retry')}
           </button>
         </div>
       )}
@@ -133,7 +118,7 @@ export function AutomationsPage() {
       {/* History */}
       {runs && runs.length > 0 && (
         <div className="mt-8 rounded-xl border bg-card p-6">
-          <h2 className="text-lg font-semibold mb-4">Automation History</h2>
+          <h2 className="text-lg font-semibold mb-4">{t('admin.automations.historyTitle')}</h2>
           <div className="space-y-2">
             {runs.map((run) => (
               <HistoryRow key={run.id} run={run} />
@@ -158,6 +143,7 @@ function AutomationCard({
   icon: React.ReactNode;
   schedule?: string;
 }) {
+  const { t } = useTranslation();
   const dryRunMutation = useStartDryRun(type);
   const executeMutation = useExecuteAutomation(type);
   const [dryRunResult, setDryRunResult] = useState<DryRunResult | null>(null);
@@ -170,7 +156,7 @@ function AutomationCard({
       const result = await dryRunMutation.mutateAsync();
       setDryRunResult(result);
     } catch (err) {
-      setActionError(`Preview failed: ${getErrorMessage(err)}. Nothing was changed.`);
+      setActionError(t('admin.automations.previewFailed', { message: getErrorMessage(err) }));
     }
   };
 
@@ -182,9 +168,7 @@ function AutomationCard({
       setDryRunResult(null);
     } catch (err) {
       // Keep the preview on screen: the admin needs to see what was attempted.
-      setActionError(
-        `Execution failed: ${getErrorMessage(err)}. Some changes may already have been applied — check the history below.`
-      );
+      setActionError(t('admin.automations.executionFailed', { message: getErrorMessage(err) }));
     }
   };
 
@@ -200,7 +184,7 @@ function AutomationCard({
         </div>
         {schedule && (
           <span className="text-xs text-muted-foreground whitespace-nowrap">
-            Auto: {schedule}
+            {t('admin.automations.auto', { schedule })}
           </span>
         )}
       </div>
@@ -212,7 +196,7 @@ function AutomationCard({
           className="inline-flex items-center gap-2 rounded-md border border-primary px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/5 disabled:opacity-50"
         >
           <RefreshCw className={`h-4 w-4 ${dryRunMutation.isPending ? 'animate-spin' : ''}`} />
-          Preview Changes
+          {t('admin.automations.previewChanges')}
         </button>
 
         {dryRunResult && dryRunResult.actions.length > 0 && (
@@ -222,17 +206,17 @@ function AutomationCard({
             className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             <Play className="h-4 w-4" />
-            Execute
+            {t('admin.automations.execute')}
           </button>
         )}
 
         {dryRunResult && dryRunResult.actions.length === 0 && (
-          <span className="text-sm text-muted-foreground">No changes needed.</span>
+          <span className="text-sm text-muted-foreground">{t('admin.automations.noChangesNeeded')}</span>
         )}
 
         {executeMutation.isSuccess && (
           <span className="inline-flex items-center gap-1 text-sm text-green-600">
-            <CheckCircle2 className="h-4 w-4" /> Executed successfully
+            <CheckCircle2 className="h-4 w-4" /> {t('admin.automations.executedSuccessfully')}
           </span>
         )}
       </div>
@@ -251,7 +235,10 @@ function AutomationCard({
       {dryRunResult && dryRunResult.actions.length > 0 && (
         <div className="mt-4 rounded-lg border bg-background p-4">
           <h4 className="text-sm font-medium mb-2">
-            Preview: {dryRunResult.actions.length} action{dryRunResult.actions.length !== 1 ? 's' : ''} ({dryRunResult.academicYear})
+            {t('admin.automations.previewActions', {
+              count: dryRunResult.actions.length,
+              year: dryRunResult.academicYear,
+            })}
           </h4>
           <div className="max-h-60 overflow-y-auto space-y-1">
             {dryRunResult.actions.map((action, i) => (
@@ -269,6 +256,7 @@ function AutomationCard({
 }
 
 function HistoryRow({ run }: { run: AutomationRun }) {
+  const { t, i18n } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
   const statusIcon = () => {
@@ -287,15 +275,19 @@ function HistoryRow({ run }: { run: AutomationRun }) {
       >
         {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         {statusIcon()}
-        <span className="text-sm font-medium">{TYPE_LABELS[run.type] || run.type}</span>
-        <span className="text-xs text-muted-foreground">
-          {run.status === 'dry_run' ? 'Dry run' : run.status}
+        <span className="text-sm font-medium">
+          {TYPE_LABEL_KEYS[run.type] ? t(TYPE_LABEL_KEYS[run.type]) : run.type}
         </span>
         <span className="text-xs text-muted-foreground">
-          {formatDateTime(run.startedAt)}
+          {run.status === 'dry_run'
+            ? t('admin.automations.dryRun')
+            : t(`admin.status.${run.status}`, run.status)}
+        </span>
+        <span className="text-xs text-muted-foreground">
+          {formatHumanDateTime(run.startedAt, i18n.language)}
         </span>
         <span className="text-xs text-muted-foreground ml-auto">
-          by {run.triggeredBy}
+          {t('admin.automations.byUser', { user: run.triggeredBy })}
         </span>
       </button>
 
@@ -345,7 +337,7 @@ function HistoryRow({ run }: { run: AutomationRun }) {
             }}
             className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
           >
-            <Download className="h-3 w-3" /> Export JSON
+            <Download className="h-3 w-3" /> {t('admin.automations.exportJson')}
           </button>
         </div>
       )}

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Application } from '@itatti/shared';
 import { Pencil, Trash2, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -11,6 +12,7 @@ interface AppTableProps {
 }
 
 export function AppTable({ applications, onDelete, isDeleting }: AppTableProps) {
+  const { t } = useTranslation();
   const [deleteTarget, setDeleteTarget] = useState<Application | null>(null);
 
   return (
@@ -20,16 +22,16 @@ export function AppTable({ applications, onDelete, isDeleting }: AppTableProps) 
           <thead>
             <tr className="border-b bg-muted/50">
               <th className="px-4 py-3 text-left text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                Application
+                {t('admin.apps.table.colApplication')}
               </th>
               <th className="hidden px-4 py-3 text-left text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground md:table-cell">
-                Roles
+                {t('admin.apps.table.colRoles')}
               </th>
               <th className="hidden px-4 py-3 text-left text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground sm:table-cell">
-                Order
+                {t('admin.apps.table.colOrder')}
               </th>
               <th className="px-4 py-3 text-right text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                Actions
+                {t('admin.apps.table.colActions')}
               </th>
             </tr>
           </thead>
@@ -80,9 +82,9 @@ export function AppTable({ applications, onDelete, isDeleting }: AppTableProps) 
                   <div className="flex items-center justify-end gap-1">
                     <Link
                       to={`/admin/apps/${app.id}/edit`}
-                      aria-label={`Edit ${app.name || app.id}`}
+                      aria-label={t('admin.apps.table.editApp', { name: app.name || app.id })}
                       className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted"
-                      title="Edit"
+                      title={t('common.edit')}
                     >
                       <Pencil className="h-4 w-4" />
                     </Link>
@@ -90,9 +92,9 @@ export function AppTable({ applications, onDelete, isDeleting }: AppTableProps) 
                       type="button"
                       onClick={() => setDeleteTarget(app)}
                       disabled={isDeleting}
-                      aria-label={`Delete ${app.name || app.id}`}
+                      aria-label={t('admin.apps.table.deleteApp', { name: app.name || app.id })}
                       className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
-                      title="Delete"
+                      title={t('common.delete')}
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -116,13 +118,13 @@ export function AppTable({ applications, onDelete, isDeleting }: AppTableProps) 
           }
         }}
         onCancel={() => setDeleteTarget(null)}
-        title="Delete Application"
+        title={t('admin.apps.table.deleteTitle')}
         description={
           deleteTarget
-            ? `Delete "${deleteTarget.name}"? This cannot be undone.`
+            ? t('admin.apps.table.deleteDescription', { name: deleteTarget.name })
             : ''
         }
-        confirmLabel="Delete"
+        confirmLabel={t('common.delete')}
         variant="danger"
       />
     </>

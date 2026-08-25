@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -8,15 +9,16 @@ import { Plus, Grid3X3, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 export function AppCatalogPage() {
+  const { t } = useTranslation();
   const { data: apps, isLoading, error, isFetching, refetch } = useApplications();
   const deleteApp = useDeleteApplication();
 
   const handleDelete = async (id: number) => {
     try {
       await deleteApp.mutateAsync(id);
-      toast.success('Application deleted');
+      toast.success(t('admin.apps.deleted'));
     } catch (err) {
-      toast.error('Failed to delete application');
+      toast.error(t('admin.apps.deleteFailed'));
       throw err; // re-throw so dialog stays open
     }
   };
@@ -26,15 +28,15 @@ export function AppCatalogPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-10">
       <PageHeader
-        title="Application Catalog"
-        description="Manage internal applications shown to portal users"
+        title={t('admin.apps.catalogTitle')}
+        description={t('admin.apps.catalogDescription')}
         actions={
           <Link
             to="/admin/apps/new"
             className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
           >
             <Plus className="h-4 w-4" />
-            Add Application
+            {t('admin.apps.addApplication')}
           </Link>
         }
       />
@@ -47,8 +49,8 @@ export function AppCatalogPage() {
         <div role="alert">
           <EmptyState
             icon={<AlertCircle className="h-12 w-12 mb-4 text-destructive" />}
-            title="Couldn't load the catalog"
-            description="The application list is temporarily unavailable. Nothing has been deleted."
+            title={t('admin.apps.loadErrorTitle')}
+            description={t('admin.apps.loadErrorDescription')}
             action={
               <button
                 type="button"
@@ -56,7 +58,7 @@ export function AppCatalogPage() {
                 disabled={isFetching}
                 className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
               >
-                {isFetching ? 'Trying again…' : 'Try again'}
+                {isFetching ? t('admin.apps.tryingAgain') : t('admin.apps.tryAgain')}
               </button>
             }
           />
@@ -64,15 +66,15 @@ export function AppCatalogPage() {
       ) : !apps || apps.length === 0 ? (
         <EmptyState
           icon={<Grid3X3 className="h-12 w-12 mb-4" />}
-          title="No applications yet"
-          description="Add your first internal application to the catalog."
+          title={t('admin.apps.emptyTitle')}
+          description={t('admin.apps.emptyDescription')}
           action={
             <Link
               to="/admin/apps/new"
               className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90"
             >
               <Plus className="h-4 w-4" />
-              Add Application
+              {t('admin.apps.addApplication')}
             </Link>
           }
         />

@@ -18,21 +18,14 @@ COPY --from=deps /app/packages/server/node_modules ./packages/server/node_module
 COPY --from=deps /app/packages/web/node_modules ./packages/web/node_modules
 COPY . .
 
-# Generate Prisma client inside the container (correct architecture binaries)
+# Generate the Prisma client (Prisma 7 `prisma-client` generator emits
+# TypeScript into src/generated/prisma, which tsup bundles into dist — no
+# architecture-specific engine relocation needed anymore).
 RUN cd packages/server && npx prisma generate
 # Build server and web (shared has no build step, exports raw .ts)
 RUN pnpm build:server && pnpm build:web
-# Materialize only the server's production dependency graph for the runtime
-# image. Prisma generates its client next to the workspace installation, so
-# copy that generated architecture-specific client into the deployed graph.
-RUN pnpm --filter @itatti/server deploy --prod /prod/server --legacy \
-  && source_client="$(find /app/node_modules/.pnpm -path '*/node_modules/.prisma/client' -type d -print -quit)" \
-  && target_client="$(find /prod/server/node_modules/.pnpm -path '*/node_modules/@prisma/client' -type d -print -quit)" \
-  && test -n "$source_client" \
-  && test -n "$target_client" \
-  && target_generated="$(dirname "$(dirname "$target_client")")/.prisma" \
-  && mkdir -p "$target_generated" \
-  && cp -R "$(dirname "$source_client")/." "$target_generated/"
+# Materialize only the server's production dependency graph for the runtime image.
+RUN pnpm --filter @itatti/server deploy --prod /prod/server --legacy
 
 # ── Stage 3: Production runtime ──
 FROM node:22-alpine AS runtime
@@ -52,6 +45,9 @@ WORKDIR /app
 COPY --from=build /prod/server/node_modules ./packages/server/node_modules
 COPY --from=build /app/packages/server/dist ./packages/server/dist
 COPY --from=build /app/packages/server/prisma ./packages/server/prisma
+# Prisma 7 CLI reads its datasource URL from prisma.config.ts (the schema no
+# longer carries env("DATABASE_URL")); migrate deploy at startup needs it.
+COPY --from=build /app/packages/server/prisma.config.ts ./packages/server/prisma.config.ts
 COPY --from=build /app/packages/web/dist ./packages/web/dist
 COPY package.json pnpm-workspace.yaml ./
 COPY packages/shared/package.json packages/shared/

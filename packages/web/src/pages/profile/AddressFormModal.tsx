@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import * as Dialog from '@radix-ui/react-dialog';
+import { useTranslation } from 'react-i18next';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { useCountries, useStateProvinces } from '@/api/contact';
 import { SearchableCombobox } from '@/components/shared/SearchableCombobox';
 import { LOCATION_TYPES } from '@itatti/shared';
@@ -15,6 +16,7 @@ interface AddressFormModalProps {
 }
 
 export function AddressFormModal({ open, onClose, onSave, address, isSaving, usedLocationTypes }: AddressFormModalProps) {
+  const { t } = useTranslation();
   const [streetAddress, setStreetAddress] = useState('');
   const [supplementalAddress1, setSupplementalAddress1] = useState('');
   const [city, setCity] = useState('');
@@ -90,23 +92,28 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving, use
   const selectedState = states?.find((s) => s.id === stateProvinceId);
 
   return (
-    <Dialog.Root open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgba(29,37,44,0.32)] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 duration-200" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-xl border bg-card p-7 shadow-lg data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=open]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.97] duration-200 max-h-[90vh] overflow-y-auto">
-          <Dialog.Title className="text-xl font-semibold tracking-tight text-foreground">
-            {address ? 'Edit address' : 'Add address'}
-          </Dialog.Title>
+    <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
+      <DialogContent
+        showCloseButton={false}
+        className="block max-h-[90vh] max-w-[calc(100%-2rem)] gap-0 overflow-y-auto rounded-xl border bg-card p-7 sm:max-w-lg"
+      >
+          <DialogTitle className="text-xl font-semibold tracking-tight text-foreground">
+            {address ? t('profile.addressForm.editTitle') : t('profile.addressForm.addTitle')}
+          </DialogTitle>
 
           <form onSubmit={handleSubmit} className="mt-5 space-y-4">
             {address?.isPrimary ? (
               <p className="text-[0.88rem] text-muted-foreground">
-                Type: <span className="font-medium text-foreground">Main</span> (primary address)
+                {t('profile.addressForm.typeLabel')}:{' '}
+                <span className="font-medium text-foreground">
+                  {t('profile.addresses.locationTypes.Main')}
+                </span>{' '}
+                {t('profile.addressForm.primaryNote')}
               </p>
             ) : (
             <fieldset>
               <legend className="mb-1.5 text-sm font-medium text-foreground">
-                Type<span className="ml-0.5 text-destructive">*</span>
+                {t('profile.addressForm.typeLabel')}<span className="ml-0.5 text-destructive">*</span>
               </legend>
               <div className="flex flex-wrap gap-3">
                 {LOCATION_TYPES.map((type) => {
@@ -128,7 +135,8 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving, use
                         className="h-4 w-4 accent-primary"
                       />
                       <span className={`text-[0.95rem] ${isDisabled ? 'text-muted-foreground' : 'text-foreground'}`}>
-                        {type.label}{isDisabled ? ' (in use)' : ''}
+                        {t(`profile.addresses.locationTypes.${type.label}`, { defaultValue: type.label })}
+                        {isDisabled ? ` ${t('profile.addressForm.inUse')}` : ''}
                       </span>
                     </label>
                   );
@@ -137,7 +145,7 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving, use
             </fieldset>
             )}
 
-            <Field label="Street address" required>
+            <Field label={t('profile.addressForm.street')} required>
               <input
                 type="text"
                 value={streetAddress}
@@ -147,18 +155,18 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving, use
               />
             </Field>
 
-            <Field label="Address line 2">
+            <Field label={t('profile.addressForm.line2')}>
               <input
                 type="text"
                 value={supplementalAddress1}
                 onChange={(e) => setSupplementalAddress1(e.target.value)}
-                placeholder="Apt, suite, floor, etc."
+                placeholder={t('profile.addressForm.line2Placeholder')}
                 className="w-full rounded-md border bg-background px-3.5 py-2.5 text-[0.95rem] placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
               />
             </Field>
 
             <div className="grid grid-cols-2 gap-4">
-              <Field label="City" required>
+              <Field label={t('profile.addressForm.city')} required>
                 <input
                   type="text"
                   value={city}
@@ -168,7 +176,7 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving, use
                 />
               </Field>
 
-              <Field label="Postal code">
+              <Field label={t('profile.addressForm.postalCode')}>
                 <input
                   type="text"
                   value={postalCode}
@@ -178,26 +186,26 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving, use
               </Field>
             </div>
 
-            <Field label="Country" required>
+            <Field label={t('profile.addressForm.country')} required>
               <SearchableCombobox
                 options={countryOptions}
                 value={countryId ? String(countryId) : ''}
                 displayValue={selectedCountry?.name}
                 onSelect={handleCountryChange}
                 onClear={() => { setCountryId(undefined); setStateProvinceId(undefined); }}
-                placeholder="Select country"
+                placeholder={t('profile.addressForm.countryPlaceholder')}
               />
             </Field>
 
             {countryId && stateOptions.length > 0 && (
-              <Field label="State / Province">
+              <Field label={t('profile.addressForm.stateProvince')}>
                 <SearchableCombobox
                   options={stateOptions}
                   value={stateProvinceId ? String(stateProvinceId) : ''}
                   displayValue={selectedState?.name}
                   onSelect={(value) => setStateProvinceId(Number(value))}
                   onClear={() => setStateProvinceId(undefined)}
-                  placeholder="Select state/province"
+                  placeholder={t('profile.addressForm.statePlaceholder')}
                 />
               </Field>
             )}
@@ -209,20 +217,19 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving, use
                 disabled={isSaving}
                 className="rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="submit"
                 disabled={isSaving || !streetAddress || !city || !countryId}
-                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isSaving ? 'Saving...' : 'Save'}
+                {isSaving ? t('profile.saving') : t('common.save')}
               </button>
             </div>
           </form>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+      </DialogContent>
+    </Dialog>
   );
 }
 

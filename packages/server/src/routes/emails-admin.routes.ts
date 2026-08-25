@@ -10,7 +10,7 @@ import {
 } from '../templates/render.js';
 import { logger } from '../lib/logger.js';
 import { getFellowsCached } from '../lib/fellows-cache.js';
-import type { AppointeeEmailType } from '@prisma/client';
+import type { AppointeeEmailType } from '../generated/prisma/client.js';
 
 const router = Router();
 

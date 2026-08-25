@@ -3,6 +3,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AppSidebar } from '@/components/layout/AppSidebar';
+import { SidebarProvider } from '@/components/ui/sidebar';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 const AUTH0_NAMESPACE = 'https://auth0.itatti.harvard.edu';
 
@@ -12,14 +14,6 @@ vi.mock('@auth0/auth0-react', () => ({
     user: mockUser,
     isAuthenticated: true,
     logout: vi.fn(),
-  }),
-}));
-
-// Mock ui-store
-vi.mock('@/stores/ui-store', () => ({
-  useUIStore: () => ({
-    sidebarCollapsed: false,
-    toggleSidebar: vi.fn(),
   }),
 }));
 
@@ -43,7 +37,11 @@ function renderSidebar(initialEntries = ['/']) {
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={initialEntries}>
-        <AppSidebar />
+        <TooltipProvider>
+          <SidebarProvider>
+            <AppSidebar />
+          </SidebarProvider>
+        </TooltipProvider>
       </MemoryRouter>
     </QueryClientProvider>
   );
@@ -123,7 +121,11 @@ describe('AppSidebar', () => {
     render(
       <QueryClientProvider client={client}>
         <MemoryRouter>
-          <AppSidebar onNavigate={mockOnNavigate} />
+          <TooltipProvider>
+            <SidebarProvider>
+              <AppSidebar onNavigate={mockOnNavigate} />
+            </SidebarProvider>
+          </TooltipProvider>
         </MemoryRouter>
       </QueryClientProvider>
     );

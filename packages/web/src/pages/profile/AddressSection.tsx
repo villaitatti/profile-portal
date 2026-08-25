@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { MapPin, Plus, Pencil, Trash2, RefreshCw, Star } from 'lucide-react';
-import * as Dialog from '@radix-ui/react-dialog';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import {
@@ -16,6 +17,7 @@ import { LOCATION_TYPES, LOCATION_TYPE_MAIN_ID } from '@itatti/shared';
 import type { CiviCRMAddress, CreateAddressInput, UpdateAddressInput } from '@itatti/shared';
 
 export function AddressSection() {
+  const { t } = useTranslation();
   const { data: addresses, isLoading, error, refetch } = useAddresses();
   const createAddress = useCreateAddress();
   const updateAddress = useUpdateAddress();
@@ -123,17 +125,17 @@ export function AddressSection() {
       <div className="rounded-xl border bg-card p-6 md:px-8">
         <div className="flex items-center gap-3">
           <MapPin className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-lg font-semibold tracking-tight">Postal Addresses</h2>
+          <h2 className="text-lg font-semibold tracking-tight">{t('profile.addresses.title')}</h2>
         </div>
         <p className="mt-4 text-[0.95rem] text-muted-foreground">
-          Unable to load addresses. Please try again later.
+          {t('profile.addresses.loadError')}
         </p>
         <button
           onClick={() => refetch()}
           className="mt-3 inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
         >
           <RefreshCw className="h-3.5 w-3.5" />
-          Retry
+          {t('common.retry')}
         </button>
       </div>
     );
@@ -144,7 +146,7 @@ export function AddressSection() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <MapPin className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-lg font-semibold tracking-tight">Postal Addresses</h2>
+          <h2 className="text-lg font-semibold tracking-tight">{t('profile.addresses.title')}</h2>
         </div>
         {!allTypesUsed && (
           <button
@@ -152,19 +154,19 @@ export function AddressSection() {
             className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
           >
             <Plus className="h-3.5 w-3.5" />
-            Add address
+            {t('profile.addresses.add')}
           </button>
         )}
       </div>
 
       <p className="mt-2 text-[0.88rem] leading-6 text-muted-foreground">
-        <Star className="inline h-3.5 w-3.5 fill-primary text-primary -mt-0.5" /> primary address — where I Tatti will send any postal correspondence.
+        <Star className="inline h-3.5 w-3.5 fill-primary text-primary -mt-0.5" /> {t('profile.addresses.primaryHint')}
       </p>
 
       {addresses && addresses.length === 0 ? (
         <div className="mt-6 rounded-lg border border-dashed p-6 text-center">
           <p className="text-[0.95rem] text-muted-foreground">
-            No addresses on file. Add one so I Tatti can reach you by post.
+            {t('profile.addresses.empty')}
           </p>
         </div>
       ) : (
@@ -186,7 +188,9 @@ export function AddressSection() {
                   </p>
                 </div>
                 <span className="flex-shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.78rem] font-medium text-muted-foreground">
-                  {address.locationType}
+                  {address.locationType
+                    ? t(`profile.addresses.locationTypes.${address.locationType}`, { defaultValue: address.locationType })
+                    : address.locationType}
                 </span>
               </div>
 
@@ -201,7 +205,7 @@ export function AddressSection() {
                   />
                   <span className={`flex items-center gap-1 ${address.isPrimary ? 'font-medium text-primary' : 'text-muted-foreground'}`}>
                     {address.isPrimary && <Star className="h-3.5 w-3.5 fill-current" />}
-                    Primary address
+                    {t('profile.addresses.primaryLabel')}
                   </span>
                 </label>
 
@@ -209,7 +213,7 @@ export function AddressSection() {
                   <button
                     onClick={() => handleEdit(address)}
                     className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                    title="Edit"
+                    title={t('common.edit')}
                   >
                     <Pencil className="h-4 w-4" />
                   </button>
@@ -217,7 +221,7 @@ export function AddressSection() {
                     onClick={() => setDeletingId(address.id)}
                     disabled={address.isPrimary}
                     className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-destructive disabled:opacity-40 disabled:cursor-not-allowed"
-                    title={address.isPrimary ? 'Select a different preferred address first' : 'Delete'}
+                    title={address.isPrimary ? t('profile.addresses.deleteDisabledHint') : t('common.delete')}
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -241,9 +245,9 @@ export function AddressSection() {
         open={deletingId !== null}
         onConfirm={handleDelete}
         onCancel={() => setDeletingId(null)}
-        title="Delete address"
-        description="Delete this address? This cannot be undone."
-        confirmLabel="Delete"
+        title={t('profile.addresses.deleteTitle')}
+        description={t('profile.addresses.deleteDescription')}
+        confirmLabel={t('common.delete')}
         variant="danger"
       />
 
@@ -276,20 +280,25 @@ function ReclassifyDialog({
   onSkip: () => void;
   onClose: () => void;
 }) {
-  const availableTypes = LOCATION_TYPES.filter((t) => !usedLocationTypes.includes(t.id));
+  const { t } = useTranslation();
+  const availableTypes = LOCATION_TYPES.filter((type) => !usedLocationTypes.includes(type.id));
   const defaultSkipType = availableTypes[0];
 
+  const localizeType = (label: string) =>
+    t(`profile.addresses.locationTypes.${label}`, { defaultValue: label });
+
   return (
-    <Dialog.Root open={open} onOpenChange={(isOpen: boolean) => { if (!isOpen) onClose(); }}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgba(29,37,44,0.32)] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 duration-200" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-xl border bg-card p-7 shadow-lg data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=open]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.97] duration-200">
-          <Dialog.Title className="text-lg font-semibold tracking-tight text-foreground">
-            Reclassify previous address
-          </Dialog.Title>
-          <Dialog.Description className="mt-2 text-[0.88rem] leading-6 text-muted-foreground">
-            The previous primary address was labeled &ldquo;{currentType}&rdquo;. What type should it be now?
-          </Dialog.Description>
+    <Dialog open={open} onOpenChange={(isOpen: boolean) => { if (!isOpen) onClose(); }}>
+      <DialogContent
+        showCloseButton={false}
+        className="block max-w-[calc(100%-2rem)] gap-0 rounded-xl border bg-card p-7 sm:max-w-sm"
+      >
+          <DialogTitle className="text-lg font-semibold tracking-tight text-foreground">
+            {t('profile.reclassify.title')}
+          </DialogTitle>
+          <DialogDescription className="mt-2 text-[0.88rem] leading-6 text-muted-foreground">
+            {t('profile.reclassify.description', { type: localizeType(currentType) })}
+          </DialogDescription>
 
           <div className="mt-5 grid grid-cols-2 gap-2">
             {availableTypes.map((type) => (
@@ -298,7 +307,7 @@ function ReclassifyDialog({
                 onClick={() => onSelect(type.id)}
                 className="rounded-md border px-3 py-2 text-sm font-medium transition-colors hover:bg-accent"
               >
-                {type.label}
+                {localizeType(type.label)}
               </button>
             ))}
           </div>
@@ -308,11 +317,10 @@ function ReclassifyDialog({
               onClick={onSkip}
               className="mt-3 w-full rounded-md border px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent"
             >
-              Skip (default to {defaultSkipType.label})
+              {t('profile.reclassify.skip', { type: localizeType(defaultSkipType.label) })}
             </button>
           )}
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+      </DialogContent>
+    </Dialog>
   );
 }

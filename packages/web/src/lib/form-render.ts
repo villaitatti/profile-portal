@@ -1,4 +1,19 @@
 import type { FormDef, FormFieldDef } from '@itatti/shared';
+import { formatHumanDate } from './dates';
+
+/**
+ * Optional localization for the display walkers. When omitted, output stays
+ * byte-identical to the server PDF renderer ('Yes'/'No', 'Entry', 'D MMM YYYY')
+ * — the parity test pins that default. The web detail pane passes the active
+ * language so booleans, entry labels, and dates follow the UI locale (dates as
+ * '24 April 2026' / '24 aprile 2026').
+ */
+export interface FormatValueOptions {
+  lang: string;
+  yes: string;
+  no: string;
+  entry: string;
+}
 
 /**
  * Canonical (label, value) pair for a single rendered form field.
@@ -27,7 +42,8 @@ function isDataField(field: FormFieldDef): boolean {
  */
 export function getVisibleFields(
   formDef: FormDef,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
+  opts?: FormatValueOptions
 ): VisibleField[] {
   const out: VisibleField[] = [];
   for (const section of formDef.sections) {
@@ -39,8 +55,8 @@ export function getVisibleFields(
         label: field.label,
         value:
           field.type === 'repeatable-group'
-            ? formatRepeatableGroupValue(data[field.name], field)
-            : formatValue(data[field.name], field.type),
+            ? formatRepeatableGroupValue(data[field.name], field, opts)
+            : formatValue(data[field.name], field.type, opts),
       });
     }
   }
@@ -60,7 +76,8 @@ export interface VisibleSection {
 
 export function getVisibleSections(
   formDef: FormDef,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
+  opts?: FormatValueOptions
 ): VisibleSection[] {
   return formDef.sections
     .map((section) => ({
@@ -74,14 +91,18 @@ export function getVisibleSections(
           label: f.label,
           value:
             f.type === 'repeatable-group'
-              ? formatRepeatableGroupValue(data[f.name], f)
-              : formatValue(data[f.name], f.type),
+              ? formatRepeatableGroupValue(data[f.name], f, opts)
+              : formatValue(data[f.name], f.type, opts),
         })),
     }))
     .filter((s) => s.fields.length > 0);
 }
 
-function formatRepeatableGroupValue(value: unknown, field: FormFieldDef): string {
+function formatRepeatableGroupValue(
+  value: unknown,
+  field: FormFieldDef,
+  opts?: FormatValueOptions
+): string {
   if (!Array.isArray(value) || value.length === 0) return '—';
   const childFields = field.fields?.filter(isDataField) ?? [];
   return value
@@ -91,10 +112,12 @@ function formatRepeatableGroupValue(value: unknown, field: FormFieldDef): string
       }
       const data = item as Record<string, unknown>;
       const lines = childFields.map((childField) => {
-        const formatted = formatValue(data[childField.name], childField.type);
+        const formatted = formatValue(data[childField.name], childField.type, opts);
         return `${childField.label}: ${formatted}`;
       });
-      return `${field.itemLabel ?? 'Entry'} ${index + 1}\n${lines.join('\n')}`;
+      // Server-authored itemLabel wins (form-definition content stays as-is);
+      // the generic fallback follows the UI language.
+      return `${field.itemLabel ?? opts?.entry ?? 'Entry'} ${index + 1}\n${lines.join('\n')}`;
     })
     .join('\n\n');
 }
@@ -111,12 +134,21 @@ function formatRepeatableGroupValue(value: unknown, field: FormFieldDef): string
  *   object                                      → JSON.stringify(value)
  *   anything else                               → String(value)
  */
-export function formatValue(value: unknown, fieldType?: FormFieldDef['type']): string {
+export function formatValue(
+  value: unknown,
+  fieldType?: FormFieldDef['type'],
+  opts?: FormatValueOptions
+): string {
   if (value === null || value === undefined) return '—';
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (typeof value === 'boolean') {
+    if (opts) return value ? opts.yes : opts.no;
+    return value ? 'Yes' : 'No';
+  }
   if (typeof value === 'string') {
     if (value === '') return '—';
-    if (fieldType === 'date') return formatDateOnly(value);
+    if (fieldType === 'date') {
+      return opts ? formatDateOnlyLocalized(value, opts.lang) : formatDateOnly(value);
+    }
     return value;
   }
   if (typeof value === 'number') return String(value);
@@ -131,6 +163,24 @@ export function formatValue(value: unknown, fieldType?: FormFieldDef['type']): s
     }
   }
   return String(value);
+}
+
+/**
+ * Localized variant of formatDateOnly: same impossible-date rejection (returns
+ * the input unchanged), but valid dates render in the app's human format
+ * ('24 April 2026' / '24 aprile 2026') via formatHumanDate.
+ */
+function formatDateOnlyLocalized(s: string, lang: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!match) return s;
+  const y = Number(match[1]);
+  const m = Number(match[2]);
+  const d = Number(match[3]);
+  const date = new Date(y, m - 1, d);
+  if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) {
+    return s;
+  }
+  return formatHumanDate(date, lang);
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

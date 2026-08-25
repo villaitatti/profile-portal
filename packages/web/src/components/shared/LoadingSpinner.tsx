@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 interface LoadingSpinnerProps {
   variant?: 'page' | 'panel';
   rows?: number;
@@ -15,15 +17,16 @@ export function LoadingSpinner({
   variant = 'page',
   rows = 4,
 }: LoadingSpinnerProps) {
+  const { t } = useTranslation();
   if (variant === 'panel') {
     return (
       <div
         role="status"
         aria-live="polite"
-        aria-label="Loading content"
+        aria-label={t('common.loading')}
         className="rounded-xl border bg-card p-6"
       >
-        <span className="sr-only">Loading content</span>
+        <span className="sr-only">{t('common.loading')}</span>
         <div className="space-y-4 motion-safe:animate-pulse">
           <div className="flex items-center justify-between gap-4">
             <SkeletonBlock className="h-5 w-40 rounded-full" />
@@ -51,10 +54,10 @@ export function LoadingSpinner({
     <div
       role="status"
       aria-live="polite"
-      aria-label="Loading page"
+      aria-label={t('common.loading')}
       className="flex min-h-[60vh] items-center justify-center"
     >
-      <span className="sr-only">Loading page</span>
+      <span className="sr-only">{t('common.loading')}</span>
       <div className="w-full max-w-md rounded-xl border bg-card p-8 motion-safe:animate-pulse">
         <div className="space-y-5">
           <div className="space-y-3">

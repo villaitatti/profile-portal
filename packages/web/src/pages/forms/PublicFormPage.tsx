@@ -1,4 +1,6 @@
 import { useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { formatHumanDate } from '@/lib/dates';
 import { PublicFormRequestError, PublicFormSubmitError, usePublicForm, useSubmitForm } from '@/api/forms';
 import { PublicFormRenderer, FormSubmittedPanel } from './PublicFormRenderer';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
@@ -13,6 +15,7 @@ export function PublicFormPage() {
 }
 
 function PublicFormView({ token }: { token: string }) {
+  const { t, i18n } = useTranslation();
   const submitMutation = useSubmitForm(token);
   const { data, isLoading, isFetching, error, refetch } = usePublicForm(token, {
     refetchOnWindowFocus: !submitMutation.isSuccess,
@@ -47,19 +50,19 @@ function PublicFormView({ token }: { token: string }) {
       <div className="text-center py-20 max-w-md mx-auto">
         <h1 className="text-2xl font-bold mb-2">
           {isExpired
-            ? 'Form Link Expired'
+            ? t('forms.loadError.expiredTitle')
             : isInvalid
-              ? 'Form Not Found'
+              ? t('forms.loadError.notFoundTitle')
               : isRateLimited
-                ? 'Too Many Requests'
-                : 'Form Temporarily Unavailable'}
+                ? t('forms.loadError.rateLimitedTitle')
+                : t('forms.loadError.unavailableTitle')}
         </h1>
         <p className="text-muted-foreground">
           {isExpired || isInvalid
-            ? 'This link is no longer active. Please contact the I Tatti staff member who sent you this form.'
+            ? t('forms.loadError.inactiveBody')
             : isRateLimited
-              ? 'Please wait a few minutes before trying this form link again.'
-              : 'We could not load the form right now. Please check your connection and try again.'}
+              ? t('forms.loadError.rateLimitedBody')
+              : t('forms.loadError.unavailableBody')}
         </p>
         {!isExpired && !isInvalid && (
           <button
@@ -68,7 +71,7 @@ function PublicFormView({ token }: { token: string }) {
             onClick={() => void refetch()}
             disabled={isFetching}
           >
-            {isFetching ? 'Trying again…' : 'Try again'}
+            {isFetching ? t('forms.tryingAgain') : t('forms.tryAgain')}
           </button>
         )}
       </div>
@@ -76,15 +79,16 @@ function PublicFormView({ token }: { token: string }) {
   }
 
   if (data.status === 'submitted') {
+    const submittedDate = data.submittedAt ? formatHumanDate(data.submittedAt, i18n.language) : '';
     return (
       <div className="text-center py-20 max-w-md mx-auto">
         <CheckCircle2 className="h-16 w-16 text-green-600 mx-auto mb-4" />
-        <h1 className="text-2xl font-bold mb-2">Form Already Submitted</h1>
+        <h1 className="text-2xl font-bold mb-2">{t('forms.alreadySubmittedTitle')}</h1>
         <p className="text-muted-foreground">
-          {data.submittedAt
-            ? `This form was submitted on ${new Date(data.submittedAt).toLocaleDateString()}. `
-            : 'This form has already been submitted. '}
-          If you need to make changes, please contact the I Tatti staff member who sent you this form.
+          {submittedDate
+            ? t('forms.submittedOn', { date: submittedDate })
+            : t('forms.alreadySubmittedBody')}
+          {t('forms.contactForChanges')}
         </p>
       </div>
     );
@@ -93,11 +97,8 @@ function PublicFormView({ token }: { token: string }) {
   if (data.status === 'expired') {
     return (
       <div className="text-center py-20 max-w-md mx-auto">
-        <h1 className="text-2xl font-bold mb-2">Form Link Expired</h1>
-        <p className="text-muted-foreground">
-          For your privacy, this form link is no longer active. Please contact the I Tatti staff
-          member who sent it to request a new link.
-        </p>
+        <h1 className="text-2xl font-bold mb-2">{t('forms.loadError.expiredTitle')}</h1>
+        <p className="text-muted-foreground">{t('forms.expiredPrivacyBody')}</p>
       </div>
     );
   }
@@ -106,7 +107,7 @@ function PublicFormView({ token }: { token: string }) {
     <div className="mx-auto max-w-5xl">
       <div className="mb-8 border-b border-primary/15 pb-6">
         <p className="mb-2 text-sm font-semibold uppercase tracking-[0.08em] text-primary">
-          Fellowship form
+          {t('forms.kicker')}
         </p>
         <h1 className="text-3xl font-semibold tracking-tight">{data.formDef.title}</h1>
         {data.formDef.description && (

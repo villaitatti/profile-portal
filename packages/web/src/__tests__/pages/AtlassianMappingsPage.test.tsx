@@ -165,6 +165,7 @@ describe('AtlassianMappingsPage — mutation failures', () => {
     await waitFor(() => {
       expect(vi.mocked(toast.error)).toHaveBeenCalledWith('Mapping is in use');
     });
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    // ConfirmDialog is a Base UI alert dialog, which exposes role="alertdialog".
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
   });
 });

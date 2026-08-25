@@ -1,0 +1,46 @@
+// Filled by the i18n extraction pass for its area. Keys are referenced as
+// t('dashboard.<key>').
+export const dashboard = {
+  en: {
+    title: 'Dashboard',
+    description: 'Access your profile and the services available to you.',
+    fallbackName: 'there',
+    viewProfile: 'View My Profile',
+    apps: {
+      title: 'Web Applications',
+      intro: 'These are some of the web applications and services available to you.',
+      introSignIn: 'Depending on the application, you may need to sign in with your VIT ID or Harvard Key credentials.',
+      vitIdInfo: 'Your VIT ID is used to access services specific to I Tatti and it is active indefinitely.',
+      harvardKeyInfo: 'Harvard Key is your login to access all Harvard online services and it is only active during your Harvard appointment.',
+      noneInfo: 'Publicly accessible and do not require any login.',
+      visit: 'Visit',
+      emptyTitle: 'No applications available',
+      emptyDescription: 'There are no applications configured for your roles.',
+      errorTitle: "Couldn't load your applications",
+      errorDescription: 'The list is temporarily unavailable. Try again in a moment — your access has not changed.',
+      tryAgain: 'Try again',
+      tryingAgain: 'Trying again…',
+    },
+  },
+  it: {
+    title: 'Dashboard',
+    description: 'Accedi al tuo profilo e ai servizi a tua disposizione.',
+    fallbackName: 'utente',
+    viewProfile: 'Vedi il mio profilo',
+    apps: {
+      title: 'Applicazioni web',
+      intro: 'Queste sono alcune delle applicazioni web e dei servizi a tua disposizione.',
+      introSignIn: 'A seconda dell’applicazione, potrebbe essere necessario accedere con il tuo VIT ID o con le credenziali Harvard Key.',
+      vitIdInfo: 'Il tuo VIT ID serve per accedere ai servizi specifici di I Tatti ed è attivo a tempo indeterminato.',
+      harvardKeyInfo: 'La Harvard Key è il tuo accesso a tutti i servizi online di Harvard ed è attiva solo durante il tuo incarico a Harvard.',
+      noneInfo: 'Accessibili pubblicamente, senza necessità di alcun login.',
+      visit: 'Visita',
+      emptyTitle: 'Nessuna applicazione disponibile',
+      emptyDescription: 'Non ci sono applicazioni configurate per i tuoi ruoli.',
+      errorTitle: 'Impossibile caricare le applicazioni',
+      errorDescription: 'L’elenco è temporaneamente non disponibile. Riprova tra un momento — i tuoi accessi non sono cambiati.',
+      tryAgain: 'Riprova',
+      tryingAgain: 'Nuovo tentativo…',
+    },
+  },
+};
