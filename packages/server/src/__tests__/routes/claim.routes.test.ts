@@ -47,7 +47,9 @@ async function postClaim(
     });
   // Alternate real IO ticks (lets the request reach the handler / the
   // response reach supertest) with fake-clock advances (releases the sleeps).
-  for (let i = 0; i < 50 && !response; i++) {
+  // Generous iteration budget: under a fully parallel test run the socket IO
+  // can need many macrotask turns between ticks.
+  for (let i = 0; i < 2000 && !response; i++) {
     await new Promise((r) => setImmediate(r));
     if (vi.getTimerCount() > 0) await vi.advanceTimersByTimeAsync(2100);
   }

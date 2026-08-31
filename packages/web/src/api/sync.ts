@@ -194,10 +194,19 @@ export function useSyncRunDetail(runId: string | null) {
 
 // ── SSE token + stream helper ──────────────────────────────────────
 
-// Fetch a short-lived SSE token (5 min expiry) so we never put the full JWT in a URL.
-export async function fetchSseToken(getToken: () => Promise<string>): Promise<string> {
+// Fetch a short-lived SSE token (5 min expiry) so we never put the full JWT
+// in a URL. The token is bound to one runId — the server refuses it for any
+// other run's stream — so it can only be requested once the run exists.
+export async function fetchSseToken(
+  getToken: () => Promise<string>,
+  runId: string
+): Promise<string> {
   const jwt = await getToken();
-  const res = await apiFetch('/api/admin/sync/sse-token', { method: 'POST', token: jwt });
+  const res = await apiFetch('/api/admin/sync/sse-token', {
+    method: 'POST',
+    token: jwt,
+    body: JSON.stringify({ runId }),
+  });
   const data = await res.json() as { token: string };
   return data.token;
 }

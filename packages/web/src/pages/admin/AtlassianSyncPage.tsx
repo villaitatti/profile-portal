@@ -433,11 +433,10 @@ export function AtlassianSyncPage() {
 
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [progress, setProgress] = useState<SyncProgress | null>(null);
-  // `started` distinguishes a run that failed after it began server-side (via
-  // failRun) from one that never started — e.g. SSE-token acquisition failing
-  // before the mutation runs. The two need different copy, and a not-started
-  // failure must not discard a still-valid dry-run preview.
-  const [runError, setRunError] = useState<{ kind: RunKind; message: string; started: boolean } | null>(null);
+  // Every runError is post-start: SSE tokens are run-bound, so even a token
+  // failure happens after the run began server-side (failRun refreshes
+  // history and drops the stale preview accordingly).
+  const [runError, setRunError] = useState<{ kind: RunKind; message: string } | null>(null);
   const [lastDryRunId, setLastDryRunId] = useState<string | null>(null);
   const [showExecuteConfirm, setShowExecuteConfirm] = useState(false);
   const [startTime, setStartTime] = useState(0);
@@ -469,7 +468,7 @@ export function AtlassianSyncPage() {
   // trusted.
   const failRun = useCallback(
     (kind: RunKind, message: string) => {
-      setRunError({ kind, message, started: true });
+      setRunError({ kind, message });
       // A failed run is still recorded server-side — refresh history so the
       // failure row appears instead of leaving the page looking untouched.
       void queryClient.invalidateQueries({ queryKey: ['sync-runs'] });
@@ -480,14 +479,6 @@ export function AtlassianSyncPage() {
     },
     [queryClient]
   );
-
-  // Pre-start failure (e.g. SSE-token acquisition threw before the mutation
-  // ran): nothing was created server-side and nothing was applied, so DON'T
-  // invalidate history, DON'T warn that changes may have landed, and — crucially
-  // — DON'T clear a still-valid dry-run preview the operator can still execute.
-  const failBeforeStart = useCallback((kind: RunKind, message: string) => {
-    setRunError({ kind, message, started: false });
-  }, []);
 
   const startSseSubscription = useCallback(
     (runId: string, sseToken: string, kind: RunKind, onDone: () => void) => {
@@ -519,55 +510,64 @@ export function AtlassianSyncPage() {
   const handleDryRun = useCallback(async () => {
     setRunError(null);
     setProgress(null);
-    let sseToken: string;
-    try {
-      sseToken = await fetchSseToken(getToken);
-    } catch (err) {
-      failBeforeStart('dry-run', getErrorMessage(err));
-      return;
-    }
     startDryRun.mutate(undefined, {
       onSuccess: ({ runId }) => {
         setActiveRunId(runId);
         setStartTime(Date.now());
         setProgress({ phase: 'starting', step: 0, totalSteps: 0, percentage: 0, description: t('admin.atlassian.sync.startingDryRun') });
-        startSseSubscription(runId, sseToken, 'dry-run', () => {
-          setLastDryRunId(runId);
-          setActiveRunId(null);
-          void queryClient.invalidateQueries({ queryKey: ['sync-runs'] });
-          void queryClient.invalidateQueries({ queryKey: ['sync-run', runId] });
-        });
+        // SSE tokens are bound to the run id, so the token can only be
+        // requested once the run exists. A token failure here means the run
+        // continues server-side without a progress view — surface it as a
+        // run error so the admin refreshes the history instead of waiting.
+        void (async () => {
+          let sseToken: string;
+          try {
+            sseToken = await fetchSseToken(getToken, runId);
+          } catch (err) {
+            failRun('dry-run', getErrorMessage(err));
+            return;
+          }
+          startSseSubscription(runId, sseToken, 'dry-run', () => {
+            setLastDryRunId(runId);
+            setActiveRunId(null);
+            void queryClient.invalidateQueries({ queryKey: ['sync-runs'] });
+            void queryClient.invalidateQueries({ queryKey: ['sync-run', runId] });
+          });
+        })();
       },
       onError: (err) => failRun('dry-run', getErrorMessage(err)),
     });
-  }, [startDryRun, queryClient, getToken, startSseSubscription, failRun, failBeforeStart, t]);
+  }, [startDryRun, queryClient, getToken, startSseSubscription, failRun, t]);
 
   const handleExecute = useCallback(async () => {
     if (!lastDryRunId) return;
     const dryRunId = lastDryRunId;
     setRunError(null);
     setProgress(null);
-    let sseToken: string;
-    try {
-      sseToken = await fetchSseToken(getToken);
-    } catch (err) {
-      failBeforeStart('execute', getErrorMessage(err));
-      return;
-    }
     executeSyncMutation.mutate(dryRunId, {
       onSuccess: ({ runId }) => {
         setActiveRunId(runId);
         setStartTime(Date.now());
         setProgress({ phase: 'starting', step: 0, totalSteps: 0, percentage: 0, description: t('admin.atlassian.sync.startingExecution') });
-        startSseSubscription(runId, sseToken, 'execute', () => {
-          setLastDryRunId(null);
-          setActiveRunId(null);
-          void queryClient.invalidateQueries({ queryKey: ['sync-runs'] });
-        });
+        // Run-bound SSE token: request it now that the run id exists.
+        void (async () => {
+          let sseToken: string;
+          try {
+            sseToken = await fetchSseToken(getToken, runId);
+          } catch (err) {
+            failRun('execute', getErrorMessage(err));
+            return;
+          }
+          startSseSubscription(runId, sseToken, 'execute', () => {
+            setLastDryRunId(null);
+            setActiveRunId(null);
+            void queryClient.invalidateQueries({ queryKey: ['sync-runs'] });
+          });
+        })();
       },
       onError: (err) => failRun('execute', getErrorMessage(err)),
     });
-  }, [lastDryRunId, executeSyncMutation, queryClient, getToken, startSseSubscription, failRun, failBeforeStart, t]);
+  }, [lastDryRunId, executeSyncMutation, queryClient, getToken, startSseSubscription, failRun, t]);
 
   if (statusLoading || mappingsLoading) return <AtlassianSyncPageSkeleton />;
 
@@ -696,19 +696,13 @@ export function AtlassianSyncPage() {
               <XCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-destructive" />
               <div className="flex-1">
                 <p className="text-sm font-semibold text-destructive">
-                  {runError.started
-                    ? t(RUN_KIND_LABEL_KEYS[runError.kind])
-                    : runError.kind === 'execute'
-                      ? t('admin.atlassian.sync.couldntStartSync')
-                      : t('admin.atlassian.sync.couldntStartPreview')}
+                  {t(RUN_KIND_LABEL_KEYS[runError.kind])}
                 </p>
                 <p className="mt-1 text-sm text-destructive/90">{runError.message}</p>
                 <p className="mt-1 text-sm text-destructive/90">
-                  {!runError.started
-                    ? t('admin.atlassian.sync.notStartedBody')
-                    : runError.kind === 'execute'
-                      ? t('admin.atlassian.sync.executeFailedBody')
-                      : t('admin.atlassian.sync.previewFailedBody')}
+                  {runError.kind === 'execute'
+                    ? t('admin.atlassian.sync.executeFailedBody')
+                    : t('admin.atlassian.sync.previewFailedBody')}
                 </p>
               </div>
               <button

@@ -143,6 +143,8 @@ export interface AdminFormInvitationsResponse {
     /** All distinct form types across submitted invitations, alpha sorted. */
     formTypes: string[];
   };
+  /** True when the archive cap (1000 rows) was hit — narrow the filters. */
+  truncated: boolean;
 }
 
 export function useFormRegistry() {

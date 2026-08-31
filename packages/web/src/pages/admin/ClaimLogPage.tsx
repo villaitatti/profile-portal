@@ -14,10 +14,12 @@ type SortDir = 'asc' | 'desc';
 
 export function ClaimLogPage() {
   const { t } = useTranslation();
-  const { data: claims, isLoading, error } = useClaims();
+  const { data, isLoading, error, hasNextPage, fetchNextPage, isFetchingNextPage } = useClaims();
   const [searchQuery, setSearchQuery] = useState('');
   const [sortField, setSortField] = useState<SortField>('claimedAt');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+
+  const claims = useMemo(() => data?.pages.flatMap((p) => p.claims), [data]);
 
   const filtered = useMemo(() => {
     if (!claims) return [];
@@ -149,10 +151,22 @@ export function ClaimLogPage() {
               </div>
             )}
 
-            <p className="mt-4 text-sm text-muted-foreground">
-              {t('admin.claimLog.totalClaims', { count: claims.length })}
-              {searchQuery.trim() ? t('admin.claimLog.matching', { count: filtered.length }) : ''}
-            </p>
+            <div className="mt-4 flex items-center justify-between gap-4">
+              <p className="text-sm text-muted-foreground">
+                {t('admin.claimLog.totalClaims', { count: claims.length })}
+                {searchQuery.trim() ? t('admin.claimLog.matching', { count: filtered.length }) : ''}
+              </p>
+              {hasNextPage && (
+                <button
+                  type="button"
+                  onClick={() => void fetchNextPage()}
+                  disabled={isFetchingNextPage}
+                  className="rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
+                >
+                  {isFetchingNextPage ? t('common.loading') : t('admin.claimLog.loadMore')}
+                </button>
+              )}
+            </div>
           </>
         )}
       </div>

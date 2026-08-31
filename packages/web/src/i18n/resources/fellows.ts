@@ -289,6 +289,7 @@ export const fellows = {
       allForms: 'All forms',
       searchPlaceholder: 'Name or form title',
       emptyTitle: 'No submissions yet',
+      archiveTruncated: 'Showing the 1,000 most recent submissions — narrow the filters to see older ones.',
       emptyDescription: 'Once appointees start submitting nomination forms, they will appear here.',
       showingAll_one: 'Showing all {{count}} submission.',
       showingAll_other: 'Showing all {{count}} submissions.',
@@ -728,6 +729,7 @@ export const fellows = {
       allForms: 'Tutti i moduli',
       searchPlaceholder: 'Nome o titolo del modulo',
       emptyTitle: 'Ancora nessun invio',
+      archiveTruncated: 'Sono mostrati i 1.000 invii più recenti — restringi i filtri per vedere quelli precedenti.',
       emptyDescription:
         'Quando gli incaricati inizieranno a inviare i moduli di nomina, compariranno qui.',
       showingAll_one: 'Visualizzato tutto: {{count}} invio.',

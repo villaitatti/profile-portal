@@ -97,6 +97,7 @@ const invRetired: AdminFormInvitation = {
 function payload(items: AdminFormInvitation[]): AdminFormInvitationsResponse {
   return {
     items,
+    truncated: false,
     facets: {
       academicYears: Array.from(new Set(items.map((i) => i.academicYear))).sort().reverse(),
       formTypes: Array.from(new Set(items.map((i) => i.formType))).sort(),

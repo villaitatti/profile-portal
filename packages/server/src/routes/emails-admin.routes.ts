@@ -35,19 +35,15 @@ const listQuerySchema = z.object({
     }),
 });
 
-router.get('/', async (req, res, next) => {
+router.get('/', async (req, res) => {
   const { limit, cursor, year, type, status } = listQuerySchema.parse(req.query);
-  try {
-    if (isDevMode) {
-      res.json({ events: getDevMockEvents(), nextCursor: null });
-      return;
-    }
-
-    const result = await listEmailEvents({ limit, cursor, year, type, statuses: status });
-    res.json(result);
-  } catch (err) {
-    next(err);
+  if (isDevMode) {
+    res.json({ events: getDevMockEvents(), nextCursor: null });
+    return;
   }
+
+  const result = await listEmailEvents({ limit, cursor, year, type, statuses: status });
+  res.json(result);
 });
 
 // GET /api/admin/emails/templates/:type/preview

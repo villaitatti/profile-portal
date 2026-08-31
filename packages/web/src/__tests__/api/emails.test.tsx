@@ -74,30 +74,65 @@ describe('useEmailEvents', () => {
     const { result } = renderHook(() => useEmailEvents(), { wrapper: wrap() });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toEqual({ events: mockEvents, nextCursor: null });
-    expect(fetchMock.mock.calls[0][0]).toContain('/api/admin/emails');
+    expect(result.current.data?.pages).toEqual([{ events: mockEvents, nextCursor: null }]);
+    expect(result.current.hasNextPage).toBe(false);
+    const url = fetchMock.mock.calls[0][0] as string;
+    expect(url).toContain('/api/admin/emails');
+    expect(url).not.toContain('cursor=');
     expect(authHeader()).toBe('Bearer test-token');
   });
 
-  it('passes query params to the fetch URL', async () => {
+  it('passes filter params to the fetch URL', async () => {
     fetchMock.mockResolvedValue({
       ok: true,
       json: async () => ({ events: [], nextCursor: null }),
     });
 
     const { result } = renderHook(
-      () => useEmailEvents({ limit: 50, cursor: 'cur123', year: '2025-2026', type: 'BIO_PROJECT_DESCRIPTION', status: 'SENT' }),
+      () => useEmailEvents({ limit: 50, year: '2025-2026', type: 'BIO_PROJECT_DESCRIPTION', status: 'SENT' }),
       { wrapper: wrap() }
     );
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     const url = fetchMock.mock.calls[0][0] as string;
     expect(url).toContain('limit=50');
-    expect(url).toContain('cursor=cur123');
     expect(url).toContain('year=2025-2026');
     expect(url).toContain('type=BIO_PROJECT_DESCRIPTION');
     expect(url).toContain('status=SENT');
     expect(authHeader()).toBe('Bearer test-token');
+  });
+
+  it('paginates across two pages via getNextPageParam', async () => {
+    const pageOne = [{ id: 'evt-1' }] as unknown as import('@/api/emails').EmailEvent[];
+    const pageTwo = [{ id: 'evt-2' }] as unknown as import('@/api/emails').EmailEvent[];
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ events: pageOne, nextCursor: 'cursor-2' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ events: pageTwo, nextCursor: null }),
+      });
+
+    const { result } = renderHook(() => useEmailEvents({ limit: 1 }), { wrapper: wrap() });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.hasNextPage).toBe(true);
+
+    await result.current.fetchNextPage();
+
+    await waitFor(() =>
+      expect(result.current.data?.pages).toEqual([
+        { events: pageOne, nextCursor: 'cursor-2' },
+        { events: pageTwo, nextCursor: null },
+      ])
+    );
+    expect(result.current.hasNextPage).toBe(false);
+    // The second request carries the cursor from the first page's nextCursor.
+    expect(fetchMock.mock.calls[0][0] as string).not.toContain('cursor=');
+    expect(fetchMock.mock.calls[1][0] as string).toContain('cursor=cursor-2');
+    expect(authHeader(1)).toBe('Bearer test-token');
   });
 
   it('throws an ApiError carrying the status when the response is not ok', async () => {

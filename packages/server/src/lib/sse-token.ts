@@ -2,7 +2,9 @@ import { randomBytes, createHmac, timingSafeEqual } from 'crypto';
 import { validateSseSecret } from './sse-secret.js';
 
 // Short-lived SSE tokens avoid putting the full JWT in query strings.
-// Tokens are HMAC-signed and expire after 5 minutes.
+// Tokens are HMAC-signed, expire after 5 minutes, and are BOUND TO ONE RUN:
+// a token issued for run A cannot open run B's stream. (Previously any valid
+// token could stream any run — TODOS.md 7.1.)
 //
 // SSE_SECRET (base64-encoded, >= 32 bytes) keeps tokens valid across restarts
 // and is REQUIRED in production — env.ts refuses to boot without it, so the
@@ -27,22 +29,34 @@ function loadSseSecret(): Buffer {
 const SSE_SECRET = loadSseSecret();
 const SSE_TOKEN_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
-export function createSseToken(userId: string): string {
+// Payload layout: `${userId}:${runId}:${expiresAt}`. userId (an Auth0 sub)
+// may contain colons; runId is a UUID and expiresAt is numeric, so parsing
+// from the RIGHT is unambiguous.
+export function createSseToken(userId: string, runId: string): string {
+  if (runId.includes(':')) {
+    throw new Error('runId must not contain ":"');
+  }
   const expiresAt = Date.now() + SSE_TOKEN_TTL_MS;
-  const payload = `${userId}:${expiresAt}`;
+  const payload = `${userId}:${runId}:${expiresAt}`;
   const sig = createHmac('sha256', SSE_SECRET).update(payload).digest('hex');
   return Buffer.from(`${payload}:${sig}`).toString('base64url');
 }
 
-export function verifySseToken(token: string): { valid: boolean; userId?: string } {
+export function verifySseToken(token: string): {
+  valid: boolean;
+  userId?: string;
+  runId?: string;
+} {
   try {
     const decoded = Buffer.from(token, 'base64url').toString();
     const parts = decoded.split(':');
-    if (parts.length < 3) return { valid: false };
+    if (parts.length < 4) return { valid: false };
 
     const sig = parts.pop()!;
-    const payload = parts.join(':'); // userId may contain colons
-    const [userId, expiresAtStr] = [parts.slice(0, -1).join(':'), parts[parts.length - 1]];
+    const payload = parts.join(':');
+    const expiresAtStr = parts[parts.length - 1];
+    const runId = parts[parts.length - 2];
+    const userId = parts.slice(0, -2).join(':');
     const expiresAt = Number(expiresAtStr);
 
     if (isNaN(expiresAt) || Date.now() > expiresAt) return { valid: false };
@@ -54,7 +68,7 @@ export function verifySseToken(token: string): { valid: boolean; userId?: string
       return { valid: false };
     }
 
-    return { valid: true, userId };
+    return { valid: true, userId, runId };
   } catch {
     return { valid: false };
   }

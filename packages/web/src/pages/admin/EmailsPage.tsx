@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetClose, SheetContent, SheetTitle } from '@/components/ui/sheet';
@@ -6,9 +6,8 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { useEmailEvents, useEmailEventPreview, useTemplatePreview } from '@/api/emails';
-import { apiUrl, useApiToken } from '@/api/client';
 import { SelectDropdown } from '@/components/shared/SelectDropdown';
-import type { EmailEvent, EmailEventsResponse } from '@/api/emails';
+import type { EmailEvent } from '@/api/emails';
 import {
   AlertCircle,
   X,
@@ -89,45 +88,38 @@ function SentEmailsTab() {
   const [sortField, setSortField] = useState<SortField>('enqueuedAt');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
-  const [loadedPages, setLoadedPages] = useState<EmailEvent[][]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [knownYears, setKnownYears] = useState<string[]>([]);
-  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
 
   const statusParam = statusFilters.size > 0 ? [...statusFilters].join(',') : undefined;
 
-  const { data, isLoading, error } = useEmailEvents({
+  // The filters are part of the query key, so changing any of them resets the
+  // infinite query to its first page; the cursor chain is TanStack's page
+  // param and never lives in component state.
+  const {
+    data,
+    isLoading,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isFetchNextPageError,
+  } = useEmailEvents({
     year: yearFilter !== 'all' ? yearFilter : undefined,
     type: typeFilter !== 'all' ? typeFilter : undefined,
     status: statusParam,
     limit: 100,
   });
 
-  // Pagination resets on the filter *values*, not on the query object identity:
-  // a background refetch (staleTime + window focus) hands back a new object for
-  // the same filters, and resetting on that collapsed every page the admin had
-  // already loaded.
-  const filterKey = `${yearFilter}|${typeFilter}|${statusParam ?? ''}`;
-  const pageStateRef = useRef({ filterKey, cursorSeeded: false });
-  if (pageStateRef.current.filterKey !== filterKey) {
-    pageStateRef.current = { filterKey, cursorSeeded: false };
-    setLoadedPages([]);
-    setLoadMoreError(null);
-  }
-  if (data && !pageStateRef.current.cursorSeeded) {
-    pageStateRef.current.cursorSeeded = true;
-    setNextCursor(data.nextCursor);
-  }
+  const events = useMemo(() => data?.pages.flatMap((page) => page.events) ?? [], [data]);
 
-  if (data && yearFilter === 'all' && typeFilter === 'all' && !statusParam) {
-    const years = [...new Set(data.events.map((e) => e.academicYear))].sort().reverse();
-    if (years.length > 0 && years.join(',') !== knownYears.join(',')) setKnownYears(years);
-  }
-
-  const events = useMemo(() => {
-    const firstPage = data?.events || [];
-    return [...firstPage, ...loadedPages.flat()];
-  }, [data, loadedPages]);
+  // Year options come from the unfiltered list and stick once seen, so the
+  // dropdown does not collapse to a single year while a filter is active.
+  const isUnfiltered = yearFilter === 'all' && typeFilter === 'all' && !statusParam;
+  useEffect(() => {
+    if (!isUnfiltered || events.length === 0) return;
+    const years = [...new Set(events.map((e) => e.academicYear))].sort().reverse();
+    setKnownYears((prev) => (years.join(',') === prev.join(',') ? prev : years));
+  }, [isUnfiltered, events]);
 
   const academicYears = knownYears;
   const hasActiveFilters = yearFilter !== 'all' || typeFilter !== 'all' || statusFilters.size > 0 || nameSearch.length > 0;
@@ -166,39 +158,10 @@ function SentEmailsTab() {
     });
   }
 
-  const getToken = useApiToken();
-  const [loadingMore, setLoadingMore] = useState(false);
-
-  const loadMore = useCallback(async () => {
-    if (!nextCursor || loadingMore) return;
-    setLoadingMore(true);
-    setLoadMoreError(null);
-    try {
-      const token = await getToken();
-      const url = new URL(apiUrl('/api/admin/emails'), window.location.origin);
-      url.searchParams.set('limit', '100');
-      url.searchParams.set('cursor', nextCursor);
-      if (yearFilter !== 'all') url.searchParams.set('year', yearFilter);
-      if (typeFilter !== 'all') url.searchParams.set('type', typeFilter);
-      if (statusParam) url.searchParams.set('status', statusParam);
-      const res = await fetch(url.toString(), {
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      });
-      if (!res.ok) throw new Error(`Load more failed: ${res.status}`);
-      const page = (await res.json()) as EmailEventsResponse;
-      setLoadedPages((prev) => [...prev, page.events]);
-      setNextCursor(page.nextCursor);
-    } catch {
-      // The cursor is kept so the same page can be retried; the rows already
-      // loaded stay on screen.
-      setLoadMoreError(t('fellows.emails.loadMoreFailed'));
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [nextCursor, loadingMore, getToken, yearFilter, typeFilter, statusParam, t]);
-
   if (isLoading) return <EmailsSkeleton />;
-  if (error) {
+  // A failed fetchNextPage keeps the loaded rows on screen and reports inline
+  // next to the "Load more" button; only first-page failures take over here.
+  if (error && !isFetchNextPageError) {
     return (
       <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-6 text-center">
         <AlertCircle className="mx-auto mb-2 h-8 w-8 text-destructive" />
@@ -337,21 +300,21 @@ function SentEmailsTab() {
       )}
 
       {/* Load more */}
-      {nextCursor && (
+      {hasNextPage && (
         <div className="mt-4 text-center">
-          {loadMoreError && (
+          {isFetchNextPageError && (
             <p role="alert" className="mb-2 text-sm text-destructive">
-              {loadMoreError}
+              {t('fellows.emails.loadMoreFailed')}
             </p>
           )}
           <button
-            onClick={() => void loadMore()}
-            disabled={loadingMore}
+            onClick={() => void fetchNextPage()}
+            disabled={isFetchingNextPage}
             className="rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"
           >
-            {loadingMore
+            {isFetchingNextPage
               ? t('fellows.emails.loading')
-              : loadMoreError
+              : isFetchNextPageError
                 ? t('fellows.emails.tryAgain')
                 : t('fellows.emails.loadMore')}
           </button>

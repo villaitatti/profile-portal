@@ -220,9 +220,6 @@ export const admin = {
         pageOf: 'Page {{page}} of {{total}}',
         previewFailed: 'Preview failed',
         syncFailed: 'Sync failed',
-        couldntStartSync: "Couldn't start sync",
-        couldntStartPreview: "Couldn't start preview",
-        notStartedBody: 'The run never started, so nothing was changed in Atlassian Cloud. Try again.',
         executeFailedBody:
           'Some changes may already have been applied. Preview again to see the current state before retrying.',
         previewFailedBody: 'Nothing was changed in Atlassian Cloud. Preview again to retry.',
@@ -312,6 +309,7 @@ export const admin = {
       statusNone: 'No Fellowship',
       totalClaims_one: '{{count}} total claim',
       totalClaims_other: '{{count}} total claims',
+      loadMore: 'Load more',
       matching: ', {{count}} matching',
     },
   },
@@ -530,10 +528,6 @@ export const admin = {
         pageOf: 'Pagina {{page}} di {{total}}',
         previewFailed: 'Anteprima non riuscita',
         syncFailed: 'Sincronizzazione non riuscita',
-        couldntStartSync: 'Impossibile avviare la sincronizzazione',
-        couldntStartPreview: 'Impossibile avviare l’anteprima',
-        notStartedBody:
-          'L’esecuzione non è mai partita, quindi nulla è stato modificato in Atlassian Cloud. Riprova.',
         executeFailedBody:
           'Alcune modifiche potrebbero essere già state applicate. Esegui di nuovo l’anteprima per vedere lo stato attuale prima di riprovare.',
         previewFailedBody: 'Nulla è stato modificato in Atlassian Cloud. Esegui di nuovo l’anteprima per riprovare.',
@@ -626,6 +620,7 @@ export const admin = {
       statusNone: 'Nessuna borsa',
       totalClaims_one: '{{count}} attivazione in totale',
       totalClaims_other: '{{count}} attivazioni in totale',
+      loadMore: 'Carica altri',
       matching: ', {{count}} corrispondenti',
     },
   },

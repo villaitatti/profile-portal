@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { ApiError, apiFetch, useApiToken } from './client';
 
 export interface EmailEvent {
@@ -45,18 +45,21 @@ export interface EmailEventsResponse {
   nextCursor: string | null;
 }
 
-export function useEmailEvents(params: EmailEventsParams = {}) {
+export function useEmailEvents(params: Omit<EmailEventsParams, 'cursor'> = {}) {
   const getToken = useApiToken();
 
-  return useQuery({
+  // Filters live in the query key, so changing a filter starts a fresh
+  // paginated list; the cursor is TanStack's page param, not a filter.
+  return useInfiniteQuery({
     queryKey: ['admin-emails', params],
-    queryFn: async () => {
+    queryFn: async ({ pageParam }) => {
       const token = await getToken();
-      const res = await apiFetch(`/api/admin/emails?${emailEventsQueryString(params)}`, {
-        token,
-      });
+      const qs = emailEventsQueryString({ ...params, cursor: pageParam });
+      const res = await apiFetch(`/api/admin/emails?${qs}`, { token });
       return (await res.json()) as EmailEventsResponse;
     },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
     staleTime: 60_000,
   });
 }

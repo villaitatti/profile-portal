@@ -120,6 +120,14 @@ describe('AtlassianSyncPage — run failures stay visible', () => {
   });
 
   it('surfaces an sse-token failure instead of silently stopping the button', async () => {
+    // Tokens are run-bound, so the fetch happens AFTER the run starts: the
+    // mutation succeeds, then the token failure surfaces as a run error
+    // (the run continues server-side without a progress view).
+    mockStartDryRunMutate.mockImplementation(
+      (_vars: undefined, opts: { onSuccess: (d: { runId: string }) => void }) => {
+        opts.onSuccess({ runId: 'dry_token_fail' });
+      }
+    );
     mockFetchSseToken.mockRejectedValue(new Error('sse-token 401'));
 
     render(<AtlassianSyncPage />, { wrapper: makeWrapper() });
@@ -129,7 +137,9 @@ describe('AtlassianSyncPage — run failures stay visible', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('sse-token 401');
     });
-    expect(mockStartDryRunMutate).not.toHaveBeenCalled();
+    expect(mockStartDryRunMutate).toHaveBeenCalled();
+    expect(mockFetchSseToken).toHaveBeenCalledWith(expect.any(Function), 'dry_token_fail');
+    expect(mockSubscribeSyncProgress).not.toHaveBeenCalled();
   });
 
   it('surfaces a dry-run mutation failure', async () => {
@@ -214,7 +224,7 @@ describe('AtlassianSyncPage — run failures stay visible', () => {
     expect(screen.queryByText(/Users to Create/)).not.toBeInTheDocument();
   });
 
-  it('keeps the preview and does not warn about applied changes when the execute token fetch fails before the run starts', async () => {
+  it('reports a run error and refreshes history when the execute token fetch fails after the run starts', async () => {
     mockUseSyncRunDetail.mockImplementation((runId: string | null) =>
       runId
         ? {
@@ -246,8 +256,13 @@ describe('AtlassianSyncPage — run failures stay visible', () => {
         opts.onSuccess({ runId: 'dry_1' });
       }
     );
-    // Preview gets its token; the execute attempt's token fetch then fails
-    // BEFORE the execute mutation runs.
+    mockExecuteMutate.mockImplementation(
+      (_dryRunId: string, opts: { onSuccess: (d: { runId: string }) => void }) => {
+        opts.onSuccess({ runId: 'exec_1' });
+      }
+    );
+    // SSE tokens are run-bound: the preview's token succeeds, then the token
+    // for the (already started) execute run fails.
     mockFetchSseToken.mockResolvedValueOnce('sse-token');
     mockFetchSseToken.mockRejectedValueOnce(new Error('sse-token 401'));
 
@@ -260,15 +275,16 @@ describe('AtlassianSyncPage — run failures stay visible', () => {
     await user.click(screen.getByRole('button', { name: /Execute Sync/ }));
     await user.click(screen.getByRole('button', { name: 'Execute Sync' }));
 
+    // The run started server-side without a progress view: surface a run
+    // error with the underlying message and refresh history.
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent("Couldn't start sync");
+      expect(screen.getByRole('alert')).toHaveTextContent('sse-token 401');
     });
-    // The execute mutation must never have run, and the preview must survive so
-    // the operator can retry against the same (still-valid) diff.
-    expect(mockExecuteMutate).not.toHaveBeenCalled();
-    expect(screen.getByText(/Users to Create/)).toBeInTheDocument();
-    // Must NOT claim changes may have landed — nothing started.
-    expect(screen.queryByText(/may already have been applied/)).not.toBeInTheDocument();
+    expect(mockExecuteMutate).toHaveBeenCalled();
+    expect(mockFetchSseToken).toHaveBeenLastCalledWith(expect.any(Function), 'exec_1');
+    // The previewed diff described pre-run state — it must not stay on
+    // screen next to an Execute button.
+    expect(screen.queryByText(/Users to Create/)).not.toBeInTheDocument();
   });
 });
 

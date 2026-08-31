@@ -1,6 +1,6 @@
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
-import { getFellowsCached } from '../lib/fellows-cache.js';
+import { getFellowsCached } from './fellows-cache.service.js';
 import type { AppointeeEmailType } from '../generated/prisma/client.js';
 
 // Read-side service for the admin email log (GET /api/admin/emails). Owns the
