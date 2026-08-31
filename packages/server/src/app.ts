@@ -9,7 +9,13 @@ import { env } from './env.js';
 import { sanitizeRequestUrl } from './lib/request-url.js';
 
 const app = express();
-const auth0Domain = env.PUBLIC_AUTH0_DOMAIN || process.env.VITE_AUTH0_DOMAIN || env.AUTH0_DOMAIN || 'harvard.eu.auth0.com';
+
+// CSP fallback chain for the Auth0 domain. No hardcoded tenant fallback: in
+// production AUTH0_DOMAIN is required non-empty, and in dev-skip mode an empty
+// value simply omits the Auth0 CSP entries — a misconfiguration should surface
+// as a visible CSP block, not be masked by someone else's tenant.
+const auth0Domain = env.PUBLIC_AUTH0_DOMAIN || env.VITE_AUTH0_DOMAIN || env.AUTH0_DOMAIN;
+const auth0CspSources = auth0Domain ? [`https://${auth0Domain}`] : [];
 
 // Trust proxy — required behind cloudflared for correct client IP.
 //
@@ -19,7 +25,7 @@ const auth0Domain = env.PUBLIC_AUTH0_DOMAIN || process.env.VITE_AUTH0_DOMAIN || 
 // XFF value. express-rate-limit flags that configuration as
 // ERR_ERL_PERMISSIVE_TRUST_PROXY. Abuse controls key on `rateLimitKey()`
 // (CF-Connecting-IP) rather than `req.ip`; see lib/client-ip.ts.
-app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS ?? 1));
+app.set('trust proxy', env.TRUST_PROXY_HOPS);
 
 // Global middleware
 app.use(helmet({
@@ -30,8 +36,8 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'", "https://use.typekit.net", "https://p.typekit.net"],
       fontSrc: ["'self'", "https://use.typekit.net", "https://p.typekit.net"],
       imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", `https://${auth0Domain}`],
-      frameSrc: ["'self'", `https://${auth0Domain}`],
+      connectSrc: ["'self'", ...auth0CspSources],
+      frameSrc: ["'self'", ...auth0CspSources],
     },
   },
 }));
@@ -44,8 +50,8 @@ app.use(
 );
 app.use(
   cors({
-    origin: process.env.NODE_ENV === 'production'
-      ? process.env.CORS_ORIGIN
+    origin: env.NODE_ENV === 'production'
+      ? env.CORS_ORIGIN
       : '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
@@ -65,7 +71,7 @@ app.use('/api', (_req, res) => {
 });
 
 // In production, serve the built frontend
-if (process.env.NODE_ENV === 'production') {
+if (env.NODE_ENV === 'production') {
   const { resolve } = await import('path');
   const webDist = resolve(process.cwd(), 'packages/web/dist');
   app.use(express.static(webDist));

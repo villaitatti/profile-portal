@@ -93,8 +93,9 @@ process.on('SIGINT', () => void shutdown('SIGINT'));
 
 // --- Process-level crash safety ---
 //
-// Safety net for the Express 4 async-handler hazard documented in
-// middleware/async-handler.ts, plus any floating promise elsewhere. Node's
+// Safety net for floating promises anywhere in the process — fire-and-forget
+// calls in cron jobs, workers, or SSE plumbing that reject outside a request
+// context (Express 5 catches async route handlers, but only those). Node's
 // default for an unhandled rejection is to terminate; for a web server that
 // turns one transient upstream error into a full outage. Log loudly (so
 // monitoring can alert on it) and stay up — the affected request is already
