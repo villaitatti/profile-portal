@@ -920,6 +920,13 @@ describe('sendBioEmailManually', () => {
     });
     // The atomic claim loses: the cron got there first.
     (mockPrisma.appointeeEmailEvent.updateMany as any).mockResolvedValue({ count: 0 });
+    // After losing the claim, the manual path reads the row the winner now
+    // owns and reports its authoritative state.
+    (mockPrisma.appointeeEmailEvent.findUniqueOrThrow as any).mockResolvedValue({
+      id: 'evt_queued',
+      status: 'SENDING',
+      sentAt: null,
+    });
 
     const result = await sendBioEmailManually({
       contactId: 1,
