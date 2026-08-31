@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../../env.js', () => ({
   env: {
+    NODE_ENV: 'test',
     AUTH0_FELLOWS_ROLE_ID: 'test-role',
   },
   isDevMode: false,
@@ -29,38 +30,29 @@ vi.mock('../../lib/logger.js', () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
 }));
 
+import express from 'express';
+import request from 'supertest';
 import { handleVitIdLookup } from '../../routes/fellows-admin.routes.js';
+import { errorHandler } from '../../middleware/error.js';
 import * as civicrmService from '../../services/civicrm.service.js';
 import * as auth0Service from '../../services/auth0.service.js';
 
 const mockCivicrm = vi.mocked(civicrmService);
 const mockAuth0 = vi.mocked(auth0Service);
 
-// Minimal Express req/res fakes — just enough surface for our handler.
-// Route is POST; query term comes from req.body, not req.query.
-function makeReq(body: Record<string, string | undefined>) {
-  return { body, query: {} } as unknown as import('express').Request;
+// Mounted like production (routes/index.ts): the handler plus the real error
+// middleware, so validation errors and unexpected failures are asserted
+// against the canonical envelopes the client actually sees.
+function makeApp() {
+  const app = express();
+  app.use(express.json());
+  app.post('/api/admin/vit-id-lookup', handleVitIdLookup);
+  app.use(errorHandler);
+  return app;
 }
 
-function makeRes() {
-  const calls: { status?: number; json?: unknown; headers?: Record<string, string> } = {
-    headers: {},
-  };
-  const res = {
-    status(code: number) {
-      calls.status = code;
-      return this;
-    },
-    json(payload: unknown) {
-      calls.json = payload;
-      return this;
-    },
-    set(name: string, value: string) {
-      calls.headers![name] = value;
-      return this;
-    },
-  } as unknown as import('express').Response;
-  return { res, calls };
+function lookup(body: Record<string, unknown>) {
+  return request(makeApp()).post('/api/admin/vit-id-lookup').send(body);
 }
 
 beforeEach(() => {
@@ -69,19 +61,17 @@ beforeEach(() => {
 
 describe('POST /api/admin/vit-id-lookup', () => {
   describe('validation', () => {
-    it('400 when q is missing', async () => {
-      const { res, calls } = makeRes();
-      await handleVitIdLookup(makeReq({}), res);
+    it('400 VALIDATION_ERROR when q is missing', async () => {
+      const res = await lookup({});
 
-      expect(calls.status).toBe(400);
-      expect(calls.json).toMatchObject({ error: 'invalid_request' });
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('VALIDATION_ERROR');
     });
 
     it('400 when q is empty string', async () => {
-      const { res, calls } = makeRes();
-      await handleVitIdLookup(makeReq({ q: '' }), res);
+      const res = await lookup({ q: '' });
 
-      expect(calls.status).toBe(400);
+      expect(res.status).toBe(400);
     });
   });
 
@@ -92,10 +82,9 @@ describe('POST /api/admin/vit-id-lookup', () => {
       ]);
       mockCivicrm.findContactIdByAnyEmail.mockResolvedValue({ found: false });
 
-      const { res, calls } = makeRes();
-      await handleVitIdLookup(makeReq({ q: 'me@x.com' }), res);
+      const res = await lookup({ q: 'me@x.com' });
 
-      expect(calls.json).toEqual({
+      expect(res.body).toEqual({
         kind: 'email-lookup',
         match: {
           status: 'active',
@@ -126,10 +115,9 @@ describe('POST /api/admin/vit-id-lookup', () => {
         new Map([[77, { primary: 'new@x.com', secondaries: [] }]])
       );
 
-      const { res, calls } = makeRes();
-      await handleVitIdLookup(makeReq({ q: 'new@x.com' }), res);
+      const res = await lookup({ q: 'new@x.com' });
 
-      expect(calls.json).toEqual({
+      expect(res.body).toEqual({
         kind: 'email-lookup',
         match: {
           status: 'active-different-email',
@@ -148,10 +136,9 @@ describe('POST /api/admin/vit-id-lookup', () => {
       mockAuth0.listUsersByRole.mockResolvedValue([]);
       mockCivicrm.findContactIdByAnyEmail.mockResolvedValue({ found: false });
 
-      const { res, calls } = makeRes();
-      await handleVitIdLookup(makeReq({ q: 'unknown@x.com' }), res);
+      const res = await lookup({ q: 'unknown@x.com' });
 
-      expect(calls.json).toEqual({
+      expect(res.body).toEqual({
         kind: 'email-lookup',
         match: { status: 'no-account' },
       });
@@ -165,10 +152,9 @@ describe('POST /api/admin/vit-id-lookup', () => {
         contactIds: [10, 20],
       });
 
-      const { res, calls } = makeRes();
-      await handleVitIdLookup(makeReq({ q: 'shared@x.com' }), res);
+      const res = await lookup({ q: 'shared@x.com' });
 
-      expect(calls.json).toEqual({
+      expect(res.body).toEqual({
         kind: 'email-lookup',
         match: {
           status: 'needs-review',
@@ -193,10 +179,9 @@ describe('POST /api/admin/vit-id-lookup', () => {
         new Map([[42, { primary: 'claimant@x.com', secondaries: [] }]])
       );
 
-      const { res, calls } = makeRes();
-      await handleVitIdLookup(makeReq({ q: 'claimant@x.com' }), res);
+      const res = await lookup({ q: 'claimant@x.com' });
 
-      expect(calls.json).toEqual({
+      expect(res.body).toEqual({
         kind: 'email-lookup',
         match: { status: 'no-account' },
       });
@@ -219,10 +204,9 @@ describe('POST /api/admin/vit-id-lookup', () => {
         new Map([[88, { primary: 'new@x.com', secondaries: ['old@y.com'] }]])
       );
 
-      const { res, calls } = makeRes();
-      await handleVitIdLookup(makeReq({ q: 'new@x.com' }), res);
+      const res = await lookup({ q: 'new@x.com' });
 
-      expect(calls.json).toMatchObject({
+      expect(res.body).toMatchObject({
         kind: 'email-lookup',
         match: {
           status: 'active-different-email',
@@ -240,10 +224,9 @@ describe('POST /api/admin/vit-id-lookup', () => {
         { user_id: 'auth0|3', email: 'other@x.com', name: 'Other Person' },
       ]);
 
-      const { res, calls } = makeRes();
-      await handleVitIdLookup(makeReq({ q: 'mar' }), res);
+      const res = await lookup({ q: 'mar' });
 
-      expect(calls.json).toEqual({
+      expect(res.body).toEqual({
         kind: 'name-search',
         candidates: [
           { userId: 'auth0|1', email: 'maria1@x.com', civicrmId: null, name: 'Maria Rossi' },
@@ -257,33 +240,30 @@ describe('POST /api/admin/vit-id-lookup', () => {
         { user_id: 'auth0|1', email: 'x@y.com', name: 'X Y' },
       ]);
 
-      const { res, calls } = makeRes();
-      await handleVitIdLookup(makeReq({ q: 'zzz' }), res);
+      const res = await lookup({ q: 'zzz' });
 
-      expect(calls.json).toEqual({ kind: 'name-search', candidates: [] });
+      expect(res.body).toEqual({ kind: 'name-search', candidates: [] });
     });
   });
 
   describe('error handling', () => {
-    it('500 when Auth0 fetch fails', async () => {
+    it('500 with canonical envelope when Auth0 fetch fails', async () => {
       mockAuth0.listUsersByRole.mockRejectedValue(new Error('Auth0 down'));
       mockCivicrm.findContactIdByAnyEmail.mockResolvedValue({ found: false });
 
-      const { res, calls } = makeRes();
-      await handleVitIdLookup(makeReq({ q: 'x@y.com' }), res);
+      const res = await lookup({ q: 'x@y.com' });
 
-      expect(calls.status).toBe(500);
-      expect(calls.json).toEqual({ error: 'internal_error' });
+      expect(res.status).toBe(500);
+      expect(res.body).toEqual({ error: 'Internal Server Error', code: 'INTERNAL_ERROR' });
     });
 
     it('500 when CiviCRM fetch fails', async () => {
       mockAuth0.listUsersByRole.mockResolvedValue([]);
       mockCivicrm.findContactIdByAnyEmail.mockRejectedValue(new Error('CiviCRM down'));
 
-      const { res, calls } = makeRes();
-      await handleVitIdLookup(makeReq({ q: 'x@y.com' }), res);
+      const res = await lookup({ q: 'x@y.com' });
 
-      expect(calls.status).toBe(500);
+      expect(res.status).toBe(500);
     });
   });
 
@@ -292,10 +272,9 @@ describe('POST /api/admin/vit-id-lookup', () => {
       mockAuth0.listUsersByRole.mockResolvedValue([]);
       mockCivicrm.findContactIdByAnyEmail.mockResolvedValue({ found: false });
 
-      const { res, calls } = makeRes();
-      await handleVitIdLookup(makeReq({ q: 'x@y.com' }), res);
+      const res = await lookup({ q: 'x@y.com' });
 
-      expect(calls.headers?.['Cache-Control']).toBe('no-store');
+      expect(res.headers['cache-control']).toBe('no-store');
     });
 
     it('error log does NOT include the raw email — only a shape descriptor', async () => {
@@ -304,8 +283,7 @@ describe('POST /api/admin/vit-id-lookup', () => {
 
       mockAuth0.listUsersByRole.mockRejectedValue(new Error('boom'));
 
-      const { res } = makeRes();
-      await handleVitIdLookup(makeReq({ q: 'sensitive@example.com' }), res);
+      await lookup({ q: 'sensitive@example.com' });
 
       expect(mockError).toHaveBeenCalled();
       const ctx = mockError.mock.calls[0][0] as Record<string, unknown>;

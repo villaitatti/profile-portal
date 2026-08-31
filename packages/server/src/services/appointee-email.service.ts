@@ -7,10 +7,9 @@ import {
 } from '../utils/eligibility.js';
 import { getCurrentAcademicYear } from '../utils/academic-year.js';
 import * as civicrmService from './civicrm.service.js';
-import * as auth0Service from './auth0.service.js';
 import * as emailService from './email.service.js';
-import { buildAuth0Maps, reconcile, type LadderFellow } from './vit-id-match.js';
-import { env } from '../env.js';
+import type { Auth0Maps } from './vit-id-match.js';
+import { buildLadderContext, matchKnownContact } from './vit-id-ladder.service.js';
 import type {
   SendBioEmailReason,
   SendVitIdEmailReason,
@@ -192,28 +191,35 @@ export async function enqueueAppointeeEmail(args: {
  * Returns false for `'needs-review'` (we won't send to an ambiguous target)
  * and for `'no-account'`.
  *
- * Delegates to classifyLadderMatch to keep a single source of truth for
+ * Delegates to vit-id-ladder.service to keep a single source of truth for
  * the Auth0-fetch + LadderFellow construction.
  */
 async function checkHasVitIdViaLadder(
   contactId: number,
-  contact: { firstName: string; lastName: string; email: string }
+  contact: { firstName: string; lastName: string; email: string },
+  maps?: Auth0Maps
 ): Promise<boolean> {
-  const match = await classifyLadderMatch(contactId, contact);
+  const match = await matchKnownContact(contactId, contact, maps);
   return match.status === 'active' || match.status === 'active-different-email';
 }
 
 export async function evaluateBioEmailEligibility(
   contactId: number,
-  academicYear: string
+  academicYear: string,
+  // Optional prefetched Auth0 maps — the dispatch loop builds them once per
+  // run instead of one full role scan per event (see buildLadderContext).
+  maps?: Auth0Maps
 ): Promise<EligibilityEvaluation> {
   // Mirror the VIT path: upstream CiviCRM / Auth0 failures produce a
   // 'civicrm_unavailable' reason (503 at the route layer) so the admin UI
   // can offer a retry instead of rendering a generic internal error.
+  // Every mapped catch logs the raw error first — without that, a recurring
+  // bug in these fetches is indistinguishable from a permanent silent outage.
   let contact: Awaited<ReturnType<typeof civicrmService.getContactById>>;
   try {
     contact = await civicrmService.getContactById(contactId);
-  } catch {
+  } catch (err) {
+    logger.warn({ err, contactId, academicYear }, 'bio_eligibility_contact_fetch_failed');
     return { eligible: false, reason: 'civicrm_unavailable' };
   }
   if (!contact) {
@@ -232,8 +238,9 @@ export async function evaluateBioEmailEligibility(
   // 'needs-review' we refuse to send — we won't pick a candidate to deliver to.
   let hasVitId: boolean;
   try {
-    hasVitId = await checkHasVitIdViaLadder(contactId, contact);
-  } catch {
+    hasVitId = await checkHasVitIdViaLadder(contactId, contact, maps);
+  } catch (err) {
+    logger.warn({ err, contactId, academicYear }, 'bio_eligibility_ladder_failed');
     return { eligible: false, reason: 'civicrm_unavailable' };
   }
   if (!hasVitId) {
@@ -243,7 +250,8 @@ export async function evaluateBioEmailEligibility(
   let fellowships;
   try {
     fellowships = await civicrmService.getFellowships(contactId);
-  } catch {
+  } catch (err) {
+    logger.warn({ err, contactId, academicYear }, 'bio_eligibility_fellowships_fetch_failed');
     return { eligible: false, reason: 'civicrm_unavailable' };
   }
   if (fellowships.length === 0) {
@@ -286,33 +294,6 @@ export async function evaluateBioEmailEligibility(
 }
 
 /**
- * Check the match-ladder match status for a contact. Returns the full
- * FellowMatch so callers can distinguish needs-review (refuse politely)
- * from no-account (VIT invitation is appropriate).
- */
-async function classifyLadderMatch(
-  contactId: number,
-  contact: { firstName: string; lastName: string; email: string }
-) {
-  const [auth0Users, contactEmails] = await Promise.all([
-    auth0Service.listUsersByRole(env.AUTH0_FELLOWS_ROLE_ID),
-    civicrmService.getEmailsForContacts([contactId]),
-  ]);
-  const maps = buildAuth0Maps(auth0Users);
-  const emails = contactEmails.get(contactId);
-  const ladderFellow: LadderFellow = {
-    civicrmId: contactId,
-    firstName: contact.firstName,
-    lastName: contact.lastName,
-    // No fallback to contact.email — if Email.get returned nothing for this
-    // contact (all on_hold), we don't want to match against the held primary.
-    primaryEmail: emails?.primary ?? null,
-    secondaries: emails?.secondaries ?? [],
-  };
-  return reconcile(ladderFellow, maps);
-}
-
-/**
  * Eligibility for the VIT ID invitation email. Mirrors the bio-email
  * eligibility check but with INVERTED VIT-ID semantics:
  *   - bio requires that a VIT ID ALREADY exists
@@ -327,12 +308,14 @@ async function classifyLadderMatch(
  */
 export async function evaluateVitIdInvitationEligibility(
   contactId: number,
-  academicYear: string
+  academicYear: string,
+  maps?: Auth0Maps
 ): Promise<VitIdInvitationEligibilityEvaluation> {
   let contact: Awaited<ReturnType<typeof civicrmService.getContactById>>;
   try {
     contact = await civicrmService.getContactById(contactId);
-  } catch {
+  } catch (err) {
+    logger.warn({ err, contactId, academicYear }, 'vit_invitation_eligibility_contact_fetch_failed');
     return { eligible: false, reason: 'civicrm_unavailable' };
   }
 
@@ -350,8 +333,9 @@ export async function evaluateVitIdInvitationEligibility(
 
   let match;
   try {
-    match = await classifyLadderMatch(contactId, contact);
-  } catch {
+    match = await matchKnownContact(contactId, contact, maps);
+  } catch (err) {
+    logger.warn({ err, contactId, academicYear }, 'vit_invitation_eligibility_ladder_failed');
     return { eligible: false, reason: 'civicrm_unavailable' };
   }
 
@@ -368,7 +352,8 @@ export async function evaluateVitIdInvitationEligibility(
   let fellowships;
   try {
     fellowships = await civicrmService.getFellowships(contactId);
-  } catch {
+  } catch (err) {
+    logger.warn({ err, contactId, academicYear }, 'vit_invitation_eligibility_fellowships_fetch_failed');
     return { eligible: false, reason: 'civicrm_unavailable' };
   }
 
@@ -484,8 +469,20 @@ export async function dispatchPendingEmails(opts?: {
   let failed = 0;
   let deferred = 0;
 
+  // One Auth0 role scan for the whole run, not one per event. Best-effort: if
+  // the prefetch fails, each dispatchOne falls back to its own fetch, which
+  // will surface the outage per-event as a deferral — same as before.
+  let maps: Auth0Maps | undefined;
+  if (due.length > 0) {
+    try {
+      maps = await buildLadderContext();
+    } catch (err) {
+      logger.warn({ err }, 'Bio email: Auth0 prefetch failed, falling back to per-event fetch');
+    }
+  }
+
   for (const event of due) {
-    const result = await dispatchOne(event.id);
+    const result = await dispatchOne(event.id, maps);
     if (result === 'sent') sent++;
     else if (result === 'skipped') skipped++;
     else if (result === 'failed') failed++;
@@ -584,7 +581,8 @@ export function classifySesFailure(err: unknown): SesFailureClass {
  * it directly after enqueue(delayHours: 0) — same code path, same guarantees.
  */
 export async function dispatchOne(
-  eventId: string
+  eventId: string,
+  maps?: Auth0Maps
 ): Promise<'sent' | 'skipped' | 'failed' | 'deferred' | 'deferred_email' | 'not_claimed'> {
   // Atomic PENDING → SENDING. Only one worker wins.
   const claimed = await prisma.appointeeEmailEvent.updateMany({
@@ -609,8 +607,8 @@ export async function dispatchOne(
   try {
     eligibility =
       event.emailType === AppointeeEmailType.VIT_ID_INVITATION
-        ? await evaluateVitIdInvitationEligibility(event.contactId, event.academicYear)
-        : await evaluateBioEmailEligibility(event.contactId, event.academicYear);
+        ? await evaluateVitIdInvitationEligibility(event.contactId, event.academicYear, maps)
+        : await evaluateBioEmailEligibility(event.contactId, event.academicYear, maps);
   } catch (err) {
     // Upstream failure (CiviCRM down). Leave as deferred — revert to PENDING.
     await prisma.appointeeEmailEvent.update({

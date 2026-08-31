@@ -1,10 +1,9 @@
-import { createHash } from 'crypto';
 import * as auth0Service from './auth0.service.js';
 import * as civicrmService from './civicrm.service.js';
 import * as jsmService from './atlassian-jsm.service.js';
 import * as emailService from './email.service.js';
 import * as appointeeEmailService from './appointee-email.service.js';
-import { buildAuth0Maps, reconcile, type LadderFellow } from './vit-id-match.js';
+import { runLadderForContactId } from './vit-id-ladder.service.js';
 import {
   evaluateEligibility,
   classifyFellowship,
@@ -13,10 +12,7 @@ import {
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { env } from '../env.js';
-
-function hashEmail(email: string): string {
-  return createHash('sha256').update(email).digest('hex').slice(0, 12);
-}
+import { hashEmail } from '../lib/hash-email.js';
 
 /**
  * Tell IT that an Auth0 account was created but provisioning did not complete.
@@ -282,14 +278,10 @@ async function runClaimLadder(
     return 'proceed';
   }
 
-  // We have a CiviCRM contact. Build a LadderFellow from its data and run the
-  // full 4-tier reconcile(). This catches returning fellows whose old Auth0
+  // We have a CiviCRM contact. Run the shared 4-tier ladder assembly
+  // (vit-id-ladder.service). This catches returning fellows whose old Auth0
   // account is reachable via civicrm_id, secondary-email, or normalized name.
-  const [contact, emailsByContact, auth0Users] = await Promise.all([
-    civicrmService.getContactById(contactLookup.contactId),
-    civicrmService.getEmailsForContacts([contactLookup.contactId]),
-    auth0Service.listUsersByRole(env.AUTH0_FELLOWS_ROLE_ID),
-  ]);
+  const { match, contact } = await runLadderForContactId(contactLookup.contactId);
   if (!contact) {
     // Race: contact was deleted between findContactIdByAnyEmail and
     // getContactById. Safest action is to proceed with normal claim flow
@@ -300,16 +292,6 @@ async function runClaimLadder(
     );
     return 'proceed';
   }
-  const contactEmails = emailsByContact.get(contactLookup.contactId);
-  const maps = buildAuth0Maps(auth0Users);
-  const ladderFellow: LadderFellow = {
-    civicrmId: contactLookup.contactId,
-    firstName: contact.firstName,
-    lastName: contact.lastName,
-    primaryEmail: contactEmails?.primary ?? null,
-    secondaries: contactEmails?.secondaries ?? [],
-  };
-  const match = reconcile(ladderFellow, maps);
 
   if (match.status === 'no-account') {
     // Ladder confirms: no prior Auth0 account anywhere. Caller creates fresh.

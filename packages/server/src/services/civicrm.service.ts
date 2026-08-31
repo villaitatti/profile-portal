@@ -1,14 +1,8 @@
-import { createHash } from 'crypto';
 import { env } from '../env.js';
 import { logger } from '../lib/logger.js';
 import { civiApiCall } from '../lib/civicrm-client.js';
+import { hashEmail } from '../lib/hash-email.js';
 import type { CiviCRMContact, CiviCRMFellowship } from '@itatti/shared';
-
-// Deterministic short hash for log correlation. Matches the pattern in
-// claim.service.ts so the same email produces the same hash across files.
-function hashEmail(email: string): string {
-  return createHash('sha256').update(email).digest('hex').slice(0, 12);
-}
 
 // Cap on the IN-list size for a single Email.get call. I Tatti is well under
 // this at any given time, but we chunk defensively so the query stays fast

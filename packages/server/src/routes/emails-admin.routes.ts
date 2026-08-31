@@ -3,32 +3,16 @@ import { z } from 'zod';
 import { env, isDevMode } from '../env.js';
 import { prisma } from '../lib/prisma.js';
 import * as civicrmService from '../services/civicrm.service.js';
+import { listEmailEvents, type EmailEventRow } from '../services/email-events.service.js';
+import type { AppointeeEmailType } from '../generated/prisma/client.js';
 import {
   renderVitIdInvitation,
   renderBioProjectDescription,
   TemplateRenderError,
 } from '../templates/render.js';
 import { logger } from '../lib/logger.js';
-import { getFellowsCached } from '../lib/fellows-cache.js';
-import type { AppointeeEmailType } from '../generated/prisma/client.js';
 
 const router = Router();
-
-interface EmailEventRow {
-  id: string;
-  fellowshipId: number;
-  contactId: number;
-  appointeeName: string;
-  academicYear: string;
-  emailType: AppointeeEmailType;
-  status: string;
-  enqueuedAt: string;
-  sentAt: string | null;
-  updatedAt: string;
-  triggeredBy: string;
-  failureReason: string | null;
-  sesMessageId: string | null;
-}
 
 // GET /api/admin/emails
 // Returns email events with joined appointee names. Supports cursor-based pagination
@@ -40,77 +24,27 @@ const listQuerySchema = z.object({
   cursor: z.string().optional(),
   year: z.string().optional(),
   type: z.enum(['BIO_PROJECT_DESCRIPTION', 'VIT_ID_INVITATION']).optional(),
-  status: z.string().optional(),
+  // Comma-separated status filter, validated and split by the schema so the
+  // handler receives a clean array (ZodError → 400 via the error middleware).
+  status: z
+    .string()
+    .optional()
+    .transform((s) => (s ? s.split(',').filter(Boolean) : []))
+    .refine((statuses) => statuses.every((s) => (VALID_STATUSES as readonly string[]).includes(s)), {
+      message: `each status must be one of ${VALID_STATUSES.join(', ')}`,
+    }),
 });
 
 router.get('/', async (req, res, next) => {
+  const { limit, cursor, year, type, status } = listQuerySchema.parse(req.query);
   try {
     if (isDevMode) {
       res.json({ events: getDevMockEvents(), nextCursor: null });
       return;
     }
 
-    const query = listQuerySchema.safeParse(req.query);
-    if (!query.success) {
-      res.status(400).json({ error: 'invalid_request' });
-      return;
-    }
-
-    const { limit, cursor, year, type, status } = query.data;
-
-    const where: Record<string, unknown> = {};
-    if (year) where.academicYear = year;
-    if (type) where.emailType = type;
-    if (status) {
-      const statuses = status.split(',').filter(Boolean);
-      const invalid = statuses.filter((s) => !(VALID_STATUSES as readonly string[]).includes(s));
-      if (invalid.length > 0) {
-        res.status(400).json({ error: 'invalid_status' });
-        return;
-      }
-      if (statuses.length === 1) where.status = statuses[0];
-      else if (statuses.length > 1) where.status = { in: statuses };
-    }
-
-    const events = await prisma.appointeeEmailEvent.findMany({
-      where,
-      take: limit + 1,
-      orderBy: [{ enqueuedAt: 'desc' }, { id: 'desc' }],
-      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-    });
-
-    const hasMore = events.length > limit;
-    const page = hasMore ? events.slice(0, limit) : events;
-    const nextCursor = hasMore ? page[page.length - 1].id : null;
-
-    let nameMap: Map<number, string>;
-    try {
-      const fellows = await getFellowsCached('emails_admin');
-      nameMap = new Map(
-        fellows.map((f) => [f.contactId, `${f.firstName} ${f.lastName}`.trim()])
-      );
-    } catch (err) {
-      logger.warn({ err }, 'Admin emails: CiviCRM unavailable for name join, degrading gracefully');
-      nameMap = new Map();
-    }
-
-    const rows: EmailEventRow[] = page.map((e) => ({
-      id: e.id,
-      fellowshipId: e.fellowshipId,
-      contactId: e.contactId,
-      appointeeName: nameMap.get(e.contactId) || '?',
-      academicYear: e.academicYear,
-      emailType: e.emailType,
-      status: e.status,
-      enqueuedAt: e.enqueuedAt.toISOString(),
-      sentAt: e.sentAt ? e.sentAt.toISOString() : null,
-      updatedAt: e.updatedAt.toISOString(),
-      triggeredBy: e.triggeredBy,
-      failureReason: e.failureReason,
-      sesMessageId: e.sesMessageId,
-    }));
-
-    res.json({ events: rows, nextCursor });
+    const result = await listEmailEvents({ limit, cursor, year, type, statuses: status });
+    res.json(result);
   } catch (err) {
     next(err);
   }
@@ -121,14 +55,15 @@ router.get('/', async (req, res, next) => {
 // Registered BEFORE /:eventId/preview to avoid Express param shadowing.
 const templateTypeSchema = z.enum(['vit-id-invitation', 'bio-project-description']);
 
-router.get('/templates/:type/preview', async (req, res) => {
+router.get('/templates/:type/preview', async (req, res, next) => {
+  // Unknown template type is a 404 (the route exists; the resource doesn't) —
+  // not a validation 400, so this stays a safeParse rather than .parse.
+  const parsed = templateTypeSchema.safeParse(req.params.type);
+  if (!parsed.success) {
+    res.status(404).json({ error: 'Template not found', code: 'NOT_FOUND' });
+    return;
+  }
   try {
-    const parsed = templateTypeSchema.safeParse(req.params.type);
-    if (!parsed.success) {
-      res.status(404).json({ error: 'not_found' });
-      return;
-    }
-
     const bcc = env.APPOINTEE_EMAIL_BCC
       ? env.APPOINTEE_EMAIL_BCC.split(',').map((s) => s.trim()).filter(Boolean)
       : [];
@@ -141,7 +76,7 @@ router.get('/templates/:type/preview', async (req, res) => {
     res.json({ ...rendered, bcc });
   } catch (err) {
     logger.error({ err, type: req.params.type }, 'Admin emails: template preview failed');
-    res.status(500).json({ error: 'internal_error' });
+    next(err);
   }
 });
 
@@ -150,17 +85,12 @@ router.get('/templates/:type/preview', async (req, res) => {
 // current first name from CiviCRM.
 const eventIdSchema = z.string().min(1);
 
-router.get('/:eventId/preview', async (req, res) => {
+router.get('/:eventId/preview', async (req, res, next) => {
+  const eventId = eventIdSchema.parse(req.params.eventId);
   try {
-    const eventId = eventIdSchema.safeParse(req.params.eventId);
-    if (!eventId.success) {
-      res.status(400).json({ error: 'invalid_request' });
-      return;
-    }
-
     if (isDevMode) {
       const devEvents = getDevMockEvents();
-      const devEvent = devEvents.find((e) => e.id === eventId.data);
+      const devEvent = devEvents.find((e) => e.id === eventId);
       const isVitId = devEvent?.emailType === 'VIT_ID_INVITATION';
       res.json({
         subject: isVitId
@@ -179,10 +109,10 @@ router.get('/:eventId/preview', async (req, res) => {
     }
 
     const event = await prisma.appointeeEmailEvent.findUnique({
-      where: { id: eventId.data },
+      where: { id: eventId },
     });
     if (!event) {
-      res.status(404).json({ error: 'not_found' });
+      res.status(404).json({ error: 'Email event not found', code: 'NOT_FOUND' });
       return;
     }
 
@@ -228,7 +158,7 @@ router.get('/:eventId/preview', async (req, res) => {
     }
   } catch (err) {
     logger.error({ err, eventId: req.params.eventId }, 'Admin emails: preview failed');
-    res.status(500).json({ error: 'internal_error' });
+    next(err);
   }
 });
 

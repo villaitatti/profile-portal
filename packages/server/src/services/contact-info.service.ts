@@ -10,7 +10,7 @@ import type {
   StateProvinceOption,
   LocationTypeLabel,
 } from '@itatti/shared';
-import { LOCATION_TYPE_MAIN_ID } from '@itatti/shared';
+import { LOCATION_TYPE_MAIN_ID, LOCATION_TYPE_LABELS } from '@itatti/shared';
 
 // --- Ownership verification (shared) ---
 
@@ -171,14 +171,6 @@ async function reconcilePrimary(
 }
 
 // --- Address functions ---
-
-const LOCATION_TYPE_LABELS: Record<number, LocationTypeLabel> = {
-  1: 'Home',
-  2: 'Work',
-  3: 'Main',
-  4: 'Other',
-  6: 'Temporary',
-};
 
 export async function getAddresses(contactId: number): Promise<CiviCRMAddress[]> {
   const res = await civiApiCall('Address', 'get', {

@@ -5,7 +5,8 @@ import { getFellowsDashboard, deriveAppointmentCategory } from '../services/fell
 import * as appointeeEmailService from '../services/appointee-email.service.js';
 import * as civicrmService from '../services/civicrm.service.js';
 import { listUsersByRole } from '../services/auth0.service.js';
-import { buildAuth0Maps, normalize, reconcile, type LadderFellow } from '../services/vit-id-match.js';
+import { normalize } from '../services/vit-id-match.js';
+import { buildLadderContext, runLadderForContactId } from '../services/vit-id-ladder.service.js';
 import { computeAppointeeStatus, type EmailEventStatus } from '../services/appointee-status.js';
 import {
   renderVitIdInvitation,
@@ -14,6 +15,7 @@ import {
 } from '../templates/render.js';
 import { logger } from '../lib/logger.js';
 import { parseCiviCRMError } from '../lib/civicrm-error.js';
+import { contactIdParamsSchema } from '../middleware/validate.js';
 import type {
   Auth0Candidate,
   FellowMatch,
@@ -166,10 +168,14 @@ function getDevMockData(academicYear?: string): FellowsDashboardResponse {
 }
 
 // GET /api/admin/fellows?academicYear=2025-2026
-router.get('/', async (req, res, next) => {
-  try {
-    const academicYear = req.query.academicYear as string | undefined;
+const dashboardQuerySchema = z.object({ academicYear: academicYearSchema.optional() });
 
+router.get('/', async (req, res, next) => {
+  // Parse OUTSIDE the try: the catch below maps errors to upstream-outage
+  // semantics, and a malformed query is a plain 400 (ZodError → error
+  // middleware), not an outage.
+  const { academicYear } = dashboardQuerySchema.parse(req.query);
+  try {
     if (isDevMode) {
       res.json(getDevMockData(academicYear));
       return;
@@ -178,71 +184,65 @@ router.get('/', async (req, res, next) => {
     const data = await getFellowsDashboard(academicYear);
     res.json(data);
   } catch (error) {
-    // The dashboard is a pure read over CiviCRM + Auth0, so a failure here is
-    // almost always an upstream outage rather than a bug in our code. Returning
-    // the default 500 left the client unable to tell "CiviCRM is down, retry in a
-    // moment" from "the server is broken" — the send-email routes on this same
-    // router already make that distinction. 503 + a retryable code lets the UI
-    // offer a retry instead of a dead end.
+    // The dashboard is a pure read over CiviCRM + Auth0. A transient upstream
+    // outage must surface as 503 + a retryable code so the UI can offer a
+    // retry instead of a dead end — but only genuine upstream conditions:
+    // parseCiviCRMError classifies CiviCRMApiError, isTransientAuth0Error
+    // covers Auth0 rate limits and 5xx. Anything else is our bug → next(error).
     const mapped = parseCiviCRMError(
       error,
       'The fellows dashboard is temporarily unavailable because an upstream service (CiviCRM or Auth0) did not respond. Please try again in a moment.'
     );
-    if (mapped.status === 503) {
+    if (mapped.status === 503 || isTransientAuth0Error(error)) {
       logger.warn({ err: error }, 'fellows_dashboard_upstream_unavailable');
-      res.status(503).json({ error: mapped.message, code: mapped.code });
+      res.status(503).json({
+        error:
+          'The fellows dashboard is temporarily unavailable because an upstream service (CiviCRM or Auth0) did not respond. Please try again in a moment.',
+        code: mapped.status === 503 ? mapped.code : 'AUTH0_UNAVAILABLE',
+      });
       return;
     }
     next(error);
   }
 });
 
+// Auth0 Management SDK errors carry a statusCode; 429 (rate limit) and 5xx are
+// transient outages worth a retry. 4xx like 403 (misconfigured M2M scopes) are
+// configuration bugs and must NOT be presented as "try again in a moment".
+function isTransientAuth0Error(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const name = (err as { name?: string }).name;
+  if (name !== 'ManagementApiError' && name !== 'AuthApiError') return false;
+  const statusCode = (err as { statusCode?: number }).statusCode;
+  return statusCode === 429 || (typeof statusCode === 'number' && statusCode >= 500);
+}
+
 // POST /api/admin/fellows/:contactId/send-bio-email
 // Body: { academicYear: "YYYY-YYYY", resend?: boolean }
 // Returns:
 //   200 { eventId, status, sentAt? }             — success (including in-flight PENDING/SENDING)
-//   400 { error: "invalid_request", details? }   — malformed :contactId or body failed schema validation
+//   400 { error, code: "VALIDATION_ERROR", details } — malformed :contactId or body (via error middleware)
 //   400 { reason: BioEmailIneligibilityReason }  — eligibility precondition failed
 //                                                  (no_vit_id / no_matching_fellowship / fellowship_not_accepted /
 //                                                   no_primary_email / already_sent)
 //   503 { reason: "civicrm_unavailable" }        — transient CiviCRM/Auth0 lookup failure
 //   502 { reason: "email_send_failed" }          — SES/config rejected the send
-//   500 { error: "internal_error" }              — unexpected server bug
+//   500 { error, code: "INTERNAL_ERROR" }        — unexpected server bug (via error middleware)
 const sendBioEmailBodySchema = z.object({
   academicYear: academicYearSchema,
   resend: z.boolean().optional().default(false),
 });
 
-router.post('/:contactId/send-bio-email', async (req, res, _next) => {
+router.post('/:contactId/send-bio-email', async (req, res, next) => {
+  // Parse before the try — a ZodError is a client 400 (rendered by the error
+  // middleware), not something the internal-error catch below should own.
+  const { contactId } = contactIdParamsSchema.parse(req.params);
+  const body = sendBioEmailBodySchema.parse(req.body);
   try {
-    const contactIdRaw = req.params.contactId;
-    const contactId = Number(contactIdRaw);
-    if (!Number.isInteger(contactId) || contactId <= 0) {
-      res
-        .status(400)
-        .json({
-          error: 'invalid_request',
-          details: [{ path: 'contactId', message: 'must be a positive integer' }],
-        });
-      return;
-    }
-
-    const parsed = sendBioEmailBodySchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({
-        error: 'invalid_request',
-        details: parsed.error.issues.map((i) => ({
-          path: i.path.join('.'),
-          message: i.message,
-        })),
-      });
-      return;
-    }
-
     // Dev-mode short-circuit: pretend-send, no DB/CiviCRM/SES touched.
     if (isDevMode) {
       res.json({
-        eventId: `dev-${contactId}-${parsed.data.academicYear}`,
+        eventId: `dev-${contactId}-${body.academicYear}`,
         status: 'SENT',
         sentAt: new Date().toISOString(),
       });
@@ -251,9 +251,9 @@ router.post('/:contactId/send-bio-email', async (req, res, _next) => {
 
     const result = await appointeeEmailService.sendBioEmailManually({
       contactId,
-      academicYear: parsed.data.academicYear,
+      academicYear: body.academicYear,
       triggeredBy: buildManualTriggeredBy(req),
-      resend: parsed.data.resend,
+      resend: body.resend,
     });
 
     if (!result.ok) {
@@ -276,8 +276,9 @@ router.post('/:contactId/send-bio-email', async (req, res, _next) => {
       sentAt: result.sentAt ? result.sentAt.toISOString() : null,
     });
   } catch (err) {
-    logger.error({ err, contactId: req.params.contactId }, 'Admin: send-bio-email failed');
-    res.status(500).json({ error: 'internal_error' });
+    // Contextual log here; the error middleware renders the canonical 500 body.
+    logger.error({ err, contactId }, 'Admin: send-bio-email failed');
+    next(err);
   }
 });
 
@@ -292,35 +293,13 @@ const sendVitIdEmailBodySchema = z.object({
   academicYear: academicYearSchema,
 });
 
-router.post('/:contactId/send-vit-id-email', async (req, res, _next) => {
+router.post('/:contactId/send-vit-id-email', async (req, res, next) => {
+  const { contactId } = contactIdParamsSchema.parse(req.params);
+  const body = sendVitIdEmailBodySchema.parse(req.body);
   try {
-    const contactIdRaw = req.params.contactId;
-    const contactId = Number(contactIdRaw);
-    if (!Number.isInteger(contactId) || contactId <= 0) {
-      res
-        .status(400)
-        .json({
-          error: 'invalid_request',
-          details: [{ path: 'contactId', message: 'must be a positive integer' }],
-        });
-      return;
-    }
-
-    const parsed = sendVitIdEmailBodySchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({
-        error: 'invalid_request',
-        details: parsed.error.issues.map((i) => ({
-          path: i.path.join('.'),
-          message: i.message,
-        })),
-      });
-      return;
-    }
-
     if (isDevMode) {
       res.json({
-        eventId: `dev-vit-${contactId}-${parsed.data.academicYear}`,
+        eventId: `dev-vit-${contactId}-${body.academicYear}`,
         status: 'SENT',
         sentAt: new Date().toISOString(),
       });
@@ -329,7 +308,7 @@ router.post('/:contactId/send-vit-id-email', async (req, res, _next) => {
 
     const result = await appointeeEmailService.sendVitIdInvitationManually({
       contactId,
-      academicYear: parsed.data.academicYear,
+      academicYear: body.academicYear,
       triggeredBy: buildManualTriggeredBy(req),
     });
 
@@ -353,11 +332,8 @@ router.post('/:contactId/send-vit-id-email', async (req, res, _next) => {
       sentAt: result.sentAt ? result.sentAt.toISOString() : null,
     });
   } catch (err) {
-    logger.error(
-      { err, contactId: req.params.contactId },
-      'Admin: send-vit-id-email failed'
-    );
-    res.status(500).json({ error: 'internal_error' });
+    logger.error({ err, contactId }, 'Admin: send-vit-id-email failed');
+    next(err);
   }
 });
 
@@ -375,32 +351,10 @@ const emailPreviewQuerySchema = z.object({
   academicYear: academicYearSchema,
 });
 
-router.get('/:contactId/email-preview', async (req, res, _next) => {
+router.get('/:contactId/email-preview', async (req, res, next) => {
+  const { contactId } = contactIdParamsSchema.parse(req.params);
+  const query = emailPreviewQuerySchema.parse(req.query);
   try {
-    const contactIdRaw = req.params.contactId;
-    const contactId = Number(contactIdRaw);
-    if (!Number.isInteger(contactId) || contactId <= 0) {
-      res
-        .status(400)
-        .json({
-          error: 'invalid_request',
-          details: [{ path: 'contactId', message: 'must be a positive integer' }],
-        });
-      return;
-    }
-
-    const parsed = emailPreviewQuerySchema.safeParse(req.query);
-    if (!parsed.success) {
-      res.status(400).json({
-        error: 'invalid_request',
-        details: parsed.error.issues.map((i) => ({
-          path: i.path.join('.'),
-          message: i.message,
-        })),
-      });
-      return;
-    }
-
     const bcc = env.APPOINTEE_EMAIL_BCC
       ? env.APPOINTEE_EMAIL_BCC.split(',')
           .map((s) => s.trim())
@@ -413,14 +367,14 @@ router.get('/:contactId/email-preview', async (req, res, _next) => {
       const mockFirstName = 'Sofia';
       const mockEmail = `dev-${contactId}@example.com`;
       const mockSubject =
-        parsed.data.type === 'vit_id_invitation'
+        query.type === 'vit_id_invitation'
           ? 'Welcome to I Tatti — Claim your VIT ID'
           : 'Biography and Project Description';
       res.json({
         to: mockEmail,
         bcc,
         subject: mockSubject,
-        body: `<p>Dev mode preview for ${mockFirstName}. Contact #${contactId}, year ${parsed.data.academicYear}.</p>`,
+        body: `<p>Dev mode preview for ${mockFirstName}. Contact #${contactId}, year ${query.academicYear}.</p>`,
         bodyFormat: 'html',
       });
       return;
@@ -455,7 +409,7 @@ router.get('/:contactId/email-preview', async (req, res, _next) => {
 
     try {
       const rendered =
-        parsed.data.type === 'vit_id_invitation'
+        query.type === 'vit_id_invitation'
           ? renderVitIdInvitation({ firstName: contact.firstName })
           : renderBioProjectDescription({ firstName: contact.firstName });
       res.json({
@@ -473,11 +427,8 @@ router.get('/:contactId/email-preview', async (req, res, _next) => {
       throw err;
     }
   } catch (err) {
-    logger.error(
-      { err, contactId: req.params.contactId },
-      'Admin: email-preview failed'
-    );
-    res.status(500).json({ error: 'internal_error' });
+    logger.error({ err, contactId }, 'Admin: email-preview failed');
+    next(err);
   }
 });
 
@@ -508,21 +459,14 @@ function looksLikeEmailQuery(q: string): boolean {
 // never land in access logs, browser history, or proxy caches).
 export async function handleVitIdLookup(
   req: import('express').Request,
-  res: import('express').Response
+  res: import('express').Response,
+  next: import('express').NextFunction
 ): Promise<void> {
+  // ZodError → 400 via the error middleware. Safe on this PII-sensitive
+  // endpoint: issues carry field paths and generic messages, never the value.
+  const parsed = vitIdLookupQuerySchema.parse(req.body);
   try {
-    const parsed = vitIdLookupQuerySchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({
-        error: 'invalid_request',
-        details: parsed.error.issues.map((i) => ({
-          path: i.path.join('.'),
-          message: i.message,
-        })),
-      });
-      return;
-    }
-    const q = parsed.data.q.trim();
+    const q = parsed.q.trim();
 
     // Responses can carry matched fellow data; don't cache anywhere.
     res.set('Cache-Control', 'no-store');
@@ -572,7 +516,7 @@ export async function handleVitIdLookup(
           : undefined,
     };
     logger.error({ err, bodyShape }, 'Admin: vit-id-lookup failed');
-    res.status(500).json({ error: 'internal_error' });
+    next(err);
   }
 }
 
@@ -583,11 +527,10 @@ async function runEmailLookupLadder(email: string): Promise<FellowMatch> {
 
   // Parallel: fetch all Auth0 fellows AND reverse-lookup any CiviCRM contact
   // that carries this email on any of their Email rows (primary or secondary).
-  const [auth0Users, contactLookup] = await Promise.all([
-    listUsersByRole(env.AUTH0_FELLOWS_ROLE_ID),
+  const [maps, contactLookup] = await Promise.all([
+    buildLadderContext(),
     civicrmService.findContactIdByAnyEmail(emailLower),
   ]);
-  const maps = buildAuth0Maps(auth0Users);
 
   // CiviCRM data bug: same email on 2+ distinct contacts. Surface before we
   // try to build a LadderFellow (we'd have to pick one contact arbitrarily).
@@ -613,26 +556,11 @@ async function runEmailLookupLadder(email: string): Promise<FellowMatch> {
     return { status: 'no-account' };
   }
 
-  // Build a synthetic LadderFellow from the matched CiviCRM contact and hand
-  // off to reconcile(). This gives the Has VIT ID page the SAME 4-tier verdict
-  // the dashboard would produce for the same contact.
-  const [contact, emailsByContact] = await Promise.all([
-    civicrmService.getContactById(contactLookup.contactId),
-    civicrmService.getEmailsForContacts([contactLookup.contactId]),
-  ]);
-  if (!contact) {
-    // Race: contact was deleted between the two calls. Degrade gracefully.
-    return { status: 'no-account' };
-  }
-  const contactEmails = emailsByContact.get(contactLookup.contactId);
-  const ladderFellow: LadderFellow = {
-    civicrmId: contactLookup.contactId,
-    firstName: contact.firstName,
-    lastName: contact.lastName,
-    primaryEmail: contactEmails?.primary ?? null,
-    secondaries: contactEmails?.secondaries ?? [],
-  };
-  return reconcile(ladderFellow, maps);
+  // Shared 4-tier assembly (vit-id-ladder.service) — the Has VIT ID page gets
+  // the SAME verdict the dashboard and claim flow would produce for this
+  // contact. A contact deleted between the two lookups degrades to no-account.
+  const { match } = await runLadderForContactId(contactLookup.contactId, maps);
+  return match;
 }
 
 function getDevVitIdLookupMock(q: string): VitIdLookupResponse {
