@@ -63,7 +63,54 @@ jobs:
         # `-r` runs the test script in every workspace (server + web). Web
         # tests previously didn't gate merges; codex review 2026-04-23 flagged
         # this as a tight-feedback-loop gap. Fixed here.
-        run: pnpm -r test
+        # Coverage is reported for visibility only — deliberately NOT a
+        # threshold gate (a mandatory percentage incentivizes low-value tests).
+        run: pnpm -r test:coverage
 
       - name: Production build
         run: pnpm build
+
+  # Real-PostgreSQL gate: proves the full migration chain applies to an empty
+  # database and runs the integration suite (constraints, atomic dispatch
+  # claim, unique races) BEFORE anything can be deployed. The unit-test job
+  # above cannot catch a migration that only fails against real Postgres.
+  database:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: portal
+          POSTGRES_PASSWORD: portal
+          POSTGRES_DB: portal_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      INTEGRATION_DATABASE_URL: postgresql://portal:portal@localhost:5432/portal_test
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Migration check (empty database -> HEAD)
+        run: pnpm --filter @itatti/server exec prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://portal:portal@localhost:5432/portal_test
+
+      - name: Integration tests
+        run: pnpm --filter @itatti/server test:integration
