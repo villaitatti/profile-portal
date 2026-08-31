@@ -10,10 +10,11 @@ export default defineConfig({
     environment: 'node',
     include: ['src/__tests__/integration/**/*.test.ts'],
     globalSetup: ['src/__tests__/integration/global-setup.ts'],
-    // Concurrency tests race real transactions; keep one worker so pool
-    // exhaustion never masquerades as a lost race.
-    pool: 'forks',
-    poolOptions: { forks: { singleFork: true } },
+    // Concurrency tests race real transactions; run files sequentially so
+    // pool exhaustion never masquerades as a lost race. (Vitest 4 removed
+    // poolOptions; file-level serialization is what we actually need.)
+    fileParallelism: false,
+    maxWorkers: 1,
     testTimeout: 30_000,
     hookTimeout: 120_000,
   },
