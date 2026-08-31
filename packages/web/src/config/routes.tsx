@@ -1,22 +1,27 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { KnownRoles } from '@itatti/shared';
 
+// Safe to translate: this boundary can only render under <RouterProvider>,
+// which App mounts after its import of @/i18n/config has synchronously
+// initialized i18next from bundled resources. Failures earlier than that
+// (e.g. a stale App chunk) never reach the router — main.tsx renders its
+// plain-DOM, deliberately hardcoded boot-failure fallback instead.
 function RouteErrorPage() {
+  const { t } = useTranslation();
   return (
     <div className="mx-auto max-w-md py-20 text-center">
-      <h1 className="mb-2 text-2xl font-bold">Page temporarily unavailable</h1>
-      <p className="text-muted-foreground">
-        This page could not be loaded. Reload to fetch the latest application files.
-      </p>
+      <h1 className="mb-2 text-2xl font-bold">{t('common.routeError.title')}</h1>
+      <p className="text-muted-foreground">{t('common.routeError.description')}</p>
       <button
         type="button"
         className="mt-6 rounded-md bg-primary px-4 py-2 text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         onClick={() => window.location.reload()}
       >
-        Reload page
+        {t('common.routeError.reload')}
       </button>
     </div>
   );

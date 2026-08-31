@@ -77,6 +77,28 @@ export const profile = {
       numberPlaceholder: '+1 (555) 123-4567',
       typeLabel: 'Type',
     },
+    // Toasts fired from the contact-info mutation hooks (src/api/contact.ts).
+    contact: {
+      toasts: {
+        addressAdded: 'Address added',
+        addressUpdated: 'Address updated',
+        addressDeleted: 'Address deleted',
+        addressSaveFailed: 'Failed to save address.',
+        addressUpdateFailed: 'Failed to update address.',
+        addressDeleteFailed: 'Failed to delete address.',
+        preferredAddressFailed: 'Failed to set preferred address.',
+        reclassifyFailed:
+          'Preferred updated, but could not update the previous address type. You can edit it manually.',
+        phoneAdded: 'Phone number added',
+        phoneUpdated: 'Phone number updated',
+        phoneDeleted: 'Phone number deleted',
+        phoneSaveFailed: 'Failed to save phone number.',
+        phoneUpdateFailed: 'Failed to update phone number.',
+        phoneDeleteFailed: 'Failed to delete phone number.',
+        primaryPhoneUpdated: 'Primary number updated',
+        preferredPhoneFailed: 'Failed to set preferred phone number.',
+      },
+    },
   },
   it: {
     title: 'Il mio profilo',
@@ -151,6 +173,27 @@ export const profile = {
       numberLabel: 'Numero di telefono',
       numberPlaceholder: '+39 055 123 4567',
       typeLabel: 'Tipo',
+    },
+    contact: {
+      toasts: {
+        addressAdded: 'Indirizzo aggiunto',
+        addressUpdated: 'Indirizzo aggiornato',
+        addressDeleted: 'Indirizzo eliminato',
+        addressSaveFailed: 'Impossibile salvare l’indirizzo.',
+        addressUpdateFailed: 'Impossibile aggiornare l’indirizzo.',
+        addressDeleteFailed: 'Impossibile eliminare l’indirizzo.',
+        preferredAddressFailed: 'Impossibile impostare l’indirizzo preferito.',
+        reclassifyFailed:
+          'Indirizzo preferito aggiornato, ma non è stato possibile aggiornare il tipo dell’indirizzo precedente. Puoi modificarlo manualmente.',
+        phoneAdded: 'Numero di telefono aggiunto',
+        phoneUpdated: 'Numero di telefono aggiornato',
+        phoneDeleted: 'Numero di telefono eliminato',
+        phoneSaveFailed: 'Impossibile salvare il numero di telefono.',
+        phoneUpdateFailed: 'Impossibile aggiornare il numero di telefono.',
+        phoneDeleteFailed: 'Impossibile eliminare il numero di telefono.',
+        primaryPhoneUpdated: 'Numero principale aggiornato',
+        preferredPhoneFailed: 'Impossibile impostare il numero di telefono preferito.',
+      },
     },
   },
 };

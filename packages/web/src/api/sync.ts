@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import i18n from '@/i18n/config';
 import { apiFetch, apiUrl, useApiToken } from './client';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -230,7 +231,9 @@ export function subscribeSyncProgress(
 
   source.onerror = () => {
     source.close();
-    onError('Connection lost');
+    // Translated here rather than by the consumer: AtlassianSyncPage renders
+    // this message verbatim in the run-failure banner.
+    onError(i18n.t('admin.atlassian.sync.connectionLost'));
   };
 
   return () => source.close();

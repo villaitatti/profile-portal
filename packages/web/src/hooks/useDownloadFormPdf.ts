@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { apiFetch, useApiToken } from '@/api/client';
 
@@ -33,6 +34,7 @@ export interface DownloadFormPdfArgs {
  */
 export function useDownloadFormPdf() {
   const getToken = useApiToken();
+  const { t } = useTranslation();
 
   return useCallback(
     async ({ invitationId, pdfKind, pdfLabel, contactName, formTitle }: DownloadFormPdfArgs) => {
@@ -60,7 +62,7 @@ export function useDownloadFormPdf() {
           document.body.removeChild(a);
         }
       } catch (err) {
-        toast.error("Couldn't download the PDF. Try again, or refresh the page if the error repeats.");
+        toast.error(t('fellows.forms.downloadPdfFailed'));
         // Re-throw so callers can handle it if they need to (e.g., tests);
         // the toast already communicates the failure to the user.
         throw err;
@@ -77,7 +79,7 @@ export function useDownloadFormPdf() {
         }
       }
     },
-    [getToken]
+    [getToken, t]
   );
 }
 

@@ -230,6 +230,7 @@ export const admin = {
         startingDryRun: 'Starting dry run...',
         startingExecution: 'Starting execution...',
         runFailed: 'Run failed',
+        connectionLost: 'Connection lost',
         confirmTitle: 'Execute Sync to Atlassian Cloud',
         confirmWithParts:
           'This will apply changes to Atlassian Cloud: {{parts}}. This action cannot be undone.',
@@ -540,6 +541,7 @@ export const admin = {
         startingDryRun: 'Avvio della simulazione...',
         startingExecution: 'Avvio dell’esecuzione...',
         runFailed: 'Esecuzione non riuscita',
+        connectionLost: 'Connessione persa',
         confirmTitle: 'Esegui sincronizzazione su Atlassian Cloud',
         confirmWithParts:
           'Verranno applicate queste modifiche ad Atlassian Cloud: {{parts}}. L’operazione non può essere annullata.',

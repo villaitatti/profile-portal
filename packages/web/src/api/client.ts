@@ -25,21 +25,47 @@ export async function apiFetch(
   });
 
   if (!response.ok) {
-    const body = await response.json().catch(() => ({ error: 'Unknown error' }));
-    throw new ApiError(response.status, body.error || 'Request failed', body.code);
+    const body = (await response.json().catch(() => ({ error: 'Unknown error' }))) as Record<
+      string,
+      unknown
+    >;
+    throw new ApiError(
+      response.status,
+      (typeof body.error === 'string' && body.error) || 'Request failed',
+      typeof body.code === 'string' ? body.code : undefined,
+      body
+    );
   }
 
   return response;
 }
 
+/**
+ * Error thrown by apiFetch on any non-2xx response. Carries the FULL parsed
+ * error body — earlier versions kept only `error`/`code`, which forced every
+ * caller that needed `reason` unions or `details` to bypass apiFetch with a
+ * raw fetch and re-implement header/error handling.
+ */
 export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
-    public code?: string
+    public code?: string,
+    /** Full parsed error body (reason unions, validation details, …). */
+    public body?: Record<string, unknown>
   ) {
     super(message);
     this.name = 'ApiError';
+  }
+
+  /** Typed accessor for `{ reason }` domain-outcome bodies. */
+  get reason(): string | undefined {
+    const r = this.body?.reason;
+    return typeof r === 'string' ? r : undefined;
+  }
+
+  get details(): unknown {
+    return this.body?.details;
   }
 }
 

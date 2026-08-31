@@ -31,6 +31,13 @@ export const common = {
     mobileSidebarDescription: 'Displays the mobile sidebar.',
     searchIn: 'Search {{target}}...',
     createNew: 'Create new: “{{value}}”',
+    // Router-level error boundary (src/config/routes.tsx), shown e.g. when a
+    // lazy route chunk fails to load after a redeploy.
+    routeError: {
+      title: 'Page temporarily unavailable',
+      description: 'This page could not be loaded. Reload to fetch the latest application files.',
+      reload: 'Reload page',
+    },
   },
   it: {
     appName: 'Profile Portal',
@@ -61,5 +68,11 @@ export const common = {
     mobileSidebarDescription: 'Mostra la barra laterale mobile.',
     searchIn: 'Cerca {{target}}...',
     createNew: 'Crea nuovo: “{{value}}”',
+    routeError: {
+      title: 'Pagina temporaneamente non disponibile',
+      description:
+        'Non è stato possibile caricare questa pagina. Ricarica per scaricare i file più recenti dell’applicazione.',
+      reload: 'Ricarica la pagina',
+    },
   },
 };
