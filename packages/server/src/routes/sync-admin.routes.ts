@@ -127,7 +127,9 @@ router.post('/sse-token', validate(sseTokenSchema), (req, res) => {
 const runsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1).catch(1),
   perPage: z.coerce.number().int().min(1).max(50).default(20).catch(20),
-  status: z.string().optional(),
+  // status is a DB enum now; an unknown value falls back to "no filter"
+  // (matching the old forgiving behavior) instead of a Prisma 500.
+  status: z.enum(['dry_run', 'executing', 'completed', 'failed', 'partial']).optional().catch(undefined),
 });
 
 router.get('/runs', async (req, res) => {

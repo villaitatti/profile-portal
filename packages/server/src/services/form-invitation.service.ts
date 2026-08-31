@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { Prisma } from '../generated/prisma/client.js';
+import { Prisma, type FormInvitationStatus } from '../generated/prisma/client.js';
 import { prisma } from '../lib/prisma.js';
 import {
   buildRetiredFormTitle,
@@ -467,7 +467,7 @@ export async function listInvitations(
   filters: {
     academicYear?: string;
     formType?: string;
-    status?: string;
+    status?: FormInvitationStatus;
   },
   nameLookup?: NameLookup
 ): Promise<InvitationListResult> {

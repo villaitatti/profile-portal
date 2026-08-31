@@ -75,7 +75,9 @@ router.get('/registry', (_req, res) => {
 const invitationsQuerySchema = z.object({
   academicYear: z.string().optional(),
   formType: z.string().optional(),
-  status: z.string().optional(),
+  // status is a DB enum now; unknown values are a client error (400), not a
+  // Prisma 500. The web client only ever sends 'submitted'.
+  status: z.enum(['pending', 'submitted', 'expired']).optional(),
 });
 
 router.get('/invitations', async (req, res) => {
