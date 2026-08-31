@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { UserProfile } from '@itatti/shared';
 import { isDevMode } from '../env.js';
+import { DEV_PROFILE } from './__dev__/fixtures.js';
 import * as civicrmService from '../services/civicrm.service.js';
 import { logger } from '../lib/logger.js';
 
@@ -9,14 +10,7 @@ const router = Router();
 router.get('/', async (req, res) => {
   // Dev mode: return mock profile
   if (isDevMode) {
-    const profile: UserProfile = {
-      firstName: 'Dev',
-      lastName: 'User',
-      email: 'dev@itatti.harvard.edu',
-      phone: '+39 055 603251',
-      source: 'civicrm',
-    };
-    res.json(profile);
+    res.json(DEV_PROFILE);
     return;
   }
 

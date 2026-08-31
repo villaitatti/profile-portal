@@ -2,20 +2,15 @@ import { Router } from 'express';
 import { requireRole } from '../middleware/rbac.js';
 import { KnownRoles } from '@itatti/shared';
 import { isDevMode } from '../env.js';
+import { DEV_ROLES } from './__dev__/fixtures.js';
 import * as auth0Service from '../services/auth0.service.js';
 import { logger } from '../lib/logger.js';
-
-const mockRoles = [
-  { id: 'rol_1', name: 'fellows', description: 'All appointees (former + current)' },
-  { id: 'rol_2', name: 'fellows-current', description: 'Current academic year appointees' },
-  { id: 'rol_3', name: KnownRoles.STAFF_IT, description: 'IT staff with admin access' },
-];
 
 const router = Router();
 
 router.get('/', requireRole(KnownRoles.STAFF_IT), async (_req, res) => {
   if (isDevMode) {
-    res.json(mockRoles);
+    res.json(DEV_ROLES);
     return;
   }
 

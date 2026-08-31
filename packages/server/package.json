@@ -20,6 +20,7 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:watch": "vitest"
   },
+  "//": "@aws-sdk/client-ses is EXACT-pinned on purpose: the SES request-timeout behavior we rely on (throwOnRequestTimeout + retry classification in appointee-email.service.ts) was verified against this exact version after a prior upgrade silently changed delivery semantics. Bump it deliberately, re-verifying classifySesFailure.",
   "dependencies": {
     "@aws-sdk/client-ses": "3.1086.0",
     "@itatti/shared": "workspace:*",

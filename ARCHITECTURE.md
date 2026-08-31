@@ -15,6 +15,24 @@ The backend uses Express with:
 - Server-side RBAC middleware (`requireRole`) on protected routes
 - Zod for environment variable validation at startup
 
+### Module layout (`src/lib/` vs `src/services/` vs `src/routes/`)
+
+- **`lib/`** — infrastructure with no domain knowledge: logging, Prisma client,
+  HTTP error type, hashing, token signing, client-IP resolution, upstream API
+  clients. `lib/` modules must never import from `services/` (the dependency
+  points one way; the old `lib/fellows-cache.ts` inversion was fixed by moving
+  it into `services/`).
+- **`services/`** — domain logic: policy, orchestration, transactions, and any
+  query construction reused by more than one caller. May import `lib/`.
+- **`routes/`** — HTTP concerns: validation schemas, status codes, response
+  shaping. Simple resource-local CRUD may query Prisma directly in the route;
+  anything reusable or policy-bearing belongs in a service. Dev-mode fixtures
+  live in `routes/__dev__/fixtures.ts`, not in the route modules.
+
+Async handler convention: rely on Express 5's native forwarding of rejected
+promises to the error middleware. Write a try/catch in a handler only to map an
+error (e.g. Prisma P2025 → 404) or to add contextual logging before rethrowing.
+
 ### Deliberately single-instance
 
 The server is designed to run as **exactly one process**. Rate-limit stores, the
