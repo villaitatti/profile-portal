@@ -72,8 +72,14 @@ router.get('/registry', (_req, res) => {
   res.json(FORM_REGISTRY);
 });
 
+const invitationsQuerySchema = z.object({
+  academicYear: z.string().optional(),
+  formType: z.string().optional(),
+  status: z.string().optional(),
+});
+
 router.get('/invitations', async (req, res, next) => {
-  const { academicYear, formType, status } = req.query as Record<string, string | undefined>;
+  const { academicYear, formType, status } = invitationsQuerySchema.parse(req.query);
 
   try {
     const nameLookup = await buildNameLookup();
@@ -131,7 +137,10 @@ router.post('/generate', validate(generateSchema), async (req, res, next) => {
           },
           'form_generation_rejected_no_matching_fellowship'
         );
-        res.status(400).json({ error: 'matching_fellowship_not_found' });
+        res.status(400).json({
+          error: 'No fellowship matching this appointee and academic year was found in CiviCRM.',
+          code: 'MATCHING_FELLOWSHIP_NOT_FOUND',
+        });
         return;
       }
       appointmentType = fellowship.appointment;
@@ -147,6 +156,8 @@ router.post('/generate', validate(generateSchema), async (req, res, next) => {
     });
     res.status(result.created ? 201 : 200).json(result);
   } catch (err) {
+    // ServiceError renders via the error middleware; this catch only adds the
+    // alerting-relevant log event for the no_form_configured rejection.
     if (err instanceof formService.ServiceError) {
       const details = err.details;
       if (
@@ -165,11 +176,6 @@ router.post('/generate', validate(generateSchema), async (req, res, next) => {
           'form_generation_rejected_no_form_configured'
         );
       }
-      res.status(err.statusCode).json({
-        error: err.message,
-        details,
-      });
-      return;
     }
     next(err);
   }
@@ -183,10 +189,6 @@ router.post('/nomination-sent/:id', validate(nominationSentSchema), async (req, 
     );
     res.json({ id: updated.id, nominationSentAt: updated.nominationSentAt?.toISOString() });
   } catch (err) {
-    if (err instanceof formService.ServiceError) {
-      res.status(err.statusCode).json({ error: err.message });
-      return;
-    }
     next(err);
   }
 });
@@ -197,10 +199,6 @@ router.post('/reset', validate(resetSchema), async (req, res, next) => {
     const result = await formService.resetInvitation(req.body.invitationId, triggeredBy);
     res.json(result);
   } catch (err) {
-    if (err instanceof formService.ServiceError) {
-      res.status(err.statusCode).json({ error: err.message });
-      return;
-    }
     next(err);
   }
 });
@@ -209,7 +207,7 @@ router.get('/response/:invitationId', async (req, res, next) => {
   try {
     const response = await formService.getResponseByInvitationId(req.params.invitationId);
     if (!response) {
-      res.status(404).json({ error: 'Response not found' });
+      res.status(404).json({ error: 'Response not found', code: 'NOT_FOUND' });
       return;
     }
     res.json({ id: response.id, data: response.data, createdAt: response.createdAt.toISOString() });
@@ -219,12 +217,7 @@ router.get('/response/:invitationId', async (req, res, next) => {
 });
 
 router.get('/response/:invitationId/pdf/:pdfKind', async (req, res, next) => {
-  const parsedKind = pdfKindSchema.safeParse(req.params.pdfKind);
-  if (!parsedKind.success) {
-    res.status(400).json({ error: 'Invalid PDF kind' });
-    return;
-  }
-  const pdfKind = parsedKind.data as FormPdfKind;
+  const pdfKind = pdfKindSchema.parse(req.params.pdfKind);
 
   try {
     const invitation = await prisma.formInvitation.findUnique({
@@ -233,13 +226,14 @@ router.get('/response/:invitationId/pdf/:pdfKind', async (req, res, next) => {
     });
 
     if (!invitation || !invitation.response) {
-      res.status(404).json({ error: 'Response not found' });
+      res.status(404).json({ error: 'Response not found', code: 'NOT_FOUND' });
       return;
     }
 
     const formDef = getFormDef(invitation.formType);
     if (!formDef) {
-      res.status(500).json({ error: 'Form definition not found' });
+      // Registry integrity failure: a stored formType no longer resolves.
+      res.status(500).json({ error: 'Form definition not found', code: 'INTERNAL_ERROR' });
       return;
     }
 

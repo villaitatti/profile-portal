@@ -52,11 +52,11 @@ const NOT_FOUND = { error: 'Not found', code: 'NOT_FOUND' } as const;
 
 const router = Router();
 
-// Every handler below funnels rejections into next(err) explicitly. The runtime
-// is Express 4, which does not forward async rejections to the error middleware
-// — the rejection escapes to Node and terminates the process. The hazard is
-// invisible to typecheck because @types/express is pinned at v5, whose
-// RequestHandler accepts a Promise-returning function.
+// Every handler below funnels rejections into next(err) explicitly. Express 5
+// forwards async rejections to the error middleware natively, so the wrapping
+// is no longer load-bearing — it survives as belt-and-braces where a handler
+// maps errors before forwarding. The behavioural contract (rejection → 500,
+// never a crash) is pinned by __tests__/routes/async-error-handling.test.ts.
 
 // List applications — filtered by user roles
 router.get('/', async (req, res, next) => {

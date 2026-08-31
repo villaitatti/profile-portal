@@ -9,6 +9,7 @@ import {
   isActiveFormDef,
 } from '@itatti/shared';
 import { buildFormSchema } from '../lib/form-schema.js';
+import { HttpError } from '../lib/http-error.js';
 import { enqueueFormNotification } from '../workers/form-notification.worker.js';
 import { logger } from '../lib/logger.js';
 import type { FormResponseData } from '@itatti/shared';
@@ -531,13 +532,25 @@ export function getAvailableFormsForAppointmentType(
 
 class InvitationClaimConflict extends Error {}
 
-export class ServiceError extends Error {
-  constructor(
-    message: string,
-    public statusCode: number,
-    public details?: unknown
-  ) {
-    super(message);
+// Default codes by status for ServiceError throws that don't need a bespoke
+// one. The route layer no longer maps ServiceError by hand — it extends
+// HttpError, so middleware/error.ts renders it as { error, code, details? }.
+const SERVICE_ERROR_CODES: Record<number, string> = {
+  400: 'VALIDATION_ERROR',
+  404: 'NOT_FOUND',
+  409: 'CONFLICT',
+  410: 'GONE',
+  500: 'INTERNAL_ERROR',
+};
+
+export class ServiceError extends HttpError {
+  constructor(message: string, statusCode: number, details?: unknown) {
+    super(statusCode, message, SERVICE_ERROR_CODES[statusCode] ?? 'REQUEST_ERROR', details);
     this.name = 'ServiceError';
+  }
+
+  /** Legacy alias — pre-HttpError call sites and tests read statusCode. */
+  get statusCode(): number {
+    return this.status;
   }
 }

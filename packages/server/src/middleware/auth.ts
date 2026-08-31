@@ -15,6 +15,8 @@ declare global {
       userRoles: string[];
       userId: string;
       civicrmId?: string;
+      /** Numeric CiviCRM contact id, set by requireCivicrmContact. */
+      civicrmContactId?: number;
     }
   }
 }

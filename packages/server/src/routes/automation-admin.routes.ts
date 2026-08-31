@@ -13,7 +13,7 @@ function getTriggeredBy(req: Request, res: Response): string | null {
     (auth?.email as string | undefined) ||
     req.userId;
   if (!identity) {
-    res.status(401).json({ error: 'Could not identify admin user' });
+    res.status(401).json({ error: 'Could not identify admin user', code: 'UNAUTHORIZED' });
     return null;
   }
   return `admin:${identity}`;
@@ -36,7 +36,7 @@ router.get('/runs', async (_req, res, next) => {
 router.get('/runs/:id', async (req, res, next) => {
   try {
     const run = await prisma.automationRun.findUnique({ where: { id: req.params.id } });
-    if (!run) return res.status(404).json({ error: 'Run not found' });
+    if (!run) return res.status(404).json({ error: 'Run not found', code: 'NOT_FOUND' });
     res.json(run);
   } catch (err) {
     next(err);

@@ -12,6 +12,7 @@ import {
 } from '../services/atlassian-sync.service.js';
 import type { SyncProgress } from '../services/atlassian-sync.service.js';
 import { isDevMode } from '../env.js';
+import { validate } from '../middleware/validate.js';
 
 const router = Router();
 
@@ -35,9 +36,12 @@ router.get('/mappings', async (_req, res, next) => {
   }
 });
 
-router.post('/mappings', async (req, res, next) => {
+// validate() (not schema.parse in the handler): a bare parse throws ZodError,
+// which carries no .status, so the error middleware rendered malformed input
+// as a 500 "Internal Server Error" and logged it as an unhandled server error.
+router.post('/mappings', validate(createMappingSchema), async (req, res, next) => {
   try {
-    const body = createMappingSchema.parse(req.body);
+    const body = req.body as z.infer<typeof createMappingSchema>;
     const auth = req.auth as Record<string, unknown> | undefined;
     const createdBy = (auth?.[`${AUTH0_NAMESPACE}/name`] as string) || (auth?.email as string) || null;
     const mapping = await prisma.roleGroupMapping.create({
@@ -72,16 +76,25 @@ router.delete('/mappings/:id', async (req, res, next) => {
     await prisma.roleGroupMapping.delete({ where: { id: req.params.id } });
     res.status(204).end();
   } catch (err) {
+    // Prisma P2025 = delete target does not exist. A stale admin tab deleting
+    // an already-removed mapping is a 404, not a server fault.
+    if ((err as { code?: string } | null)?.code === 'P2025') {
+      res.status(404).json({ error: 'Mapping not found', code: 'NOT_FOUND' });
+      return;
+    }
     next(err);
   }
 });
 
 // ── Sync operations ────────────────────────────────────────────────
 
+// The sync service throws HttpError (409 SYNC_ALREADY_RUNNING with the active
+// run in details, 400/404 dry-run state errors) — the error middleware renders
+// them, so these handlers just forward.
 router.post('/dry-run', async (req, res, next) => {
   try {
     if (!isDevMode && !isScimConfigured()) {
-      res.status(503).json({ error: 'Atlassian SCIM not configured' });
+      res.status(503).json({ error: 'Atlassian SCIM not configured', code: 'SCIM_NOT_CONFIGURED' });
       return;
     }
 
@@ -90,15 +103,7 @@ router.post('/dry-run', async (req, res, next) => {
     const { runId, emitter } = await runDrySync(triggeredBy);
     storeEmitter(runId, emitter);
     res.status(202).json({ runId });
-  } catch (err: unknown) {
-    const errObj = err as Record<string, unknown> | null;
-    if (errObj && typeof errObj === 'object' && 'status' in errObj && errObj.status === 409) {
-      res.status(409).json({
-        error: errObj.message ?? 'Sync already running',
-        activeRun: errObj.activeRun,
-      });
-      return;
-    }
+  } catch (err) {
     next(err);
   }
 });
@@ -106,7 +111,7 @@ router.post('/dry-run', async (req, res, next) => {
 router.post('/execute/:runId', async (req, res, next) => {
   try {
     if (!isDevMode && !isScimConfigured()) {
-      res.status(503).json({ error: 'Atlassian SCIM not configured' });
+      res.status(503).json({ error: 'Atlassian SCIM not configured', code: 'SCIM_NOT_CONFIGURED' });
       return;
     }
 
@@ -115,16 +120,7 @@ router.post('/execute/:runId', async (req, res, next) => {
     const { runId, emitter } = await executeSync(req.params.runId, triggeredBy);
     storeEmitter(runId, emitter);
     res.status(202).json({ runId });
-  } catch (err: unknown) {
-    const errObj = err as Record<string, unknown> | null;
-    if (errObj && typeof errObj === 'object' && 'status' in errObj) {
-      const status = errObj.status as number;
-      res.status(status).json({
-        error: errObj.message ?? 'Unknown error',
-        ...(status === 409 ? { activeRun: errObj.activeRun } : {}),
-      });
-      return;
-    }
+  } catch (err) {
     next(err);
   }
 });
@@ -143,12 +139,17 @@ router.post('/sse-token', (req, res) => {
 
 // ── Sync run history ───────────────────────────────────────────────
 
-router.get('/runs', async (req, res, next) => {
-  try {
-    const page = Math.max(1, Number(req.query.page) || 1);
-    const perPage = Math.min(50, Math.max(1, Number(req.query.perPage) || 20));
-    const status = req.query.status as string | undefined;
+const runsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1).catch(1),
+  perPage: z.coerce.number().int().min(1).max(50).default(20).catch(20),
+  status: z.string().optional(),
+});
 
+router.get('/runs', async (req, res, next) => {
+  // .catch() preserves the old forgiving behavior (garbage → default) rather
+  // than turning a malformed pagination param into a 400.
+  const { page, perPage, status } = runsQuerySchema.parse(req.query);
+  try {
     const where = status ? { status } : {};
     const [runs, total] = await Promise.all([
       prisma.syncRun.findMany({
@@ -179,7 +180,7 @@ router.get('/runs/:id', async (req, res, next) => {
   try {
     const run = await prisma.syncRun.findUnique({ where: { id: req.params.id } });
     if (!run) {
-      res.status(404).json({ error: 'Sync run not found' });
+      res.status(404).json({ error: 'Sync run not found', code: 'NOT_FOUND' });
       return;
     }
     res.json(run);
@@ -205,12 +206,12 @@ sseRouter.get('/runs/:runId/stream', async (req, res, next) => {
   const sseToken = req.query.sse_token as string | undefined;
   if (!isDevMode) {
     if (!sseToken) {
-      res.status(401).json({ error: 'Missing sse_token query parameter' });
+      res.status(401).json({ error: 'Missing sse_token query parameter', code: 'UNAUTHORIZED' });
       return;
     }
     const { valid } = verifySseToken(sseToken);
     if (!valid) {
-      res.status(401).json({ error: 'Invalid or expired SSE token' });
+      res.status(401).json({ error: 'Invalid or expired SSE token', code: 'UNAUTHORIZED' });
       return;
     }
   }
@@ -225,7 +226,7 @@ sseRouter.get('/runs/:runId/stream', async (req, res, next) => {
     return;
   }
   if (!run) {
-    res.status(404).json({ error: 'Run not found' });
+    res.status(404).json({ error: 'Run not found', code: 'NOT_FOUND' });
     return;
   }
 

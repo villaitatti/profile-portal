@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { ErrorCodes } from '@itatti/shared';
 import { createHash } from 'crypto';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
@@ -27,7 +28,7 @@ const claimLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: rateLimitKey,
-  message: { error: 'Too many requests. Please try again later.' },
+  message: { error: 'Too many requests. Please try again later.', code: ErrorCodes.RATE_LIMITED },
 });
 
 // Second limiter, keyed on the *target* email rather than the caller.
@@ -49,7 +50,7 @@ const claimEmailLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) =>
     createHash('sha256').update(String(req.body?.email ?? '')).digest('hex'),
-  message: { error: 'Too many requests for this address. Please try again later.' },
+  message: { error: 'Too many requests for this address. Please try again later.', code: ErrorCodes.RATE_LIMITED },
 });
 
 const router = Router();
