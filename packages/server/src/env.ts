@@ -22,6 +22,29 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(3000),
   DEV_SKIP_EXTERNAL_SERVICES: z.string().optional(),
 
+  // Number of reverse-proxy hops in front of the server (cloudflared = 1).
+  // Validated here so a typo'd value fails the boot instead of silently
+  // becoming NaN in `app.set('trust proxy', …)` — which would break client-IP
+  // resolution and every rate limiter keyed on it. Empty string (dotenv
+  // `TRUST_PROXY_HOPS=`) falls through to the default rather than coercing to 0.
+  TRUST_PROXY_HOPS: z.preprocess(
+    (v) => (v === '' || v === undefined ? undefined : v),
+    z.coerce.number().int().min(0).default(1)
+  ),
+
+  // Pino log level. lib/logger.ts deliberately reads process.env directly (see
+  // the comment there — the logger must not depend on env-module load order);
+  // declaring it here means a typo'd level still fails the boot loudly instead
+  // of being silently ignored.
+  LOG_LEVEL: z
+    .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
+    .or(z.literal(''))
+    .optional(),
+
+  // Web dev-server variable that shares the root .env; the server reads it only
+  // as a CSP fallback for the Auth0 domain in development (app.ts).
+  VITE_AUTH0_DOMAIN: z.string().optional(),
+
   // Database
   DATABASE_URL: z.string().min(1),
 
@@ -82,6 +105,8 @@ const envSchema = z.object({
   // Only the true production instance should set this to 'true'; dev/staging
   // boxes running with NODE_ENV=production must leave it unset/false so the
   // July 1 + July 2 cron jobs don't fire against real Auth0/JSM/CiviCRM.
+  // Gates ONLY the July automations — the daily bio-email dispatch has its own
+  // independent flag (APPOINTEE_EMAIL_CRON_ENABLED below).
   AUTOMATIONS_ENABLED: booleanFlag(),
 
   // Atlassian JSM Organizations (Phase 2 — optional, org features disabled if not configured)
@@ -99,7 +124,8 @@ const envSchema = z.object({
 
   // Appointee bio-and-project-description email workflow.
   // Cron dispatch (daily at 09:00 Europe/Rome). Defaults to false so dev/staging
-  // never accidentally fire it; production must opt in explicitly.
+  // never accidentally fire it; production must opt in explicitly. Independent
+  // of AUTOMATIONS_ENABLED — enabling this alone is sufficient for dispatch.
   APPOINTEE_EMAIL_CRON_ENABLED: booleanFlag(),
   // Dev/staging safety valve. When set, ALL outgoing appointee bio emails are
   // redirected to this single address regardless of the intended recipient.

@@ -3,6 +3,7 @@ import { Prisma } from '../generated/prisma/client.js';
 import { env, isDevMode } from '../env.js';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
+import { HttpError } from '../lib/http-error.js';
 import * as auth0Service from './auth0.service.js';
 import * as civicrmService from './civicrm.service.js';
 import * as jsmService from './atlassian-jsm.service.js';
@@ -74,9 +75,20 @@ async function reportAutomationFailure(type: AutomationType, err: unknown): Prom
 
 // --- Scheduling ---
 
+// The two flags are independent gates: AUTOMATIONS_ENABLED covers only the
+// 2x/year July role automations; APPOINTEE_EMAIL_CRON_ENABLED covers only the
+// daily bio-email dispatch. Neither implies the other — a dev/staging box can
+// run the email cron with the July automations off, and vice versa. An earlier
+// version returned early when AUTOMATIONS_ENABLED was false, which silently
+// disabled the email cron too and left claim-enqueued rows PENDING forever.
 export function registerCronJobs(): void {
+  registerJulyAutomationCrons();
+  registerAppointeeEmailCron();
+}
+
+function registerJulyAutomationCrons(): void {
   if (!env.AUTOMATIONS_ENABLED) {
-    logger.info('Automation: AUTOMATIONS_ENABLED is false, scheduled cron jobs not registered');
+    logger.info('Automation: AUTOMATIONS_ENABLED is false, July cron jobs not registered');
     return;
   }
 
@@ -113,10 +125,10 @@ export function registerCronJobs(): void {
   }, { timezone: 'UTC' });
 
   logger.info('Automation: cron jobs registered (July 1 + July 2 at 04:00 UTC)');
+}
 
-  // Daily at 09:00 Europe/Rome — dispatch pending appointee bio emails.
-  // Gated separately from AUTOMATIONS_ENABLED so the 2x/year July automations
-  // and the daily bio-email dispatch can be toggled independently.
+// Daily at 09:00 Europe/Rome — dispatch pending appointee bio emails.
+function registerAppointeeEmailCron(): void {
   if (env.APPOINTEE_EMAIL_CRON_ENABLED) {
     cron.schedule(
       '0 9 * * *',
@@ -171,7 +183,7 @@ export async function runEndOfYearDryRun(triggeredBy: string): Promise<DryRunRes
       status: 'dry_run',
       triggeredBy,
       academicYear: ay.label,
-      result: { actions } as any,
+      result: { actions } as unknown as Prisma.InputJsonValue,
       stats: { toRemove: currentFellows.length },
       completedAt: new Date(),
     },
@@ -219,7 +231,7 @@ export async function runNewCohortDryRun(triggeredBy: string): Promise<DryRunRes
       status: 'dry_run',
       triggeredBy,
       academicYear: ay.label,
-      result: { actions, pending, toOnboard } as any,
+      result: { actions, pending, toOnboard } as unknown as Prisma.InputJsonValue,
       stats: { toOnboard: toOnboard.length, pending: pending.length },
       completedAt: new Date(),
     },
@@ -265,7 +277,7 @@ export async function runBackfillDryRun(triggeredBy: string): Promise<DryRunResu
       status: 'dry_run',
       triggeredBy,
       academicYear: ay.label,
-      result: { actions } as any,
+      result: { actions } as unknown as Prisma.InputJsonValue,
       stats: { total: allFellows.length },
       completedAt: new Date(),
     },
@@ -284,8 +296,11 @@ export async function executeAutomation(
   expectedType?: AutomationType
 ): Promise<{ runId: string; status: string }> {
   const dryRun = await prisma.automationRun.findUnique({ where: { id: dryRunId } });
+  // HttpError, not bare Error: these are caller mistakes (stale UI, wrong run
+  // id), and a bare Error rendered as a 500 "Internal Server Error" while the
+  // real message never reached the admin.
   if (!dryRun || dryRun.status !== 'dry_run') {
-    throw new Error('Invalid dry run ID or not in dry_run status');
+    throw new HttpError(409, 'Invalid dry run ID or not in dry_run status', 'DRY_RUN_INVALID');
   }
 
   // The executor dispatches on the *stored* type, so posting a backfill run id
@@ -294,13 +309,19 @@ export async function executeAutomation(
   // mean pass expectedType so the mismatch is refused instead of surprising
   // someone with a different set of Auth0/JSM mutations.
   if (expectedType && dryRun.type !== expectedType) {
-    throw new Error(
-      `Dry run ${dryRunId} is a "${dryRun.type}" run, not "${expectedType}"`
+    throw new HttpError(
+      409,
+      `Dry run ${dryRunId} is a "${dryRun.type}" run, not "${expectedType}"`,
+      'DRY_RUN_TYPE_MISMATCH'
     );
   }
 
   if (!dryRun.completedAt || Date.now() - dryRun.completedAt.getTime() > DRY_RUN_TTL_MS) {
-    throw new Error('Dry run has expired (60 minute TTL). Please run a new dry run.');
+    throw new HttpError(
+      409,
+      'Dry run has expired (60 minute TTL). Please run a new dry run.',
+      'DRY_RUN_EXPIRED'
+    );
   }
 
   if (env.NODE_ENV !== 'production' && !isDevMode) {

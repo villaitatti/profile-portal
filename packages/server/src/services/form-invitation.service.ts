@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { Prisma } from '../generated/prisma/client.js';
+import { Prisma, type FormInvitationStatus } from '../generated/prisma/client.js';
 import { prisma } from '../lib/prisma.js';
 import {
   buildRetiredFormTitle,
@@ -9,6 +9,7 @@ import {
   isActiveFormDef,
 } from '@itatti/shared';
 import { buildFormSchema } from '../lib/form-schema.js';
+import { HttpError } from '../lib/http-error.js';
 import { enqueueFormNotification } from '../workers/form-notification.worker.js';
 import { logger } from '../lib/logger.js';
 import type { FormResponseData } from '@itatti/shared';
@@ -427,7 +428,15 @@ export interface InvitationListResult {
     academicYears: string[];
     formTypes: string[];
   };
+  /** True when more rows matched than the archive cap returned. */
+  truncated: boolean;
 }
+
+// The archive list is bounded so unbounded growth (one row per invitation,
+// forever) can't degrade the admin page or the name-join loop. Well above a
+// realistic filtered view; when exceeded the response says so explicitly
+// (`truncated: true`) instead of silently dropping rows.
+const INVITATION_LIST_MAX = 1000;
 
 export interface NameLookup {
   getName(contactId: number): string | null;
@@ -458,7 +467,7 @@ export async function listInvitations(
   filters: {
     academicYear?: string;
     formType?: string;
-    status?: string;
+    status?: FormInvitationStatus;
   },
   nameLookup?: NameLookup
 ): Promise<InvitationListResult> {
@@ -473,7 +482,7 @@ export async function listInvitations(
     ...(filters.status && { status: filters.status }),
   };
 
-  const [rows, facetRows] = await Promise.all([
+  const [allRows, facetRows] = await Promise.all([
     prisma.formInvitation.findMany({
       where,
       // Project only the presence of the response relation (id only, no
@@ -483,12 +492,16 @@ export async function listInvitations(
       // response into server memory on every /admin/forms fetch.
       include: { response: { select: { id: true } } },
       orderBy: [{ submittedAt: 'desc' }, { id: 'desc' }],
+      take: INVITATION_LIST_MAX + 1,
     }),
     prisma.formInvitation.findMany({
       where: facetWhere,
       select: { academicYear: true, formType: true },
     }),
   ]);
+
+  const truncated = allRows.length > INVITATION_LIST_MAX;
+  const rows = truncated ? allRows.slice(0, INVITATION_LIST_MAX) : allRows;
 
   const items: InvitationListItem[] = rows.map((inv) => {
     const formDef = getFormDef(inv.formType);
@@ -517,7 +530,7 @@ export async function listInvitations(
   const academicYears = Array.from(new Set(facetRows.map((r) => r.academicYear))).sort().reverse();
   const formTypes = Array.from(new Set(facetRows.map((r) => r.formType))).sort();
 
-  return { items, facets: { academicYears, formTypes } };
+  return { items, facets: { academicYears, formTypes }, truncated };
 }
 
 export function getAvailableFormsForAppointmentType(
@@ -531,13 +544,25 @@ export function getAvailableFormsForAppointmentType(
 
 class InvitationClaimConflict extends Error {}
 
-export class ServiceError extends Error {
-  constructor(
-    message: string,
-    public statusCode: number,
-    public details?: unknown
-  ) {
-    super(message);
+// Default codes by status for ServiceError throws that don't need a bespoke
+// one. The route layer no longer maps ServiceError by hand — it extends
+// HttpError, so middleware/error.ts renders it as { error, code, details? }.
+const SERVICE_ERROR_CODES: Record<number, string> = {
+  400: 'VALIDATION_ERROR',
+  404: 'NOT_FOUND',
+  409: 'CONFLICT',
+  410: 'GONE',
+  500: 'INTERNAL_ERROR',
+};
+
+export class ServiceError extends HttpError {
+  constructor(message: string, statusCode: number, details?: unknown) {
+    super(statusCode, message, SERVICE_ERROR_CODES[statusCode] ?? 'REQUEST_ERROR', details);
     this.name = 'ServiceError';
+  }
+
+  /** Legacy alias — pre-HttpError call sites and tests read statusCode. */
+  get statusCode(): number {
+    return this.status;
   }
 }

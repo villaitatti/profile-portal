@@ -51,6 +51,7 @@ const mockRender = vi.mocked(render);
 
 // Dynamic import so mocks are already in place
 const { emailsAdminRoutes } = await import('../../routes/emails-admin.routes.js');
+const { errorHandler } = await import('../../middleware/error.js');
 
 function makeApp() {
   const app = express();
@@ -60,6 +61,7 @@ function makeApp() {
     next();
   });
   app.use('/api/admin/emails', emailsAdminRoutes);
+  app.use(errorHandler);
   return app;
 }
 
@@ -183,7 +185,7 @@ describe('GET /api/admin/emails', () => {
     const res = await request(app).get('/api/admin/emails?status=SENT,BOGUS');
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('invalid_status');
+    expect(res.body.code).toBe('VALIDATION_ERROR');
     expect(mockPrisma.appointeeEmailEvent.findMany).not.toHaveBeenCalled();
   });
 
@@ -222,7 +224,7 @@ describe('GET /api/admin/emails/:eventId/preview', () => {
     const res = await request(app).get('/api/admin/emails/nonexistent/preview');
 
     expect(res.status).toBe(404);
-    expect(res.body.error).toBe('not_found');
+    expect(res.body.code).toBe('NOT_FOUND');
   });
 
   it('returns 503 when CiviCRM is unavailable for contact lookup', async () => {
@@ -446,7 +448,7 @@ describe('GET /api/admin/emails/:eventId/preview', () => {
     const res = await request(app).get('/api/admin/emails/evt-1/preview');
 
     expect(res.status).toBe(500);
-    expect(res.body.error).toBe('internal_error');
+    expect(res.body.code).toBe('INTERNAL_ERROR');
   });
 });
 
@@ -489,7 +491,7 @@ describe('GET /api/admin/emails/templates/:type/preview', () => {
     const res = await request(app).get('/api/admin/emails/templates/unknown-type/preview');
 
     expect(res.status).toBe(404);
-    expect(res.body.error).toBe('not_found');
+    expect(res.body.code).toBe('NOT_FOUND');
   });
 
   it('returns 500 internal_error when the template renderer throws', async () => {
@@ -501,7 +503,7 @@ describe('GET /api/admin/emails/templates/:type/preview', () => {
     const res = await request(app).get('/api/admin/emails/templates/vit-id-invitation/preview');
 
     expect(res.status).toBe(500);
-    expect(res.body.error).toBe('internal_error');
+    expect(res.body.code).toBe('INTERNAL_ERROR');
   });
 });
 

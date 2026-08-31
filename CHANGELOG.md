@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.20.0] - 31 August 2026 - Production-readiness: contracts, safety nets, and structure
+
+### Added
+- **A real safety net under the whole API.** A composed authorization suite now exercises the actual route mounting: every admin prefix is proven to reject unauthenticated (401) and under-privileged (403) requests, with a completeness check that fails CI if a new admin mount is ever added without coverage. The public claim endpoint gained its own suite covering both rate limiters, the anti-enumeration response uniformity, and the fixed 2-second response deadline that keeps address existence unguessable from timing.
+- **The database is tested for real.** A disposable-PostgreSQL integration suite proves the full migration chain applies to an empty database, that the unique indexes and enum columns reject what the code assumes they reject, and that the atomic PENDING → SENDING email-dispatch claim holds under eight-way competition. CI runs it — plus a from-scratch migration check — against a real Postgres before anything can deploy.
+- **Every admin page now has behavioral tests.** Claim Log, Access Permissions, App Catalog, App Form, and Fellows Management gained workflow-focused suites (61 new tests): send-email flows including typed failure reasons, delete confirmations, validation, sorting, pagination, and empty/error states. Web tests grew from 277 to 366; server tests from 543 to 636.
+- **Sync progress streams are locked to their run.** The short-lived SSE token is now bound to one specific sync run — a leaked token can no longer be replayed to watch a different run's stream.
+
+### Changed
+- **Long lists no longer grow without bound.** The claim log is cursor-paginated with a Load more control, the emails log pages through TanStack Query's infinite-query support (the hand-rolled cursor state is gone), and the forms archive is capped at 1,000 rows with a visible notice instead of silent growth.
+- **Filters live in the URL.** Fellows Management and the emails log persist their filters (and the emails sort) in the address bar, so filtered views can be bookmarked and shared — matching the submissions archive.
+- **One source of truth for access control in the UI.** Route guards, sidebar navigation, and the Access Permissions page all derive from a single section config, pinned by a consistency test across both languages. Workflow state columns (sync runs, automation runs, form invitations) are real database enums now, with a migration that fails loudly on any unexpected value.
+- **Table headers are properly accessible.** One shared sortable-header component (correct `aria-sort`, explicit `type="button"`) replaced four page-local copies; search inputs gained accessible labels and stray buttons their explicit types.
+- **The interface imports React Router from the single `react-router` package**; the `react-router-dom` shim is gone.
+
+### Fixed
+- The resend-confirmation dialog was invisible to screen readers while the email preview was open (it rendered outside the modal's accessibility tree); it is now a real nested dialog.
+- The CiviCRM contact guard on profile routes now applies the same positive-integer rule as every other identifier instead of a bare finiteness check.
+- All five rate limiters return a machine-readable `RATE_LIMITED` code alongside the human message, matching the documented error contract.
+- A dispatch run of appointee emails performs one Auth0 role scan for the whole batch (with a per-event fallback when the prefetch fails), pinned by tests that also prove a full Auth0 outage leaves every event retryable rather than stranded.
+
+### Internal
+- Type-aware ESLint is on: `no-floating-promises`, `no-misused-promises`, and `await-thenable` across all three packages (65 findings fixed, none suppressed), and `any` is banned in production source.
+- Route handlers rely on Express 5's native async error forwarding; the boilerplate try/catch wrappers are gone, and the remaining catches all map errors or add log context. The `lib/` vs `services/` dependency rule is documented in `ARCHITECTURE.md` (and the one inversion, the fellows cache, fixed and given stampede protection plus a refresh deadline).
+- The bio and VIT-ID manual email senders share one mechanics core (idempotency guard, dispatch choreography, outcome mapping) while keeping their eligibility policies and typed reason unions separate; the form-response display walker lives once in `@itatti/shared`, serving both the PDF renderer and the web detail pane.
+- ~230 lines of dev-mode mock data moved out of route modules into a fixtures module; coverage reporting (no threshold gate) runs in CI; the SES client pin carries an in-file justification and the shadcn CLI left devDependencies.
+
 ## [0.19.0] - 24 August 2026 - Italian & English interface, current-generation platform
 
 ### Added

@@ -53,7 +53,7 @@ export function PhoneFormModal({ open, onClose, onSave, phone, isSaving }: Phone
           {phone ? t('profile.phoneForm.editTitle') : t('profile.phoneForm.addTitle')}
         </DialogTitle>
 
-        <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+        <form onSubmit={(e) => void handleSubmit(e)} className="mt-5 space-y-4">
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-foreground">
               {t('profile.phoneForm.numberLabel')}<span className="ml-0.5 text-destructive">*</span>

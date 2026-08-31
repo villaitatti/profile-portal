@@ -97,7 +97,8 @@ router.delete('/:filename', requireRole(KnownRoles.STAFF_IT), async (req, res) =
   try {
     await deleteImage(filename);
     res.json({ success: true });
-  } catch {
+  } catch (err) {
+    logger.error({ err, filename }, 'uploads_delete_failed');
     res.status(500).json({ error: 'Failed to delete image', code: 'DELETE_FAILED' });
   }
 });

@@ -71,6 +71,20 @@ if [[ -n "$version_file" && -n "$changelog_version" && "$version_file" != "$chan
        Add the changelog entry for this release, or correct VERSION."
 fi
 
+# Workspace packages are private and never published, but a stale version there
+# reads as "this package is releases behind" to anyone browsing the repo — they
+# drifted to 0.17.0 while the root was 0.19.0 once. Keep them in lockstep.
+for pkg in packages/server/package.json packages/web/package.json packages/shared/package.json; do
+  pkg_version="$(read_tracked_file "$pkg" \
+    | sed -n 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+    | head -n 1)"
+  if [[ -z "$pkg_version" ]]; then
+    fail "Could not read the \"version\" field from $pkg${ref:+ at $ref}."
+  elif [[ -n "$version_file" && "$pkg_version" != "$version_file" ]]; then
+    fail "$pkg version ($pkg_version) does not match VERSION ($version_file)."
+  fi
+done
+
 if [[ "$failed" -ne 0 ]]; then
   exit 1
 fi

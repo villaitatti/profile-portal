@@ -1,4 +1,4 @@
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router';
 import { Languages, Moon, Sun } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import itattiLogo from '@/assets/itatti-logo.png';

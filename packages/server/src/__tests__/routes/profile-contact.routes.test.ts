@@ -37,6 +37,7 @@ vi.mock('../../services/contact-info.service.js', () => ({
 }));
 
 import { profileContactRoutes } from '../../routes/profile-contact.routes.js';
+import { errorHandler } from '../../middleware/error.js';
 import * as contactInfoService from '../../services/contact-info.service.js';
 
 const mockService = vi.mocked(contactInfoService);
@@ -49,6 +50,7 @@ function makeApp(civicrmId?: string) {
     next();
   });
   app.use('/contact', profileContactRoutes);
+  app.use(errorHandler);
   return app;
 }
 
@@ -57,6 +59,34 @@ beforeEach(() => {
 });
 
 // --- Address routes ---
+
+// The guard applies the same positive-integer rule as every other id.
+// Boundary cases pinned so a refactor can't quietly reintroduce the old
+// bare-isFinite check that accepted "0", negatives, and decimals.
+describe('requireCivicrmContact boundary values', () => {
+  it.each([
+    ['missing', undefined],
+    ['empty string', ''],
+    ['zero', '0'],
+    ['negative', '-5'],
+    ['decimal', '3.5'],
+    ['non-numeric', 'abc'],
+  ])('rejects %s civicrmId with 400 NO_CIVICRM_ID', async (_label, value) => {
+    const app = makeApp(value);
+    const res = await request(app).get('/contact/addresses');
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('NO_CIVICRM_ID');
+    expect(mockService.getAddresses).not.toHaveBeenCalled();
+  });
+
+  it('accepts a positive integer id and passes it to the service as a number', async () => {
+    mockService.getAddresses.mockResolvedValue([]);
+    const app = makeApp('42');
+    const res = await request(app).get('/contact/addresses');
+    expect(res.status).toBe(200);
+    expect(mockService.getAddresses).toHaveBeenCalledWith(42);
+  });
+});
 
 describe('GET /contact/addresses', () => {
   it('returns 400 when civicrmId is missing', async () => {

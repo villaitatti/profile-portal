@@ -131,7 +131,7 @@ export function AddressSection() {
           {t('profile.addresses.loadError')}
         </p>
         <button
-          onClick={() => refetch()}
+          onClick={() => void refetch()}
           className="mt-3 inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
         >
           <RefreshCw className="h-3.5 w-3.5" />
@@ -200,7 +200,7 @@ export function AddressSection() {
                     type="radio"
                     name="preferred-address"
                     checked={address.isPrimary}
-                    onChange={() => handlePreferred(address.id)}
+                    onChange={() => void handlePreferred(address.id)}
                     className="h-4 w-4 text-primary accent-primary"
                   />
                   <span className={`flex items-center gap-1 ${address.isPrimary ? 'font-medium text-primary' : 'text-muted-foreground'}`}>
@@ -243,7 +243,7 @@ export function AddressSection() {
 
       <ConfirmDialog
         open={deletingId !== null}
-        onConfirm={handleDelete}
+        onConfirm={() => void handleDelete()}
         onCancel={() => setDeletingId(null)}
         title={t('profile.addresses.deleteTitle')}
         description={t('profile.addresses.deleteDescription')}

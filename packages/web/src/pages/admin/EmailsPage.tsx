@@ -1,22 +1,21 @@
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetClose, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { useEmailEvents, useEmailEventPreview, useTemplatePreview } from '@/api/emails';
-import { apiUrl, useApiToken } from '@/api/client';
 import { SelectDropdown } from '@/components/shared/SelectDropdown';
-import type { EmailEvent, EmailEventsResponse } from '@/api/emails';
+import type { EmailEvent } from '@/api/emails';
+import { SortableHeader } from '@/components/shared/SortableHeader';
 import {
   AlertCircle,
   X,
   Copy,
   Check,
   ExternalLink,
-  ChevronDown,
-  ChevronUp,
   ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -54,6 +53,21 @@ function formatEmailType(type: EmailEvent['emailType'], t: TFunction): string {
     : t('fellows.emails.typeBio');
 }
 
+// Valid values for URL-sourced filter/sort params; anything else in the URL
+// silently falls back to the default so a mangled link never breaks the page.
+const EMAIL_TYPES: ReadonlySet<string> = new Set([
+  'VIT_ID_INVITATION',
+  'BIO_PROJECT_DESCRIPTION',
+]);
+const EMAIL_STATUSES: ReadonlySet<string> = new Set([
+  'PENDING',
+  'SENDING',
+  'SENT',
+  'FAILED',
+  'SKIPPED',
+]);
+const SORT_FIELDS: ReadonlySet<string> = new Set(['enqueuedAt', 'sentAt']);
+
 const STATUS_STYLES: Record<EmailEvent['status'], string> = {
   PENDING: 'bg-blue-50 text-blue-700',
   SENDING: 'bg-amber-50 text-amber-700',
@@ -82,54 +96,109 @@ function StatusBadge({ status, failureReason }: { status: EmailEvent['status']; 
 
 function SentEmailsTab() {
   const { t, i18n } = useTranslation();
-  const [yearFilter, setYearFilter] = useState<string>('all');
-  const [typeFilter, setTypeFilter] = useState<TypeFilter | 'all'>('all');
-  const [statusFilters, setStatusFilters] = useState<Set<StatusFilter>>(new Set());
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // The URL is the source of truth for the server-side filters (year/type/
+  // status) and the sort, so filtered views survive reload and are shareable.
+  // Absent params fall back to the previous local-state defaults.
+  const yearFilter = searchParams.get('year') ?? 'all';
+  const typeParam = searchParams.get('type');
+  const typeFilter: TypeFilter | 'all' =
+    typeParam && EMAIL_TYPES.has(typeParam) ? (typeParam as TypeFilter) : 'all';
+  const statusFilters = useMemo(
+    () =>
+      new Set(
+        (searchParams.get('status') ?? '')
+          .split(',')
+          .filter((s): s is StatusFilter => EMAIL_STATUSES.has(s))
+      ),
+    [searchParams]
+  );
+  const sortParam = searchParams.get('sort');
+  const sortField: SortField =
+    sortParam && SORT_FIELDS.has(sortParam) ? (sortParam as SortField) : 'enqueuedAt';
+  const sortDir: SortDir = searchParams.get('dir') === 'asc' ? 'asc' : 'desc';
+
   const [nameSearch, setNameSearch] = useState('');
-  const [sortField, setSortField] = useState<SortField>('enqueuedAt');
-  const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
-  const [loadedPages, setLoadedPages] = useState<EmailEvent[][]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [knownYears, setKnownYears] = useState<string[]>([]);
-  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
+
+  const updateParams = useCallback(
+    (mutate: (next: URLSearchParams) => void) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          mutate(next);
+          return next;
+        },
+        { replace: true }
+      );
+    },
+    [setSearchParams]
+  );
+
+  const setYearFilter = useCallback(
+    (year: string) => {
+      updateParams((next) => {
+        if (year !== 'all') next.set('year', year);
+        else next.delete('year');
+      });
+    },
+    [updateParams]
+  );
+
+  const setTypeFilter = useCallback(
+    (type: TypeFilter | 'all') => {
+      updateParams((next) => {
+        if (type !== 'all') next.set('type', type);
+        else next.delete('type');
+      });
+    },
+    [updateParams]
+  );
 
   const statusParam = statusFilters.size > 0 ? [...statusFilters].join(',') : undefined;
 
-  const { data, isLoading, error } = useEmailEvents({
+  // The filters are part of the query key, so changing any of them resets the
+  // infinite query to its first page; the cursor chain is TanStack's page
+  // param and never lives in component state.
+  const {
+    data,
+    isLoading,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isFetchNextPageError,
+  } = useEmailEvents({
     year: yearFilter !== 'all' ? yearFilter : undefined,
     type: typeFilter !== 'all' ? typeFilter : undefined,
     status: statusParam,
     limit: 100,
   });
 
-  // Pagination resets on the filter *values*, not on the query object identity:
-  // a background refetch (staleTime + window focus) hands back a new object for
-  // the same filters, and resetting on that collapsed every page the admin had
-  // already loaded.
-  const filterKey = `${yearFilter}|${typeFilter}|${statusParam ?? ''}`;
-  const pageStateRef = useRef({ filterKey, cursorSeeded: false });
-  if (pageStateRef.current.filterKey !== filterKey) {
-    pageStateRef.current = { filterKey, cursorSeeded: false };
-    setLoadedPages([]);
-    setLoadMoreError(null);
-  }
-  if (data && !pageStateRef.current.cursorSeeded) {
-    pageStateRef.current.cursorSeeded = true;
-    setNextCursor(data.nextCursor);
-  }
+  const events = useMemo(() => data?.pages.flatMap((page) => page.events) ?? [], [data]);
 
-  if (data && yearFilter === 'all' && typeFilter === 'all' && !statusParam) {
-    const years = [...new Set(data.events.map((e) => e.academicYear))].sort().reverse();
-    if (years.length > 0 && years.join(',') !== knownYears.join(',')) setKnownYears(years);
-  }
+  // Year options come from the unfiltered list and stick once seen, so the
+  // dropdown does not collapse to a single year while a filter is active.
+  const isUnfiltered = yearFilter === 'all' && typeFilter === 'all' && !statusParam;
+  useEffect(() => {
+    if (!isUnfiltered || events.length === 0) return;
+    const years = [...new Set(events.map((e) => e.academicYear))].sort().reverse();
+    setKnownYears((prev) => (years.join(',') === prev.join(',') ? prev : years));
+  }, [isUnfiltered, events]);
 
-  const events = useMemo(() => {
-    const firstPage = data?.events || [];
-    return [...firstPage, ...loadedPages.flat()];
-  }, [data, loadedPages]);
-
-  const academicYears = knownYears;
+  // The active filter must always be among the options: on a deep link
+  // (?year=X) knownYears is still empty, and SelectDropdown renders its
+  // placeholder ("All years") for values it doesn't know — while the list IS
+  // filtered by X. Splice the active year in until the unfiltered seed runs.
+  const academicYears = useMemo(
+    () =>
+      yearFilter !== 'all' && !knownYears.includes(yearFilter)
+        ? [...knownYears, yearFilter].sort().reverse()
+        : knownYears,
+    [knownYears, yearFilter]
+  );
   const hasActiveFilters = yearFilter !== 'all' || typeFilter !== 'all' || statusFilters.size > 0 || nameSearch.length > 0;
 
   const sorted = useMemo(() => {
@@ -153,52 +222,35 @@ function SentEmailsTab() {
   );
 
   function toggleSort(field: SortField) {
-    if (sortField === field) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
-    else { setSortField(field); setSortDir('desc'); }
-  }
-
-  function toggleStatus(status: StatusFilter) {
-    setStatusFilters((prev) => {
-      const next = new Set(prev);
-      if (next.has(status)) next.delete(status);
-      else next.add(status);
-      return next;
+    const nextField = field;
+    const nextDir: SortDir =
+      sortField === field ? (sortDir === 'asc' ? 'desc' : 'asc') : 'desc';
+    updateParams((next) => {
+      // Keep the URL clean: the default sort (enqueuedAt desc) carries no params.
+      if (nextField === 'enqueuedAt' && nextDir === 'desc') {
+        next.delete('sort');
+        next.delete('dir');
+      } else {
+        next.set('sort', nextField);
+        next.set('dir', nextDir);
+      }
     });
   }
 
-  const getToken = useApiToken();
-  const [loadingMore, setLoadingMore] = useState(false);
-
-  const loadMore = useCallback(async () => {
-    if (!nextCursor || loadingMore) return;
-    setLoadingMore(true);
-    setLoadMoreError(null);
-    try {
-      const token = await getToken();
-      const url = new URL(apiUrl('/api/admin/emails'), window.location.origin);
-      url.searchParams.set('limit', '100');
-      url.searchParams.set('cursor', nextCursor);
-      if (yearFilter !== 'all') url.searchParams.set('year', yearFilter);
-      if (typeFilter !== 'all') url.searchParams.set('type', typeFilter);
-      if (statusParam) url.searchParams.set('status', statusParam);
-      const res = await fetch(url.toString(), {
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      });
-      if (!res.ok) throw new Error(`Load more failed: ${res.status}`);
-      const page = (await res.json()) as EmailEventsResponse;
-      setLoadedPages((prev) => [...prev, page.events]);
-      setNextCursor(page.nextCursor);
-    } catch {
-      // The cursor is kept so the same page can be retried; the rows already
-      // loaded stay on screen.
-      setLoadMoreError(t('fellows.emails.loadMoreFailed'));
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [nextCursor, loadingMore, getToken, yearFilter, typeFilter, statusParam, t]);
+  function toggleStatus(status: StatusFilter) {
+    const nextSet = new Set(statusFilters);
+    if (nextSet.has(status)) nextSet.delete(status);
+    else nextSet.add(status);
+    updateParams((next) => {
+      if (nextSet.size > 0) next.set('status', [...nextSet].join(','));
+      else next.delete('status');
+    });
+  }
 
   if (isLoading) return <EmailsSkeleton />;
-  if (error) {
+  // A failed fetchNextPage keeps the loaded rows on screen and reports inline
+  // next to the "Load more" button; only first-page failures take over here.
+  if (error && !isFetchNextPageError) {
     return (
       <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-6 text-center">
         <AlertCircle className="mx-auto mb-2 h-8 w-8 text-destructive" />
@@ -253,6 +305,7 @@ function SentEmailsTab() {
           {(['PENDING', 'SENDING', 'SENT', 'FAILED', 'SKIPPED'] as StatusFilter[]).map((s) => (
             <button
               key={s}
+              type="button"
               onClick={() => toggleStatus(s)}
               aria-label={t('fellows.emails.statusFilterAria', { status: t(`fellows.emails.status.${s}`) })}
               aria-pressed={statusFilters.has(s)}
@@ -285,12 +338,15 @@ function SentEmailsTab() {
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t('fellows.emails.colYear')}</th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t('fellows.emails.colType')}</th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t('fellows.emails.colStatus')}</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">
-                  <button onClick={() => toggleSort('enqueuedAt')} className="inline-flex items-center gap-1 hover:text-foreground">
-                    {t('fellows.emails.colEnqueued')}
-                    {sortField === 'enqueuedAt' && (sortDir === 'desc' ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />)}
-                  </button>
-                </th>
+                <SortableHeader
+                  field="enqueuedAt"
+                  label={t('fellows.emails.colEnqueued')}
+                  sortField={sortField}
+                  sortDir={sortDir}
+                  onSort={toggleSort}
+                  className="px-4 py-3 font-medium text-muted-foreground"
+                  buttonClassName="text-sm normal-case tracking-normal"
+                />
                 <th className="hidden px-4 py-3 text-left font-medium text-muted-foreground lg:table-cell">{t('fellows.emails.colTriggeredBy')}</th>
                 <th className="w-10 px-4 py-3"><span className="sr-only">{t('fellows.emails.colDetails')}</span></th>
               </tr>
@@ -337,21 +393,22 @@ function SentEmailsTab() {
       )}
 
       {/* Load more */}
-      {nextCursor && (
+      {hasNextPage && (
         <div className="mt-4 text-center">
-          {loadMoreError && (
+          {isFetchNextPageError && (
             <p role="alert" className="mb-2 text-sm text-destructive">
-              {loadMoreError}
+              {t('fellows.emails.loadMoreFailed')}
             </p>
           )}
           <button
-            onClick={() => void loadMore()}
-            disabled={loadingMore}
+            type="button"
+            onClick={() => void fetchNextPage()}
+            disabled={isFetchingNextPage}
             className="rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"
           >
-            {loadingMore
+            {isFetchingNextPage
               ? t('fellows.emails.loading')
-              : loadMoreError
+              : isFetchNextPageError
                 ? t('fellows.emails.tryAgain')
                 : t('fellows.emails.loadMore')}
           </button>
@@ -373,7 +430,7 @@ function EmailDrawer({ event, onClose }: { event: EmailEvent | null; onClose: ()
 
   const copyMessageId = useCallback(() => {
     if (event?.sesMessageId) {
-      navigator.clipboard.writeText(event.sesMessageId);
+      void navigator.clipboard.writeText(event.sesMessageId);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
@@ -389,7 +446,7 @@ function EmailDrawer({ event, onClose }: { event: EmailEvent | null; onClose: ()
           <div className="flex items-center justify-between border-b border-border px-6 py-4">
             <SheetTitle className="text-lg font-semibold">{t('fellows.emails.drawerTitle')}</SheetTitle>
             <SheetClose
-              render={<button className="rounded-md p-1.5 hover:bg-muted" aria-label={t('common.close')} />}
+              render={<button type="button" className="rounded-md p-1.5 hover:bg-muted" aria-label={t('common.close')} />}
             >
               <X className="h-4 w-4" />
             </SheetClose>
@@ -462,6 +519,7 @@ function EmailDrawer({ event, onClose }: { event: EmailEvent | null; onClose: ()
                   <span className="text-xs text-muted-foreground">{t('fellows.emails.sesId')}</span>
                   <code className="flex-1 truncate text-xs">{event.sesMessageId}</code>
                   <button
+                    type="button"
                     onClick={copyMessageId}
                     className="rounded p-1 hover:bg-muted"
                     aria-label={t('fellows.emails.copySesAria')}

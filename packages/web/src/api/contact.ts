@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { apiFetch, useApiToken } from './client';
 import { toast } from 'sonner';
 import { LOCATION_TYPES } from '@itatti/shared';
@@ -32,6 +33,7 @@ export function useAddresses() {
 export function useCreateAddress() {
   const getToken = useApiToken();
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
 
   return useMutation({
     mutationFn: async (input: CreateAddressInput) => {
@@ -65,14 +67,14 @@ export function useCreateAddress() {
       return { previous };
     },
     onSuccess: () => {
-      toast.success('Address added');
-      queryClient.invalidateQueries({ queryKey: ['profile', 'addresses'] });
+      toast.success(t('profile.contact.toasts.addressAdded'));
+      void queryClient.invalidateQueries({ queryKey: ['profile', 'addresses'] });
     },
     onError: (err, _input, context) => {
       if (context?.previous) {
         queryClient.setQueryData(['profile', 'addresses'], context.previous);
       }
-      toast.error(err instanceof Error ? err.message : 'Failed to save address.');
+      toast.error(err instanceof Error ? err.message : t('profile.contact.toasts.addressSaveFailed'));
     },
   });
 }
@@ -80,6 +82,7 @@ export function useCreateAddress() {
 export function useUpdateAddress() {
   const getToken = useApiToken();
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
 
   return useMutation({
     mutationFn: async ({ id, ...input }: UpdateAddressInput & { id: number }) => {
@@ -106,14 +109,14 @@ export function useUpdateAddress() {
       return { previous };
     },
     onSuccess: () => {
-      toast.success('Address updated');
-      queryClient.invalidateQueries({ queryKey: ['profile', 'addresses'] });
+      toast.success(t('profile.contact.toasts.addressUpdated'));
+      void queryClient.invalidateQueries({ queryKey: ['profile', 'addresses'] });
     },
     onError: (err, _input, context) => {
       if (context?.previous) {
         queryClient.setQueryData(['profile', 'addresses'], context.previous);
       }
-      toast.error(err instanceof Error ? err.message : 'Failed to update address.');
+      toast.error(err instanceof Error ? err.message : t('profile.contact.toasts.addressUpdateFailed'));
     },
   });
 }
@@ -121,6 +124,7 @@ export function useUpdateAddress() {
 export function useDeleteAddress() {
   const getToken = useApiToken();
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
 
   return useMutation({
     mutationFn: async (id: number) => {
@@ -139,14 +143,14 @@ export function useDeleteAddress() {
       return { previous };
     },
     onSuccess: () => {
-      toast.success('Address deleted');
-      queryClient.invalidateQueries({ queryKey: ['profile', 'addresses'] });
+      toast.success(t('profile.contact.toasts.addressDeleted'));
+      void queryClient.invalidateQueries({ queryKey: ['profile', 'addresses'] });
     },
     onError: (err, _id, context) => {
       if (context?.previous) {
         queryClient.setQueryData(['profile', 'addresses'], context.previous);
       }
-      toast.error(err instanceof Error ? err.message : 'Failed to delete address.');
+      toast.error(err instanceof Error ? err.message : t('profile.contact.toasts.addressDeleteFailed'));
     },
   });
 }
@@ -160,6 +164,7 @@ export interface SetPreferredAddressResponse {
 export function useSetPreferredAddress() {
   const getToken = useApiToken();
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
 
   return useMutation({
     mutationFn: async (id: number) => {
@@ -182,10 +187,10 @@ export function useSetPreferredAddress() {
       if (context?.previous) {
         queryClient.setQueryData(['profile', 'addresses'], context.previous);
       }
-      toast.error('Failed to set preferred address.');
+      toast.error(t('profile.contact.toasts.preferredAddressFailed'));
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['profile', 'addresses'] });
+      void queryClient.invalidateQueries({ queryKey: ['profile', 'addresses'] });
     },
   });
 }
@@ -193,6 +198,7 @@ export function useSetPreferredAddress() {
 export function useReclassifyAddress() {
   const getToken = useApiToken();
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
 
   return useMutation({
     mutationFn: async ({ id, locationTypeId }: { id: number; locationTypeId: number }) => {
@@ -204,11 +210,11 @@ export function useReclassifyAddress() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['profile', 'addresses'] });
+      void queryClient.invalidateQueries({ queryKey: ['profile', 'addresses'] });
     },
     onError: () => {
-      toast.warning('Preferred updated, but could not update the previous address type. You can edit it manually.');
-      queryClient.invalidateQueries({ queryKey: ['profile', 'addresses'] });
+      toast.warning(t('profile.contact.toasts.reclassifyFailed'));
+      void queryClient.invalidateQueries({ queryKey: ['profile', 'addresses'] });
     },
   });
 }
@@ -231,6 +237,7 @@ export function usePhones() {
 export function useCreatePhone() {
   const getToken = useApiToken();
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
 
   return useMutation({
     mutationFn: async (input: CreatePhoneInput) => {
@@ -259,14 +266,14 @@ export function useCreatePhone() {
       return { previous };
     },
     onSuccess: () => {
-      toast.success('Phone number added');
-      queryClient.invalidateQueries({ queryKey: ['profile', 'phones'] });
+      toast.success(t('profile.contact.toasts.phoneAdded'));
+      void queryClient.invalidateQueries({ queryKey: ['profile', 'phones'] });
     },
     onError: (err, _input, context) => {
       if (context?.previous) {
         queryClient.setQueryData(['profile', 'phones'], context.previous);
       }
-      toast.error(err instanceof Error ? err.message : 'Failed to save phone number.');
+      toast.error(err instanceof Error ? err.message : t('profile.contact.toasts.phoneSaveFailed'));
     },
   });
 }
@@ -274,6 +281,7 @@ export function useCreatePhone() {
 export function useUpdatePhone() {
   const getToken = useApiToken();
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
 
   return useMutation({
     mutationFn: async ({ id, ...input }: UpdatePhoneInput & { id: number }) => {
@@ -293,14 +301,14 @@ export function useUpdatePhone() {
       return { previous };
     },
     onSuccess: () => {
-      toast.success('Phone number updated');
-      queryClient.invalidateQueries({ queryKey: ['profile', 'phones'] });
+      toast.success(t('profile.contact.toasts.phoneUpdated'));
+      void queryClient.invalidateQueries({ queryKey: ['profile', 'phones'] });
     },
     onError: (err, _input, context) => {
       if (context?.previous) {
         queryClient.setQueryData(['profile', 'phones'], context.previous);
       }
-      toast.error(err instanceof Error ? err.message : 'Failed to update phone number.');
+      toast.error(err instanceof Error ? err.message : t('profile.contact.toasts.phoneUpdateFailed'));
     },
   });
 }
@@ -308,6 +316,7 @@ export function useUpdatePhone() {
 export function useDeletePhone() {
   const getToken = useApiToken();
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
 
   return useMutation({
     mutationFn: async (id: number) => {
@@ -326,14 +335,14 @@ export function useDeletePhone() {
       return { previous };
     },
     onSuccess: () => {
-      toast.success('Phone number deleted');
-      queryClient.invalidateQueries({ queryKey: ['profile', 'phones'] });
+      toast.success(t('profile.contact.toasts.phoneDeleted'));
+      void queryClient.invalidateQueries({ queryKey: ['profile', 'phones'] });
     },
     onError: (err, _id, context) => {
       if (context?.previous) {
         queryClient.setQueryData(['profile', 'phones'], context.previous);
       }
-      toast.error(err instanceof Error ? err.message : 'Failed to delete phone number.');
+      toast.error(err instanceof Error ? err.message : t('profile.contact.toasts.phoneDeleteFailed'));
     },
   });
 }
@@ -341,6 +350,7 @@ export function useDeletePhone() {
 export function useSetPreferredPhone() {
   const getToken = useApiToken();
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
 
   return useMutation({
     mutationFn: async (id: number) => {
@@ -359,16 +369,16 @@ export function useSetPreferredPhone() {
       return { previous };
     },
     onSuccess: () => {
-      toast.success('Primary number updated');
+      toast.success(t('profile.contact.toasts.primaryPhoneUpdated'));
     },
     onError: (_err, _id, context) => {
       if (context?.previous) {
         queryClient.setQueryData(['profile', 'phones'], context.previous);
       }
-      toast.error('Failed to set preferred phone number.');
+      toast.error(t('profile.contact.toasts.preferredPhoneFailed'));
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['profile', 'phones'] });
+      void queryClient.invalidateQueries({ queryKey: ['profile', 'phones'] });
     },
   });
 }

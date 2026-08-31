@@ -3,13 +3,18 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { useEmailEvents, useEmailEventPreview, useTemplatePreview } from '@/api/emails';
+import { ApiError } from '@/api/client';
 
-// Mock the auth token provider
-vi.mock('@/api/client', () => ({
-  useApiToken: () => async () => 'test-token',
-  apiUrl: (path: string) => path,
-  apiFetch: vi.fn(),
-}));
+// Partial mock: only the token hook is stubbed. apiFetch/ApiError are the REAL
+// implementations, so these tests cover the actual header attachment and
+// error-body parsing the hooks rely on.
+vi.mock('@/api/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/client')>();
+  return {
+    ...actual,
+    useApiToken: () => async () => 'test-token',
+  };
+});
 
 const originalFetch = globalThis.fetch;
 const fetchMock = vi.fn();
@@ -32,6 +37,11 @@ function wrap(client?: QueryClient) {
   return ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
+}
+
+function authHeader(callIndex = 0): string | null {
+  const headers = fetchMock.mock.calls[callIndex][1]?.headers as Headers;
+  return headers.get('Authorization');
 }
 
 // ─── useEmailEvents ──────────────────────────────────────────────────────────
@@ -64,54 +74,80 @@ describe('useEmailEvents', () => {
     const { result } = renderHook(() => useEmailEvents(), { wrapper: wrap() });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toEqual({ events: mockEvents, nextCursor: null });
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/api/admin/emails'),
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: 'Bearer test-token',
-        }),
-      })
-    );
+    expect(result.current.data?.pages).toEqual([{ events: mockEvents, nextCursor: null }]);
+    expect(result.current.hasNextPage).toBe(false);
+    const url = fetchMock.mock.calls[0][0] as string;
+    expect(url).toContain('/api/admin/emails');
+    expect(url).not.toContain('cursor=');
+    expect(authHeader()).toBe('Bearer test-token');
   });
 
-  it('passes query params to the fetch URL', async () => {
+  it('passes filter params to the fetch URL', async () => {
     fetchMock.mockResolvedValue({
       ok: true,
       json: async () => ({ events: [], nextCursor: null }),
     });
 
     const { result } = renderHook(
-      () => useEmailEvents({ limit: 50, cursor: 'cur123', year: '2025-2026', type: 'BIO_PROJECT_DESCRIPTION', status: 'SENT' }),
+      () => useEmailEvents({ limit: 50, year: '2025-2026', type: 'BIO_PROJECT_DESCRIPTION', status: 'SENT' }),
       { wrapper: wrap() }
     );
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     const url = fetchMock.mock.calls[0][0] as string;
     expect(url).toContain('limit=50');
-    expect(url).toContain('cursor=cur123');
     expect(url).toContain('year=2025-2026');
     expect(url).toContain('type=BIO_PROJECT_DESCRIPTION');
     expect(url).toContain('status=SENT');
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        headers: expect.objectContaining({ Authorization: 'Bearer test-token' }),
-      })
-    );
+    expect(authHeader()).toBe('Bearer test-token');
   });
 
-  it('throws an error when the response is not ok', async () => {
+  it('paginates across two pages via getNextPageParam', async () => {
+    const pageOne = [{ id: 'evt-1' }] as unknown as import('@/api/emails').EmailEvent[];
+    const pageTwo = [{ id: 'evt-2' }] as unknown as import('@/api/emails').EmailEvent[];
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ events: pageOne, nextCursor: 'cursor-2' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ events: pageTwo, nextCursor: null }),
+      });
+
+    const { result } = renderHook(() => useEmailEvents({ limit: 1 }), { wrapper: wrap() });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.hasNextPage).toBe(true);
+
+    await result.current.fetchNextPage();
+
+    await waitFor(() =>
+      expect(result.current.data?.pages).toEqual([
+        { events: pageOne, nextCursor: 'cursor-2' },
+        { events: pageTwo, nextCursor: null },
+      ])
+    );
+    expect(result.current.hasNextPage).toBe(false);
+    // The second request carries the cursor from the first page's nextCursor.
+    expect(fetchMock.mock.calls[0][0] as string).not.toContain('cursor=');
+    expect(fetchMock.mock.calls[1][0] as string).toContain('cursor=cursor-2');
+    expect(authHeader(1)).toBe('Bearer test-token');
+  });
+
+  it('throws an ApiError carrying the status when the response is not ok', async () => {
     fetchMock.mockResolvedValue({
       ok: false,
       status: 500,
+      json: async () => ({ error: 'Internal Server Error', code: 'INTERNAL_ERROR' }),
     });
 
     const { result } = renderHook(() => useEmailEvents(), { wrapper: wrap() });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(result.current.error).toBeInstanceOf(Error);
-    expect((result.current.error as Error).message).toContain('500');
+    expect(result.current.error).toBeInstanceOf(ApiError);
+    expect((result.current.error as ApiError).status).toBe(500);
+    expect((result.current.error as ApiError).code).toBe('INTERNAL_ERROR');
   });
 });
 
@@ -148,15 +184,13 @@ describe('useEmailEventPreview', () => {
       bcc: ['angela@itatti.harvard.edu'],
       recipientStatus: 'current',
     });
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/api/admin/emails/evt-1/preview'),
-      expect.any(Object)
-    );
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/admin/emails/evt-1/preview');
   });
 
   it('throws an error with the reason from the response body on failure', async () => {
     fetchMock.mockResolvedValue({
       ok: false,
+      status: 503,
       json: async () => ({ reason: 'civicrm_unavailable' }),
     });
 
@@ -180,7 +214,7 @@ describe('useEmailEventPreview', () => {
     });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
-    expect((result.current.error as Error).message).toContain('Preview failed');
+    expect((result.current.error as Error).message).toBe('Request failed');
   });
 
   it('handles json parse failure gracefully', async () => {
@@ -195,7 +229,7 @@ describe('useEmailEventPreview', () => {
     });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
-    expect((result.current.error as Error).message).toContain('Preview failed');
+    expect((result.current.error as Error).message).toBe('Unknown error');
   });
 });
 
@@ -225,9 +259,8 @@ describe('useTemplatePreview', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.subject).toBe('Welcome to I Tatti — Claim your VIT ID');
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/api/admin/emails/templates/vit-id-invitation/preview'),
-      expect.any(Object)
+    expect(fetchMock.mock.calls[0][0]).toContain(
+      '/api/admin/emails/templates/vit-id-invitation/preview'
     );
   });
 
@@ -251,10 +284,11 @@ describe('useTemplatePreview', () => {
     expect(result.current.data?.subject).toBe('Biography and Project Description');
   });
 
-  it('throws on non-ok response', async () => {
+  it('throws an ApiError on non-ok response', async () => {
     fetchMock.mockResolvedValue({
       ok: false,
       status: 500,
+      json: async () => ({ error: 'Internal Server Error' }),
     });
 
     const { result } = renderHook(() => useTemplatePreview('vit-id-invitation'), {
@@ -262,6 +296,7 @@ describe('useTemplatePreview', () => {
     });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
-    expect((result.current.error as Error).message).toContain('Template preview failed');
+    expect(result.current.error).toBeInstanceOf(ApiError);
+    expect((result.current.error as ApiError).status).toBe(500);
   });
 });

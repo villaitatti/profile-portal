@@ -52,6 +52,7 @@ vi.mock('../../lib/logger.js', () => ({
 }));
 
 import { fellowsAdminRoutes } from '../../routes/fellows-admin.routes.js';
+import { errorHandler } from '../../middleware/error.js';
 import * as civicrmService from '../../services/civicrm.service.js';
 import * as appointeeEmailService from '../../services/appointee-email.service.js';
 import * as render from '../../templates/render.js';
@@ -70,6 +71,7 @@ function makeApp() {
     next();
   });
   app.use('/api/admin/fellows', fellowsAdminRoutes);
+  app.use(errorHandler);
   return app;
 }
 
@@ -84,7 +86,7 @@ describe('POST /api/admin/fellows/:contactId/send-vit-id-email', () => {
       .post('/api/admin/fellows/abc/send-vit-id-email')
       .send({ academicYear: '2026-2027' });
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('invalid_request');
+    expect(res.body.code).toBe('VALIDATION_ERROR');
   });
 
   it('returns 400 invalid_request when body fails schema validation', async () => {
@@ -93,7 +95,7 @@ describe('POST /api/admin/fellows/:contactId/send-vit-id-email', () => {
       .post('/api/admin/fellows/1/send-vit-id-email')
       .send({ academicYear: 'not-a-year' });
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('invalid_request');
+    expect(res.body.code).toBe('VALIDATION_ERROR');
     expect(res.body.details).toBeDefined();
   });
 
@@ -196,7 +198,7 @@ describe('POST /api/admin/fellows/:contactId/send-vit-id-email', () => {
       .post('/api/admin/fellows/1/send-vit-id-email')
       .send({ academicYear: '2026-2027' });
     expect(res.status).toBe(500);
-    expect(res.body.error).toBe('internal_error');
+    expect(res.body.code).toBe('INTERNAL_ERROR');
   });
 });
 
@@ -255,7 +257,7 @@ describe('GET /api/admin/fellows/:contactId/email-preview', () => {
       .get('/api/admin/fellows/abc/email-preview')
       .query({ type: 'vit_id_invitation', academicYear: '2026-2027' });
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('invalid_request');
+    expect(res.body.code).toBe('VALIDATION_ERROR');
   });
 
   it('returns 400 invalid_request when the type query param is not a known enum', async () => {
@@ -264,7 +266,7 @@ describe('GET /api/admin/fellows/:contactId/email-preview', () => {
       .get('/api/admin/fellows/1/email-preview')
       .query({ type: 'unknown_type', academicYear: '2026-2027' });
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('invalid_request');
+    expect(res.body.code).toBe('VALIDATION_ERROR');
   });
 
   it('returns 400 invalid_request when academicYear is not consecutive', async () => {
@@ -274,7 +276,7 @@ describe('GET /api/admin/fellows/:contactId/email-preview', () => {
       .query({ type: 'vit_id_invitation', academicYear: '2025-2030' });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('invalid_request');
+    expect(res.body.code).toBe('VALIDATION_ERROR');
   });
 
   it('returns 404 with reason contact_not_found when the CiviCRM contact does not exist', async () => {

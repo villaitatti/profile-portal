@@ -1,13 +1,21 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NextFunction, Request, Response } from 'express';
-import { errorHandler } from '../../middleware/error.js';
 
+// errorHandler reads the validated env module (not process.env), so the test
+// controls the environment through a mutable mock rather than vi.stubEnv.
+const { envMock } = vi.hoisted(() => ({
+  envMock: { NODE_ENV: 'production' as string },
+}));
+
+vi.mock('../../env.js', () => ({ env: envMock, isDevMode: false }));
 vi.mock('../../lib/logger.js', () => ({
   logger: { error: vi.fn(), warn: vi.fn() },
 }));
 
-afterEach(() => {
-  vi.unstubAllEnvs();
+import { errorHandler } from '../../middleware/error.js';
+
+beforeEach(() => {
+  envMock.NODE_ENV = 'production';
 });
 
 function responseDouble() {
@@ -21,7 +29,6 @@ function responseDouble() {
 
 describe('errorHandler', () => {
   it('preserves an intentional client error message and code', () => {
-    vi.stubEnv('NODE_ENV', 'production');
     const res = responseDouble();
     errorHandler(
       Object.assign(new Error('Dry run has expired'), { status: 409, code: 'DRY_RUN_EXPIRED' }),
@@ -38,7 +45,6 @@ describe('errorHandler', () => {
   });
 
   it('does not expose a server exception in production', () => {
-    vi.stubEnv('NODE_ENV', 'production');
     const res = responseDouble();
     errorHandler(
       new Error('database password appeared here'),

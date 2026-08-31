@@ -145,4 +145,46 @@ describe('POST /api/admin/sync/mappings', () => {
       }),
     });
   });
+
+  // Regression: the handler used schema.parse inside try→next(err); ZodError
+  // carries no .status, so malformed input surfaced as a 500 "Internal Server
+  // Error" and was logged as an unhandled server error.
+  it('rejects malformed input with 400 VALIDATION_ERROR, not 500', async () => {
+    const res = await request(app)
+      .post('/api/admin/sync/mappings')
+      .send({ auth0RoleId: '' }); // missing required fields
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('VALIDATION_ERROR');
+    expect(prisma.roleGroupMapping.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('DELETE /api/admin/sync/mappings/:id', () => {
+  beforeEach(() => {
+    vi.mocked(prisma.roleGroupMapping.delete).mockReset();
+  });
+
+  it('returns 204 on successful delete', async () => {
+    vi.mocked(prisma.roleGroupMapping.delete).mockResolvedValue(
+      {} as Awaited<ReturnType<typeof prisma.roleGroupMapping.delete>>
+    );
+
+    const res = await request(app).delete('/api/admin/sync/mappings/mapping-1');
+
+    expect(res.status).toBe(204);
+  });
+
+  // Regression: Prisma P2025 (delete target missing) previously fell through
+  // to the error middleware as a 500.
+  it('returns 404 when the mapping does not exist', async () => {
+    vi.mocked(prisma.roleGroupMapping.delete).mockRejectedValue(
+      Object.assign(new Error('Record not found'), { code: 'P2025' })
+    );
+
+    const res = await request(app).delete('/api/admin/sync/mappings/gone');
+
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe('NOT_FOUND');
+  });
 });

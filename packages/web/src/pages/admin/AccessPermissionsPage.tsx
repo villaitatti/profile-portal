@@ -1,7 +1,8 @@
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { navSections, apiAccessRules } from '@/config/navigation';
+import { accessSections } from '@/config/access';
+import { navSections } from '@/config/navigation';
 import { useUserRoles } from '@/hooks/useUserRoles';
 import { hasAnyRole } from '@itatti/shared';
 import { CheckCircle2, LockKeyhole, ShieldCheck } from 'lucide-react';
@@ -11,22 +12,6 @@ function formatAudience(t: TFunction, requiredRoles?: readonly string[]): string
   if (requiredRoles.length === 1) return t('admin.permissions.roleOnly', { role: requiredRoles[0] });
   return requiredRoles.join(t('admin.permissions.roleJoin'));
 }
-
-// The API access rules live in the (untranslated) navigation registry; map
-// their literal label/visibleTo strings to i18n keys, falling back to the raw
-// string for any future rule that has no key yet. Route paths stay technical.
-const API_RULE_LABEL_KEYS: Record<string, string> = {
-  'Authenticated portal': 'admin.permissions.apiRuleAuthenticatedPortal',
-  'VIT ID Administration': 'nav.vitIdAdministration',
-  'Portal Settings': 'nav.portalSettings',
-  'Atlassian Cloud': 'nav.atlassianCloud',
-};
-
-const API_RULE_VISIBLE_TO_KEYS: Record<string, string> = {
-  'Any authenticated Auth0 user': 'admin.permissions.visibleToAnyUser',
-  'fellows-admin or staff-IT': 'admin.permissions.visibleToFellowsAdminOrStaffIT',
-  'staff-IT only': 'admin.permissions.visibleToStaffITOnly',
-};
 
 export function AccessPermissionsPage() {
   const { t } = useTranslation();
@@ -142,18 +127,18 @@ export function AccessPermissionsPage() {
           </p>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
-          {apiAccessRules.map((rule) => (
-            <article key={rule.label} className="rounded-xl border bg-card p-5">
+          {/* Titles and audiences translate via the section's stable i18n keys;
+              API route paths stay technical and untranslated. */}
+          {accessSections.map((section) => (
+            <article key={section.key} className="rounded-xl border bg-card p-5">
               <h3 className="text-lg font-semibold tracking-tight text-foreground">
-                {API_RULE_LABEL_KEYS[rule.label] ? t(API_RULE_LABEL_KEYS[rule.label]) : rule.label}
+                {t(section.labelKey)}
               </h3>
               <p className="mt-1 text-sm font-medium text-primary">
-                {API_RULE_VISIBLE_TO_KEYS[rule.visibleTo]
-                  ? t(API_RULE_VISIBLE_TO_KEYS[rule.visibleTo])
-                  : rule.visibleTo}
+                {t(section.visibleToKey)}
               </p>
               <ul className="mt-4 space-y-2">
-                {rule.access.map((entry) => (
+                {section.apiAccess.map((entry) => (
                   <li
                     key={entry}
                     className="rounded-md bg-muted/45 px-3 py-2 font-mono text-[0.78rem] text-muted-foreground"

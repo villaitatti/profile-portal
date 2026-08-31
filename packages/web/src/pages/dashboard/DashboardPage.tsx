@@ -7,7 +7,7 @@ import { useApplications } from '@/api/applications';
 import { useProfile } from '@/api/profile';
 import { User, ExternalLink, Grid3X3, ArrowRight, AlertCircle } from 'lucide-react';
 import { LoginMethodBadge } from '@/components/shared/LoginMethodBadge';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 
 export function DashboardPage() {
   const { t } = useTranslation();

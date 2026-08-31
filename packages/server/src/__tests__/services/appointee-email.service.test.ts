@@ -59,6 +59,7 @@ import {
   classifySesFailure,
 } from '../../services/appointee-email.service.js';
 import { prisma } from '../../lib/prisma.js';
+import { logger } from '../../lib/logger.js';
 import * as civicrmService from '../../services/civicrm.service.js';
 import * as auth0Service from '../../services/auth0.service.js';
 import * as emailService from '../../services/email.service.js';
@@ -919,6 +920,13 @@ describe('sendBioEmailManually', () => {
     });
     // The atomic claim loses: the cron got there first.
     (mockPrisma.appointeeEmailEvent.updateMany as any).mockResolvedValue({ count: 0 });
+    // After losing the claim, the manual path reads the row the winner now
+    // owns and reports its authoritative state.
+    (mockPrisma.appointeeEmailEvent.findUniqueOrThrow as any).mockResolvedValue({
+      id: 'evt_queued',
+      status: 'SENDING',
+      sentAt: null,
+    });
 
     const result = await sendBioEmailManually({
       contactId: 1,
@@ -1199,6 +1207,88 @@ describe('dispatchPendingEmails', () => {
     expect(findManyCall.where.emailType).not.toEqual(
       expect.objectContaining({ not: expect.anything() })
     );
+  });
+
+  // ── Auth0 prefetch batching ─────────────────────────────────────────
+  //
+  // dispatchPendingEmails builds the ladder's Auth0 maps ONCE per run and
+  // threads them through every dispatchOne. These tests pin the three
+  // properties that matter: one role scan per run (not per event), graceful
+  // per-event fallback when the prefetch fails, and no event ever getting
+  // stranded in a non-PENDING state because of a prefetch outage.
+
+  function primeDueEvents(ids: string[]) {
+    // First updateMany call is the stale-SENDING reclaim; subsequent calls
+    // are each dispatchOne's atomic PENDING→SENDING claim.
+    (mockPrisma.appointeeEmailEvent.updateMany as any)
+      .mockResolvedValueOnce({ count: 0 })
+      .mockResolvedValue({ count: 1 });
+    const events = ids.map((id) => ({
+      id,
+      contactId: 1,
+      academicYear: '2026-2027',
+      fellowshipId: 10,
+      emailType: 'BIO_PROJECT_DESCRIPTION',
+    }));
+    (mockPrisma.appointeeEmailEvent.findMany as any).mockResolvedValue(events);
+    (mockPrisma.appointeeEmailEvent.findUniqueOrThrow as any).mockImplementation(
+      ({ where }: { where: { id: string } }) =>
+        Promise.resolve(events.find((e) => e.id === where.id))
+    );
+    (mockPrisma.appointeeEmailEvent.update as any).mockResolvedValue({});
+    mockCivicrm.getContactById.mockResolvedValue({
+      id: 1,
+      firstName: 'Ada',
+      lastName: 'L',
+      email: 'ada@example.com',
+    });
+    mockCivicrm.getFellowships.mockResolvedValue([
+      { id: 10, contactId: 1, startDate: '2026-07-01', endDate: '2027-06-30', fellowshipAccepted: true },
+    ]);
+    mockEmail.sendBioProjectDescriptionEmail.mockResolvedValue({ messageId: 'ses-1' });
+  }
+
+  it('performs ONE Auth0 role scan for the whole run, however many events are due', async () => {
+    primeDueEvents(['evt_a', 'evt_b', 'evt_c']);
+
+    const result = await dispatchPendingEmails({ now: new Date('2026-06-15T12:00:00Z') });
+
+    expect(result.sent).toBe(3);
+    expect(mockAuth0.listUsersByRole).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to a per-event Auth0 fetch when the prefetch fails, and still sends', async () => {
+    primeDueEvents(['evt_a']);
+    // Prefetch rejects; the beforeEach default (one user, civicrmId '1')
+    // takes over for the per-event fetch inside the eligibility ladder.
+    mockAuth0.listUsersByRole.mockRejectedValueOnce(new Error('Auth0 rate limited'));
+
+    const result = await dispatchPendingEmails({ now: new Date('2026-06-15T12:00:00Z') });
+
+    expect(result.sent).toBe(1);
+    // 1 failed prefetch + 1 per-event fallback.
+    expect(mockAuth0.listUsersByRole).toHaveBeenCalledTimes(2);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ err: expect.any(Error) }),
+      expect.stringContaining('prefetch failed')
+    );
+  });
+
+  it('leaves events retryable (reverted to PENDING, deferred) when Auth0 is down for the whole run', async () => {
+    primeDueEvents(['evt_a']);
+    mockAuth0.listUsersByRole.mockRejectedValue(new Error('Auth0 down'));
+
+    const result = await dispatchPendingEmails({ now: new Date('2026-06-15T12:00:00Z') });
+
+    expect(result.sent).toBe(0);
+    expect(result.failed).toBe(0);
+    expect(result.deferred).toBe(1);
+    // The row must end PENDING — SKIPPED/FAILED would strand it forever
+    // because the cron filter only picks up PENDING.
+    const updates = (mockPrisma.appointeeEmailEvent.update as any).mock.calls;
+    expect(updates).toHaveLength(1);
+    expect(updates[0][0].data.status).toBe('PENDING');
+    expect(mockEmail.sendBioProjectDescriptionEmail).not.toHaveBeenCalled();
   });
 });
 

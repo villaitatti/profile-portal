@@ -7,10 +7,9 @@ import {
 } from '../utils/eligibility.js';
 import { getCurrentAcademicYear } from '../utils/academic-year.js';
 import * as civicrmService from './civicrm.service.js';
-import * as auth0Service from './auth0.service.js';
 import * as emailService from './email.service.js';
-import { buildAuth0Maps, reconcile, type LadderFellow } from './vit-id-match.js';
-import { env } from '../env.js';
+import type { Auth0Maps } from './vit-id-match.js';
+import { buildLadderContext, matchKnownContact } from './vit-id-ladder.service.js';
 import type {
   SendBioEmailReason,
   SendVitIdEmailReason,
@@ -192,28 +191,35 @@ export async function enqueueAppointeeEmail(args: {
  * Returns false for `'needs-review'` (we won't send to an ambiguous target)
  * and for `'no-account'`.
  *
- * Delegates to classifyLadderMatch to keep a single source of truth for
+ * Delegates to vit-id-ladder.service to keep a single source of truth for
  * the Auth0-fetch + LadderFellow construction.
  */
 async function checkHasVitIdViaLadder(
   contactId: number,
-  contact: { firstName: string; lastName: string; email: string }
+  contact: { firstName: string; lastName: string; email: string },
+  maps?: Auth0Maps
 ): Promise<boolean> {
-  const match = await classifyLadderMatch(contactId, contact);
+  const match = await matchKnownContact(contactId, contact, maps);
   return match.status === 'active' || match.status === 'active-different-email';
 }
 
 export async function evaluateBioEmailEligibility(
   contactId: number,
-  academicYear: string
+  academicYear: string,
+  // Optional prefetched Auth0 maps — the dispatch loop builds them once per
+  // run instead of one full role scan per event (see buildLadderContext).
+  maps?: Auth0Maps
 ): Promise<EligibilityEvaluation> {
   // Mirror the VIT path: upstream CiviCRM / Auth0 failures produce a
   // 'civicrm_unavailable' reason (503 at the route layer) so the admin UI
   // can offer a retry instead of rendering a generic internal error.
+  // Every mapped catch logs the raw error first — without that, a recurring
+  // bug in these fetches is indistinguishable from a permanent silent outage.
   let contact: Awaited<ReturnType<typeof civicrmService.getContactById>>;
   try {
     contact = await civicrmService.getContactById(contactId);
-  } catch {
+  } catch (err) {
+    logger.warn({ err, contactId, academicYear }, 'bio_eligibility_contact_fetch_failed');
     return { eligible: false, reason: 'civicrm_unavailable' };
   }
   if (!contact) {
@@ -232,8 +238,9 @@ export async function evaluateBioEmailEligibility(
   // 'needs-review' we refuse to send — we won't pick a candidate to deliver to.
   let hasVitId: boolean;
   try {
-    hasVitId = await checkHasVitIdViaLadder(contactId, contact);
-  } catch {
+    hasVitId = await checkHasVitIdViaLadder(contactId, contact, maps);
+  } catch (err) {
+    logger.warn({ err, contactId, academicYear }, 'bio_eligibility_ladder_failed');
     return { eligible: false, reason: 'civicrm_unavailable' };
   }
   if (!hasVitId) {
@@ -243,7 +250,8 @@ export async function evaluateBioEmailEligibility(
   let fellowships;
   try {
     fellowships = await civicrmService.getFellowships(contactId);
-  } catch {
+  } catch (err) {
+    logger.warn({ err, contactId, academicYear }, 'bio_eligibility_fellowships_fetch_failed');
     return { eligible: false, reason: 'civicrm_unavailable' };
   }
   if (fellowships.length === 0) {
@@ -286,33 +294,6 @@ export async function evaluateBioEmailEligibility(
 }
 
 /**
- * Check the match-ladder match status for a contact. Returns the full
- * FellowMatch so callers can distinguish needs-review (refuse politely)
- * from no-account (VIT invitation is appropriate).
- */
-async function classifyLadderMatch(
-  contactId: number,
-  contact: { firstName: string; lastName: string; email: string }
-) {
-  const [auth0Users, contactEmails] = await Promise.all([
-    auth0Service.listUsersByRole(env.AUTH0_FELLOWS_ROLE_ID),
-    civicrmService.getEmailsForContacts([contactId]),
-  ]);
-  const maps = buildAuth0Maps(auth0Users);
-  const emails = contactEmails.get(contactId);
-  const ladderFellow: LadderFellow = {
-    civicrmId: contactId,
-    firstName: contact.firstName,
-    lastName: contact.lastName,
-    // No fallback to contact.email — if Email.get returned nothing for this
-    // contact (all on_hold), we don't want to match against the held primary.
-    primaryEmail: emails?.primary ?? null,
-    secondaries: emails?.secondaries ?? [],
-  };
-  return reconcile(ladderFellow, maps);
-}
-
-/**
  * Eligibility for the VIT ID invitation email. Mirrors the bio-email
  * eligibility check but with INVERTED VIT-ID semantics:
  *   - bio requires that a VIT ID ALREADY exists
@@ -327,12 +308,14 @@ async function classifyLadderMatch(
  */
 export async function evaluateVitIdInvitationEligibility(
   contactId: number,
-  academicYear: string
+  academicYear: string,
+  maps?: Auth0Maps
 ): Promise<VitIdInvitationEligibilityEvaluation> {
   let contact: Awaited<ReturnType<typeof civicrmService.getContactById>>;
   try {
     contact = await civicrmService.getContactById(contactId);
-  } catch {
+  } catch (err) {
+    logger.warn({ err, contactId, academicYear }, 'vit_invitation_eligibility_contact_fetch_failed');
     return { eligible: false, reason: 'civicrm_unavailable' };
   }
 
@@ -350,8 +333,9 @@ export async function evaluateVitIdInvitationEligibility(
 
   let match;
   try {
-    match = await classifyLadderMatch(contactId, contact);
-  } catch {
+    match = await matchKnownContact(contactId, contact, maps);
+  } catch (err) {
+    logger.warn({ err, contactId, academicYear }, 'vit_invitation_eligibility_ladder_failed');
     return { eligible: false, reason: 'civicrm_unavailable' };
   }
 
@@ -368,7 +352,8 @@ export async function evaluateVitIdInvitationEligibility(
   let fellowships;
   try {
     fellowships = await civicrmService.getFellowships(contactId);
-  } catch {
+  } catch (err) {
+    logger.warn({ err, contactId, academicYear }, 'vit_invitation_eligibility_fellowships_fetch_failed');
     return { eligible: false, reason: 'civicrm_unavailable' };
   }
 
@@ -484,8 +469,20 @@ export async function dispatchPendingEmails(opts?: {
   let failed = 0;
   let deferred = 0;
 
+  // One Auth0 role scan for the whole run, not one per event. Best-effort: if
+  // the prefetch fails, each dispatchOne falls back to its own fetch, which
+  // will surface the outage per-event as a deferral — same as before.
+  let maps: Auth0Maps | undefined;
+  if (due.length > 0) {
+    try {
+      maps = await buildLadderContext();
+    } catch (err) {
+      logger.warn({ err }, 'Bio email: Auth0 prefetch failed, falling back to per-event fetch');
+    }
+  }
+
   for (const event of due) {
-    const result = await dispatchOne(event.id);
+    const result = await dispatchOne(event.id, maps);
     if (result === 'sent') sent++;
     else if (result === 'skipped') skipped++;
     else if (result === 'failed') failed++;
@@ -584,7 +581,8 @@ export function classifySesFailure(err: unknown): SesFailureClass {
  * it directly after enqueue(delayHours: 0) — same code path, same guarantees.
  */
 export async function dispatchOne(
-  eventId: string
+  eventId: string,
+  maps?: Auth0Maps
 ): Promise<'sent' | 'skipped' | 'failed' | 'deferred' | 'deferred_email' | 'not_claimed'> {
   // Atomic PENDING → SENDING. Only one worker wins.
   const claimed = await prisma.appointeeEmailEvent.updateMany({
@@ -609,8 +607,8 @@ export async function dispatchOne(
   try {
     eligibility =
       event.emailType === AppointeeEmailType.VIT_ID_INVITATION
-        ? await evaluateVitIdInvitationEligibility(event.contactId, event.academicYear)
-        : await evaluateBioEmailEligibility(event.contactId, event.academicYear);
+        ? await evaluateVitIdInvitationEligibility(event.contactId, event.academicYear, maps)
+        : await evaluateBioEmailEligibility(event.contactId, event.academicYear, maps);
   } catch (err) {
     // Upstream failure (CiviCRM down). Leave as deferred — revert to PENDING.
     await prisma.appointeeEmailEvent.update({
@@ -807,216 +805,71 @@ export async function dispatchOne(
   }
 }
 
-/**
- * Manual admin path: enqueue a fresh event (or replace a FAILED one) and
- * dispatch immediately. Returns the terminal status for the admin UI.
- *
- * Eligibility is checked BEFORE enqueue so Angela gets a clear
- * {reason} back instead of creating a SKIPPED event for a button press.
- */
-export async function sendBioEmailManually(args: {
-  contactId: number;
-  academicYear: string;
-  triggeredBy: string;
-  resend?: boolean;
-}): Promise<
+// ── Manual send core ─────────────────────────────────────────────────
+//
+// The bio and VIT-invitation manual paths share ALL of their mechanics:
+// latest-row idempotency guard, enqueue-fresh vs dispatch-existing decision,
+// dispatch outcome mapping, and skipped-reason surfacing. What stays separate
+// — by design, see the reviewer discussion in the PR — is each type's
+// eligibility policy and its typed reason union. The two public functions
+// below own policy; this core owns mechanics.
+
+type ManualSendBaseReason = 'already_sent' | 'civicrm_unavailable' | 'email_send_failed';
+
+type ManualSendResult<Reason extends string> =
   | { ok: true; eventId: string; status: AppointeeEmailStatus; sentAt: Date | null }
-  | { ok: false; reason: BioEmailIneligibilityReason }
-> {
-  const { contactId, academicYear, triggeredBy, resend = false } = args;
-
-  // Pre-check eligibility so we don't persist a SKIPPED event on manual click.
-  const eligibility = await evaluateBioEmailEligibility(contactId, academicYear);
-  if (!eligibility.eligible) {
-    return { ok: false, reason: eligibility.reason };
-  }
-
-  // Latest-row guard: preserve all historical rows, but do not create a new
-  // attempt while one is already PENDING/SENDING. SENT requires explicit
-  // resend=true so accidental duplicate clicks stay blocked.
-  const existing = await prisma.appointeeEmailEvent.findFirst({
-    where: {
-      fellowshipId: eligibility.fellowshipId,
-      emailType: AppointeeEmailType.BIO_PROJECT_DESCRIPTION,
-    },
-    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-  });
-
-  if (existing) {
-    if (existing.status === AppointeeEmailStatus.SENT) {
-      if (!resend) {
-        return { ok: false, reason: 'already_sent' };
-      }
-    } else if (existing.status === AppointeeEmailStatus.SENDING) {
-      // Genuinely in-flight: another dispatcher holds the atomic claim. Report
-      // pending rather than racing it; the stale-SENDING reclaim recovers a
-      // crashed send.
-      return {
-        ok: true,
-        eventId: existing.id,
-        status: existing.status,
-        sentAt: existing.sentAt,
-      };
-    } else if (existing.status === AppointeeEmailStatus.PENDING) {
-      // A PENDING row is not in flight — it is *queued*, waiting for the daily
-      // cron. Returning "pending" here without dispatching meant the admin's
-      // click did nothing visible, and if APPOINTEE_EMAIL_CRON_ENABLED is unset
-      // (the default) nothing would ever pick the row up: `dispatchPendingEmails`
-      // has exactly one caller, the cron. The VIT invitation path already falls
-      // through to dispatchOne for precisely this reason.
-      //
-      // dispatchOne's PENDING → SENDING transition is atomic, so if the cron does
-      // fire concurrently exactly one of them wins and the other returns
-      // 'not_claimed'.
-      const claimedOutcome = await dispatchOne(existing.id);
-      if (claimedOutcome === 'not_claimed') {
-        return {
-          ok: true,
-          eventId: existing.id,
-          status: AppointeeEmailStatus.SENDING,
-          sentAt: null,
-        };
-      }
-      if (claimedOutcome === 'deferred') {
-        return { ok: false, reason: 'civicrm_unavailable' };
-      }
-      if (claimedOutcome === 'failed' || claimedOutcome === 'deferred_email') {
-        return { ok: false, reason: 'email_send_failed' };
-      }
-      // Check 'skipped' BEFORE querying the row: a skip carries a
-      // failureReason we must surface (same mapping the fresh-enqueue path
-      // uses), not a fixed 'no_matching_fellowship'. Only the success path
-      // needs the persisted row.
-      if (claimedOutcome === 'skipped') {
-        return { ok: false, reason: await mapBioSkippedReason(existing.id) };
-      }
-      const dispatched = await prisma.appointeeEmailEvent.findUniqueOrThrow({
-        where: { id: existing.id },
-      });
-      return {
-        ok: true,
-        eventId: dispatched.id,
-        status: dispatched.status,
-        sentAt: dispatched.sentAt,
-      };
-    }
-  }
-
-  const { eventId } = await enqueueBioEmail({
-    contactId,
-    academicYear,
-    fellowshipId: eligibility.fellowshipId,
-    triggeredBy,
-    delayHours: 0,
-    allowHistoricalDuplicate: true,
-  });
-
-  const outcome = await dispatchOne(eventId);
-
-  // A 'deferred' outcome means dispatchOne hit civicrm_unavailable (the
-  // only source of defers). The event is back at PENDING so a future run
-  // can retry. Map to the typed ineligibility union so the route layer
-  // returns 503 via the civicrm_unavailable branch.
-  if (outcome === 'deferred') {
-    return { ok: false, reason: 'civicrm_unavailable' };
-  }
-
-  // SES rejected the send, or failed transiently. Either way the admin who is
-  // watching should be told the delivery did not happen; a 'deferred_email' row
-  // stays PENDING so the daily cron also retries it on its own.
-  if (outcome === 'failed' || outcome === 'deferred_email') {
-    return { ok: false, reason: 'email_send_failed' };
-  }
-
-  // SKIPPED means eligibility flipped between the pre-check above and the
-  // dispatch-time re-check (rare race). Map the persisted failureReason back
-  // to an ineligibility reason the admin UI already knows how to render.
-  // (mapBioSkippedReason re-reads the row itself, so query for success only.)
-  if (outcome === 'skipped') {
-    return { ok: false, reason: await mapBioSkippedReason(eventId) };
-  }
-
-  // outcome === 'sent' (or 'not_claimed', which only happens if another worker
-  // raced us on the same eventId — treat the persisted state as authoritative).
-  const finalEvent = await prisma.appointeeEmailEvent.findUniqueOrThrow({
-    where: { id: eventId },
-  });
-  return {
-    ok: true,
-    eventId: finalEvent.id,
-    status: finalEvent.status,
-    sentAt: finalEvent.sentAt,
-  };
-}
+  | { ok: false; reason: Reason };
 
 /**
  * A dispatchOne 'skipped' outcome persists a `failureReason` on the row.
- * Re-read it and map it to a typed BioEmailIneligibilityReason the admin UI can
- * render; anything unrecognized is a real bug, so throw and let it surface as a
- * 500. Shared by both the fresh-enqueue and existing-PENDING manual paths so
- * they return the same reason for the same skip.
+ * Re-read it and map it to the caller's typed reason union; anything
+ * unrecognized is a real bug, so throw and let it surface as a 500.
  */
-async function mapBioSkippedReason(eventId: string): Promise<BioEmailIneligibilityReason> {
+async function mapSkippedReason<Reason extends string>(
+  eventId: string,
+  validReasons: readonly Reason[],
+  logLabel: string
+): Promise<Reason> {
   const event = await prisma.appointeeEmailEvent.findUniqueOrThrow({ where: { id: eventId } });
   const reason = event.failureReason;
-  const validReasons: readonly BioEmailIneligibilityReason[] = [
-    'no_vit_id',
-    'no_matching_fellowship',
-    'fellowship_not_accepted',
-    'no_primary_email',
-    'already_sent',
-    'civicrm_unavailable',
-    'email_send_failed',
-  ];
   if (reason && (validReasons as readonly string[]).includes(reason)) {
-    return reason as BioEmailIneligibilityReason;
+    return reason as Reason;
   }
   logger.warn(
     { eventId, failureReason: reason },
-    'Bio email: dispatch returned skipped with unrecognized failureReason'
+    `${logLabel}: dispatch returned skipped with unrecognized failureReason`
   );
   throw new Error('dispatch_skipped_unexpected');
 }
 
-/**
- * Manual admin path for the VIT ID invitation email. Same shape and
- * idempotency guarantees as sendBioEmailManually, but:
- *   - preconditions are inverted (no existing VIT ID, not needs-review)
- *   - eligibility returns the richer VitIdInvitationIneligibilityReason union
- *   - cron does NOT pick up VIT_ID_INVITATION rows — this function is the
- *     only path that ever enqueues + dispatches one
- */
-export async function sendVitIdInvitationManually(args: {
+async function manualSendCore<Reason extends ManualSendBaseReason | string>(opts: {
+  emailType: AppointeeEmailType;
   contactId: number;
   academicYear: string;
+  fellowshipId: number;
   triggeredBy: string;
-}): Promise<
-  | { ok: true; eventId: string; status: AppointeeEmailStatus; sentAt: Date | null }
-  | { ok: false; reason: VitIdInvitationIneligibilityReason }
-> {
-  const { contactId, academicYear, triggeredBy } = args;
-
-  const eligibility = await evaluateVitIdInvitationEligibility(contactId, academicYear);
-  if (!eligibility.eligible) {
-    return { ok: false, reason: eligibility.reason };
-  }
-
+  /** Bio passes the admin's resend flag; VIT invitations never resend a SENT row. */
+  allowResendOfSent: boolean;
+  validSkipReasons: readonly Reason[];
+  logLabel: string;
+}): Promise<ManualSendResult<Reason>> {
+  // Latest-row guard: preserve all historical rows, but do not create a new
+  // attempt while one is already PENDING/SENDING. SENT is blocked unless the
+  // caller explicitly allows a resend.
   const existing = await prisma.appointeeEmailEvent.findFirst({
-    where: {
-      fellowshipId: eligibility.fellowshipId,
-      emailType: AppointeeEmailType.VIT_ID_INVITATION,
-    },
+    where: { fellowshipId: opts.fellowshipId, emailType: opts.emailType },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
   });
 
-  let eventId: string;
+  let eventId: string | undefined;
   if (existing) {
-    if (existing.status === AppointeeEmailStatus.SENT) {
-      return { ok: false, reason: 'already_sent' };
+    if (existing.status === AppointeeEmailStatus.SENT && !opts.allowResendOfSent) {
+      return { ok: false, reason: 'already_sent' as Reason };
     }
     if (existing.status === AppointeeEmailStatus.SENDING) {
-      // Another invocation is currently dispatching this row. Tell the admin
-      // UI it's in-flight; don't duplicate.
+      // Genuinely in-flight: another dispatcher holds the atomic claim. Report
+      // in-flight rather than racing it; the stale-SENDING reclaim recovers a
+      // crashed send.
       return {
         ok: true,
         eventId: existing.id,
@@ -1025,35 +878,27 @@ export async function sendVitIdInvitationManually(args: {
       };
     }
     if (existing.status === AppointeeEmailStatus.PENDING) {
-      // Unlike bio email, the cron NEVER dispatches VIT invitations. A
-      // PENDING VIT row only exists if a previous manual send crashed
-      // between enqueue and dispatch (or the stale-SENDING reclaim demoted
-      // a previous SENDING row). Fall through to dispatchOne so the row
-      // actually gets sent — short-circuiting with ok:true here would
-      // strand the row forever since no cron picks it up.
+      // A PENDING row is not in flight — it is *queued*. Dispatch it now: for
+      // bio, waiting on the daily cron would make the admin's click do nothing
+      // visible (and with APPOINTEE_EMAIL_CRON_ENABLED unset, nothing would
+      // EVER pick it up); for VIT invitations no cron exists at all, so a
+      // short-circuit would strand the row forever. dispatchOne's PENDING →
+      // SENDING transition is atomic, so a concurrent cron and this call
+      // cannot double-send: exactly one wins, the other sees 'not_claimed'.
       eventId = existing.id;
-    } else {
-      // FAILED or SKIPPED — enqueue a fresh attempt while preserving the old
-      // row for the future email log page.
-      const enqueued = await enqueueAppointeeEmail({
-        contactId,
-        academicYear,
-        fellowshipId: eligibility.fellowshipId,
-        triggeredBy,
-        delayHours: 0,
-        emailType: AppointeeEmailType.VIT_ID_INVITATION,
-        allowHistoricalDuplicate: true,
-      });
-      eventId = enqueued.eventId;
     }
-  } else {
+    // FAILED/SKIPPED (or SENT with an allowed resend) fall through to a fresh
+    // enqueue; the old row remains in the audit history.
+  }
+
+  if (!eventId) {
     const enqueued = await enqueueAppointeeEmail({
-      contactId,
-      academicYear,
-      fellowshipId: eligibility.fellowshipId,
-      triggeredBy,
+      contactId: opts.contactId,
+      academicYear: opts.academicYear,
+      fellowshipId: opts.fellowshipId,
+      triggeredBy: opts.triggeredBy,
       delayHours: 0,
-      emailType: AppointeeEmailType.VIT_ID_INVITATION,
+      emailType: opts.emailType,
       allowHistoricalDuplicate: true,
     });
     eventId = enqueued.eventId;
@@ -1061,55 +906,127 @@ export async function sendVitIdInvitationManually(args: {
 
   const outcome = await dispatchOne(eventId);
 
-  // A 'deferred' outcome means dispatchOne hit civicrm_unavailable (the
-  // only source of defers) and reverted the row to PENDING. Map back to
-  // the typed ineligibility union so the route layer returns 503 via the
-  // same code path as a pre-check civicrm_unavailable.
+  // 'deferred' means dispatchOne hit civicrm_unavailable (the only source of
+  // defers) and reverted the row to PENDING for a later retry. Map to the
+  // typed union so the route layer returns 503 via its retryable branch.
   if (outcome === 'deferred') {
-    return { ok: false, reason: 'civicrm_unavailable' };
+    return { ok: false, reason: 'civicrm_unavailable' as Reason };
   }
-  // 'deferred_email' = transient SES failure; row stays PENDING for the cron,
-  // but tell the waiting admin the send did not go through.
+  // SES rejected the send ('failed', terminal) or failed transiently
+  // ('deferred_email', row stays PENDING for retry). Either way the admin who
+  // is watching must be told this delivery did not happen.
   if (outcome === 'failed' || outcome === 'deferred_email') {
-    return { ok: false, reason: 'email_send_failed' };
+    return { ok: false, reason: 'email_send_failed' as Reason };
+  }
+  // SKIPPED means eligibility flipped between the caller's pre-check and the
+  // dispatch-time re-check (rare race). Surface the persisted failureReason
+  // through the caller's typed union. (mapSkippedReason re-reads the row.)
+  if (outcome === 'skipped') {
+    return {
+      ok: false,
+      reason: await mapSkippedReason(eventId, opts.validSkipReasons, opts.logLabel),
+    };
   }
 
+  // outcome === 'sent', or 'not_claimed' (another worker raced us on the same
+  // event) — either way the persisted row is authoritative.
   const finalEvent = await prisma.appointeeEmailEvent.findUniqueOrThrow({
     where: { id: eventId },
   });
-
-  if (outcome === 'skipped') {
-    const reason = finalEvent.failureReason;
-    const validReasons: readonly VitIdInvitationIneligibilityReason[] = [
-      'no_matching_fellowship',
-      'fellowship_not_accepted',
-      'no_primary_email',
-      'missing_first_name',
-      'already_has_vit_id',
-      'needs_review',
-      'already_sent',
-      'civicrm_unavailable',
-      'email_send_failed',
-    ];
-    if (reason && (validReasons as readonly string[]).includes(reason)) {
-      return {
-        ok: false,
-        reason: reason as VitIdInvitationIneligibilityReason,
-      };
-    }
-    logger.warn(
-      { eventId, failureReason: reason },
-      'VIT ID invitation: dispatch returned skipped with unrecognized failureReason'
-    );
-    throw new Error('dispatch_skipped_unexpected');
-  }
-
   return {
     ok: true,
     eventId: finalEvent.id,
     status: finalEvent.status,
     sentAt: finalEvent.sentAt,
   };
+}
+
+const BIO_SKIP_REASONS: readonly BioEmailIneligibilityReason[] = [
+  'no_vit_id',
+  'no_matching_fellowship',
+  'fellowship_not_accepted',
+  'no_primary_email',
+  'already_sent',
+  'civicrm_unavailable',
+  'email_send_failed',
+];
+
+const VIT_INVITATION_SKIP_REASONS: readonly VitIdInvitationIneligibilityReason[] = [
+  'no_matching_fellowship',
+  'fellowship_not_accepted',
+  'no_primary_email',
+  'missing_first_name',
+  'already_has_vit_id',
+  'needs_review',
+  'already_sent',
+  'civicrm_unavailable',
+  'email_send_failed',
+];
+
+/**
+ * Manual admin path: enqueue a fresh event (or dispatch/replace an existing
+ * one) and return the terminal status for the admin UI.
+ *
+ * Eligibility is checked BEFORE enqueue so Angela gets a clear {reason} back
+ * instead of creating a SKIPPED event for a button press. SENT rows require
+ * explicit resend=true so accidental duplicate clicks stay blocked.
+ */
+export async function sendBioEmailManually(args: {
+  contactId: number;
+  academicYear: string;
+  triggeredBy: string;
+  resend?: boolean;
+}): Promise<ManualSendResult<BioEmailIneligibilityReason>> {
+  const { contactId, academicYear, triggeredBy, resend = false } = args;
+
+  const eligibility = await evaluateBioEmailEligibility(contactId, academicYear);
+  if (!eligibility.eligible) {
+    return { ok: false, reason: eligibility.reason };
+  }
+
+  return manualSendCore({
+    emailType: AppointeeEmailType.BIO_PROJECT_DESCRIPTION,
+    contactId,
+    academicYear,
+    fellowshipId: eligibility.fellowshipId,
+    triggeredBy,
+    allowResendOfSent: resend,
+    validSkipReasons: BIO_SKIP_REASONS,
+    logLabel: 'Bio email',
+  });
+}
+
+/**
+ * Manual admin path for the VIT ID invitation email. Same mechanics as
+ * sendBioEmailManually (shared via manualSendCore), but:
+ *   - preconditions are inverted (no existing VIT ID, not needs-review)
+ *   - eligibility returns the richer VitIdInvitationIneligibilityReason union
+ *   - a SENT row is never resent
+ *   - cron does NOT pick up VIT_ID_INVITATION rows — this function is the
+ *     only path that ever enqueues + dispatches one
+ */
+export async function sendVitIdInvitationManually(args: {
+  contactId: number;
+  academicYear: string;
+  triggeredBy: string;
+}): Promise<ManualSendResult<VitIdInvitationIneligibilityReason>> {
+  const { contactId, academicYear, triggeredBy } = args;
+
+  const eligibility = await evaluateVitIdInvitationEligibility(contactId, academicYear);
+  if (!eligibility.eligible) {
+    return { ok: false, reason: eligibility.reason };
+  }
+
+  return manualSendCore({
+    emailType: AppointeeEmailType.VIT_ID_INVITATION,
+    contactId,
+    academicYear,
+    fellowshipId: eligibility.fellowshipId,
+    triggeredBy,
+    allowResendOfSent: false,
+    validSkipReasons: VIT_INVITATION_SKIP_REASONS,
+    logLabel: 'VIT ID invitation',
+  });
 }
 
 /**

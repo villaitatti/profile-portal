@@ -12,6 +12,7 @@ import {
 } from '../services/atlassian-sync.service.js';
 import type { SyncProgress } from '../services/atlassian-sync.service.js';
 import { isDevMode } from '../env.js';
+import { validate } from '../middleware/validate.js';
 
 const router = Router();
 
@@ -24,47 +25,38 @@ const createMappingSchema = z.object({
   atlassianGroupId: z.string().nullish(),
 });
 
-router.get('/mappings', async (_req, res, next) => {
-  try {
-    const mappings = await prisma.roleGroupMapping.findMany({
-      orderBy: { createdAt: 'asc' },
-    });
-    res.json(mappings);
-  } catch (err) {
-    next(err);
-  }
+router.get('/mappings', async (_req, res) => {
+  const mappings = await prisma.roleGroupMapping.findMany({
+    orderBy: { createdAt: 'asc' },
+  });
+  res.json(mappings);
 });
 
-router.post('/mappings', async (req, res, next) => {
-  try {
-    const body = createMappingSchema.parse(req.body);
-    const auth = req.auth as Record<string, unknown> | undefined;
-    const createdBy = (auth?.[`${AUTH0_NAMESPACE}/name`] as string) || (auth?.email as string) || null;
-    const mapping = await prisma.roleGroupMapping.create({
-      data: {
-        auth0RoleId: body.auth0RoleId,
-        auth0RoleName: body.auth0RoleName,
-        atlassianGroupName: body.atlassianGroupName,
-        atlassianGroupId: body.atlassianGroupId || null,
-        createdBy,
-      },
-    });
-    res.status(201).json(mapping);
-  } catch (err) {
-    next(err);
-  }
+// validate() (not schema.parse in the handler): a bare parse throws ZodError,
+// which carries no .status, so the error middleware rendered malformed input
+// as a 500 "Internal Server Error" and logged it as an unhandled server error.
+router.post('/mappings', validate(createMappingSchema), async (req, res) => {
+  const body = req.body as z.infer<typeof createMappingSchema>;
+  const auth = req.auth as Record<string, unknown> | undefined;
+  const createdBy = (auth?.[`${AUTH0_NAMESPACE}/name`] as string) || (auth?.email as string) || null;
+  const mapping = await prisma.roleGroupMapping.create({
+    data: {
+      auth0RoleId: body.auth0RoleId,
+      auth0RoleName: body.auth0RoleName,
+      atlassianGroupName: body.atlassianGroupName,
+      atlassianGroupId: body.atlassianGroupId || null,
+      createdBy,
+    },
+  });
+  res.status(201).json(mapping);
 });
 
 // ── Groups ────────────────────────────────────────────────────────
 
-router.get('/groups', async (_req, res, next) => {
-  try {
-    res.set('Cache-Control', 'no-store');
-    const groups = await getGroups();
-    res.json(groups.map((g) => ({ id: g.id, displayName: g.displayName })));
-  } catch (err) {
-    next(err);
-  }
+router.get('/groups', async (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const groups = await getGroups();
+  res.json(groups.map((g) => ({ id: g.id, displayName: g.displayName })));
 });
 
 router.delete('/mappings/:id', async (req, res, next) => {
@@ -72,70 +64,59 @@ router.delete('/mappings/:id', async (req, res, next) => {
     await prisma.roleGroupMapping.delete({ where: { id: req.params.id } });
     res.status(204).end();
   } catch (err) {
+    // Prisma P2025 = delete target does not exist. A stale admin tab deleting
+    // an already-removed mapping is a 404, not a server fault.
+    if ((err as { code?: string } | null)?.code === 'P2025') {
+      res.status(404).json({ error: 'Mapping not found', code: 'NOT_FOUND' });
+      return;
+    }
     next(err);
   }
 });
 
 // ── Sync operations ────────────────────────────────────────────────
 
-router.post('/dry-run', async (req, res, next) => {
-  try {
-    if (!isDevMode && !isScimConfigured()) {
-      res.status(503).json({ error: 'Atlassian SCIM not configured' });
-      return;
-    }
-
-    const auth = req.auth as Record<string, unknown> | undefined;
-    const triggeredBy = (auth?.[`${AUTH0_NAMESPACE}/name`] as string) || (auth?.email as string) || req.userId || 'unknown';
-    const { runId, emitter } = await runDrySync(triggeredBy);
-    storeEmitter(runId, emitter);
-    res.status(202).json({ runId });
-  } catch (err: unknown) {
-    const errObj = err as Record<string, unknown> | null;
-    if (errObj && typeof errObj === 'object' && 'status' in errObj && errObj.status === 409) {
-      res.status(409).json({
-        error: errObj.message ?? 'Sync already running',
-        activeRun: errObj.activeRun,
-      });
-      return;
-    }
-    next(err);
+// The sync service throws HttpError (409 SYNC_ALREADY_RUNNING with the active
+// run in details, 400/404 dry-run state errors) — the error middleware renders
+// them, so these handlers just forward.
+router.post('/dry-run', async (req, res) => {
+  if (!isDevMode && !isScimConfigured()) {
+    res.status(503).json({ error: 'Atlassian SCIM not configured', code: 'SCIM_NOT_CONFIGURED' });
+    return;
   }
+
+  const auth = req.auth as Record<string, unknown> | undefined;
+  const triggeredBy = (auth?.[`${AUTH0_NAMESPACE}/name`] as string) || (auth?.email as string) || req.userId || 'unknown';
+  const { runId, emitter } = await runDrySync(triggeredBy);
+  storeEmitter(runId, emitter);
+  res.status(202).json({ runId });
 });
 
-router.post('/execute/:runId', async (req, res, next) => {
-  try {
-    if (!isDevMode && !isScimConfigured()) {
-      res.status(503).json({ error: 'Atlassian SCIM not configured' });
-      return;
-    }
-
-    const auth = req.auth as Record<string, unknown> | undefined;
-    const triggeredBy = (auth?.[`${AUTH0_NAMESPACE}/name`] as string) || (auth?.email as string) || req.userId || 'unknown';
-    const { runId, emitter } = await executeSync(req.params.runId, triggeredBy);
-    storeEmitter(runId, emitter);
-    res.status(202).json({ runId });
-  } catch (err: unknown) {
-    const errObj = err as Record<string, unknown> | null;
-    if (errObj && typeof errObj === 'object' && 'status' in errObj) {
-      const status = errObj.status as number;
-      res.status(status).json({
-        error: errObj.message ?? 'Unknown error',
-        ...(status === 409 ? { activeRun: errObj.activeRun } : {}),
-      });
-      return;
-    }
-    next(err);
+router.post('/execute/:runId', async (req, res) => {
+  if (!isDevMode && !isScimConfigured()) {
+    res.status(503).json({ error: 'Atlassian SCIM not configured', code: 'SCIM_NOT_CONFIGURED' });
+    return;
   }
+
+  const auth = req.auth as Record<string, unknown> | undefined;
+  const triggeredBy = (auth?.[`${AUTH0_NAMESPACE}/name`] as string) || (auth?.email as string) || req.userId || 'unknown';
+  const { runId, emitter } = await executeSync(req.params.runId, triggeredBy);
+  storeEmitter(runId, emitter);
+  res.status(202).json({ runId });
 });
 
 // ── SSE token issuance ─────────────────────────────────────────────
-// Issue a short-lived SSE token (5 min) so the full JWT is never in a query string.
-// The SSE stream endpoint below validates this token instead of the JWT.
+// Issue a short-lived SSE token (5 min) so the full JWT is never in a query
+// string. The token is BOUND to one run id: the stream endpoint refuses a
+// token minted for a different run, so a leaked token cannot be replayed to
+// watch other syncs.
 
-router.post('/sse-token', (req, res) => {
+const sseTokenSchema = z.object({ runId: z.string().min(1).max(200) });
+
+router.post('/sse-token', validate(sseTokenSchema), (req, res) => {
   const userId = req.userId || 'unknown';
-  const token = createSseToken(userId);
+  const { runId } = req.body as z.infer<typeof sseTokenSchema>;
+  const token = createSseToken(userId, runId);
   res.json({ token });
 });
 
@@ -143,49 +124,48 @@ router.post('/sse-token', (req, res) => {
 
 // ── Sync run history ───────────────────────────────────────────────
 
-router.get('/runs', async (req, res, next) => {
-  try {
-    const page = Math.max(1, Number(req.query.page) || 1);
-    const perPage = Math.min(50, Math.max(1, Number(req.query.perPage) || 20));
-    const status = req.query.status as string | undefined;
-
-    const where = status ? { status } : {};
-    const [runs, total] = await Promise.all([
-      prisma.syncRun.findMany({
-        where,
-        orderBy: { startedAt: 'desc' },
-        skip: (page - 1) * perPage,
-        take: perPage,
-        select: {
-          id: true,
-          status: true,
-          triggeredBy: true,
-          dryRunId: true,
-          startedAt: true,
-          completedAt: true,
-          stats: true,
-        },
-      }),
-      prisma.syncRun.count({ where }),
-    ]);
-
-    res.json({ runs, total, page, perPage });
-  } catch (err) {
-    next(err);
-  }
+const runsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1).catch(1),
+  perPage: z.coerce.number().int().min(1).max(50).default(20).catch(20),
+  // status is a DB enum now; an unknown value falls back to "no filter"
+  // (matching the old forgiving behavior) instead of a Prisma 500.
+  status: z.enum(['dry_run', 'executing', 'completed', 'failed', 'partial']).optional().catch(undefined),
 });
 
-router.get('/runs/:id', async (req, res, next) => {
-  try {
-    const run = await prisma.syncRun.findUnique({ where: { id: req.params.id } });
-    if (!run) {
-      res.status(404).json({ error: 'Sync run not found' });
-      return;
-    }
-    res.json(run);
-  } catch (err) {
-    next(err);
+router.get('/runs', async (req, res) => {
+  // .catch() preserves the old forgiving behavior (garbage → default) rather
+  // than turning a malformed pagination param into a 400.
+  const { page, perPage, status } = runsQuerySchema.parse(req.query);
+  const where = status ? { status } : {};
+  const [runs, total] = await Promise.all([
+    prisma.syncRun.findMany({
+      where,
+      orderBy: { startedAt: 'desc' },
+      skip: (page - 1) * perPage,
+      take: perPage,
+      select: {
+        id: true,
+        status: true,
+        triggeredBy: true,
+        dryRunId: true,
+        startedAt: true,
+        completedAt: true,
+        stats: true,
+      },
+    }),
+    prisma.syncRun.count({ where }),
+  ]);
+
+  res.json({ runs, total, page, perPage });
+});
+
+router.get('/runs/:id', async (req, res) => {
+  const run = await prisma.syncRun.findUnique({ where: { id: req.params.id } });
+  if (!run) {
+    res.status(404).json({ error: 'Sync run not found', code: 'NOT_FOUND' });
+    return;
   }
+  res.json(run);
 });
 
 // ── Configuration status ───────────────────────────────────────────
@@ -201,31 +181,31 @@ router.get('/status', (_req, res) => {
 // Auth is handled by the short-lived SSE token validated inline.
 const sseRouter = Router();
 
-sseRouter.get('/runs/:runId/stream', async (req, res, next) => {
+sseRouter.get('/runs/:runId/stream', async (req, res) => {
   const sseToken = req.query.sse_token as string | undefined;
+  const { runId } = req.params;
   if (!isDevMode) {
     if (!sseToken) {
-      res.status(401).json({ error: 'Missing sse_token query parameter' });
+      res.status(401).json({ error: 'Missing sse_token query parameter', code: 'UNAUTHORIZED' });
       return;
     }
-    const { valid } = verifySseToken(sseToken);
-    if (!valid) {
-      res.status(401).json({ error: 'Invalid or expired SSE token' });
+    const verified = verifySseToken(sseToken);
+    if (!verified.valid) {
+      res.status(401).json({ error: 'Invalid or expired SSE token', code: 'UNAUTHORIZED' });
+      return;
+    }
+    // Run binding: a token minted for one run must not open another run's
+    // stream. Same 401 body as an invalid token — no oracle about which
+    // run ids exist.
+    if (verified.runId !== runId) {
+      res.status(401).json({ error: 'Invalid or expired SSE token', code: 'UNAUTHORIZED' });
       return;
     }
   }
 
-  const { runId } = req.params;
-
-  let run;
-  try {
-    run = await prisma.syncRun.findUnique({ where: { id: runId } });
-  } catch (err) {
-    next(err);
-    return;
-  }
+  const run = await prisma.syncRun.findUnique({ where: { id: runId } });
   if (!run) {
-    res.status(404).json({ error: 'Run not found' });
+    res.status(404).json({ error: 'Run not found', code: 'NOT_FOUND' });
     return;
   }
 

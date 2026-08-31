@@ -2,6 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 
+vi.mock('../../env.js', () => ({
+  env: { NODE_ENV: 'test' },
+  isDevMode: false,
+}));
+
 vi.mock('../../middleware/rbac.js', () => ({
   requireRole: (..._roles: string[]) =>
     (_req: any, _res: any, next: any) => next(),
@@ -33,20 +38,16 @@ function makeApp() {
 }
 
 /**
- * The runtime is Express 4, which does NOT forward a rejected async handler to
- * the error middleware — the rejection escapes to Node, whose default action is
- * to terminate the process. So an unwrapped `async (req, res) => { await
- * somethingThatRejects() }` turned any transient Prisma error into a full
- * outage, taking the HTTP server, the pg-boss workers and the cron with it.
+ * Pins the contract that a rejected async handler produces a 500 through the
+ * error middleware instead of crashing the process. Under Express 4 (the
+ * runtime when these tests were written) that required explicit
+ * try/catch → next(err) in every handler; the runtime is now Express 5, whose
+ * router forwards async rejections to the error middleware natively.
  *
- * These tests pin the contract that every handler routes failures through
- * next(err) instead. They are deliberately behavioural (assert the 500 response)
- * rather than asserting the presence of a try/catch, so they keep working if the
- * mechanism changes — e.g. if the runtime is later upgraded to Express 5, whose
- * router forwards rejections natively.
- *
- * The type system cannot catch this: @types/express is pinned at v5, whose
- * RequestHandler accepts a Promise-returning function.
+ * The tests are deliberately behavioural (assert the 500 response) rather than
+ * asserting the presence of a try/catch, so they keep pinning the contract no
+ * matter which mechanism provides it — a downgrade or a router swap that loses
+ * native forwarding would fail here.
  */
 describe('async route handler rejections', () => {
   beforeEach(() => {

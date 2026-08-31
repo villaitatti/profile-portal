@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import { Download, FileText, Inbox, Landmark } from 'lucide-react';
 import { useFormInvitations, useFormResponse, useFormRegistry } from '@/api/forms';
 import { useDownloadFormPdf } from '@/hooks/useDownloadFormPdf';
@@ -215,7 +215,7 @@ export function FormsSubmissionsPage() {
         />
 
         {isError ? (
-          <ErrorBanner onRetry={refetch} />
+          <ErrorBanner onRetry={() => void refetch()} />
         ) : isLoading ? (
           <ListSkeleton />
         ) : items.length === 0 ? (
@@ -226,6 +226,14 @@ export function FormsSubmissionsPage() {
           />
         ) : (
           <>
+            {data?.truncated && (
+              <div
+                role="alert"
+                className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+              >
+                {t('fellows.forms.archiveTruncated')}
+              </div>
+            )}
             {/* Announce filter-result count changes to assistive tech (WCAG 4.1.3).
                 Keeping this visually hidden avoids visual duplication of the list. */}
             <div role="status" aria-live="polite" className="sr-only">

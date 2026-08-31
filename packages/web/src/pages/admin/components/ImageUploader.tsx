@@ -293,7 +293,7 @@ export function ImageUploader({ value, blurPlaceholder, onChange, onClear }: Ima
               </DialogClose>
               <button
                 type="button"
-                onClick={handleCropConfirm}
+                onClick={() => void handleCropConfirm()}
                 disabled={isUploading}
                 className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-[0.95rem] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
               >

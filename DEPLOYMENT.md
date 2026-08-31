@@ -269,7 +269,8 @@ until an operator turns them on.
 | `JIRA_BASE_URL` + `JIRA_EMAIL` + `JIRA_API_TOKEN` + `JIRA_SERVICE_DESK_ID` + `JIRA_REQUEST_TYPE_ID` | Jira SM help tickets |
 | `ATLASSIAN_SCIM_BASE_URL` + `ATLASSIAN_SCIM_DIRECTORY_ID` + `ATLASSIAN_SCIM_BEARER_TOKEN` | Atlassian SCIM user/group sync |
 | `ATLASSIAN_JSM_SITE1_URL` + `ATLASSIAN_JSM_SITE1_FORMER_ORG_ID` + `ATLASSIAN_JSM_SITE1_CURRENT_ORG_ID` + the three matching `SITE2` values | JSM "Former/Current Appointees" organization membership on both I Tatti sites. **All six must be set**; if any is missing the feature is silently disabled, which also silently no-ops that part of the July automations. |
-| `AWS_SES_REGION` + `AWS_SES_FROM_EMAIL` + `ADMIN_NOTIFICATION_EMAIL` | Transactional email via SES (appointee emails, form notifications, automation reports). With any of these missing the app logs emails instead of sending them. |
+| `AWS_SES_REGION` + `AWS_SES_FROM_EMAIL` | Transactional email via SES (appointee emails, form notifications). With either missing the app logs emails instead of sending them. |
+| `ADMIN_NOTIFICATION_EMAIL` | Recipient for IT-admin notifications and automation reports. With it missing only those admin emails are skipped — appointee emails and form notifications still send. |
 | `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` | Read directly from the environment by the AWS SDK. Leave unset if the host provides an IAM role. |
 | `AUTH0_FELLOWS_CURRENT_ROLE_ID` | Auth0 role granted only to the current academic year's cohort. **Required for the July automations** to move fellows in and out of the current cohort; the automation cannot do its job without it. |
 | `AUTH0_CONNECTION` | Auth0 database connection name. Defaults to `Username-Password-Authentication`. |
@@ -334,7 +335,9 @@ PostgreSQL 17 runs in a separate container defined in `docker-compose.yml`. Data
 Migrations are in `packages/server/prisma/migrations/`. They run automatically on container start via `docker-entrypoint.sh`. To run manually:
 
 ```bash
-docker compose exec portal node packages/server/node_modules/prisma/build/index.js migrate deploy
+# -w matters: the Prisma 7 CLI resolves prisma.config.ts (schema path +
+# datasource URL) from its working directory — run from /app it finds neither.
+docker compose exec -w /app/packages/server portal node node_modules/prisma/build/index.js migrate deploy
 ```
 
 **Minimum PostgreSQL version: 12** — `20260423120000_add_vit_id_invitation_email_type` uses `ALTER TYPE ... ADD VALUE IF NOT EXISTS`, a syntax added in PG12. Production runs PG17 (docker-compose), so the floor only matters for operators standing up new dev/staging boxes from older images.
@@ -402,7 +405,9 @@ since it failed partway, `_prisma_migrations` has a row with a NULL
 `finished_at` that blocks future deploys:
 
 ```bash
-docker compose exec portal npx prisma migrate resolve --rolled-back 20260423120001_rekey_appointee_email_events_by_fellowship
+# The runtime image ships without npx/npm — invoke the Prisma CLI directly,
+# from packages/server so it finds prisma.config.ts.
+docker compose exec -w /app/packages/server portal node node_modules/prisma/build/index.js migrate resolve --rolled-back 20260423120001_rekey_appointee_email_events_by_fellowship
 ```
 
 Then `prisma migrate deploy` will pick up the three new migrations in order.
@@ -729,7 +734,7 @@ The sync feature requires a SCIM directory in Atlassian Guard:
 5. Generate an SSE secret: `python3 -c "import secrets, base64; print(base64.b64encode(secrets.token_bytes(32)).decode())"`
 6. Add `SSE_SECRET=<output>` to `.env`
 
-The sync is operated from the admin UI at `/admin/sync`.
+The sync is operated from the admin UI at `/admin/atlassian/sync`.
 
 ## Troubleshooting
 

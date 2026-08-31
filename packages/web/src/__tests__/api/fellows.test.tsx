@@ -11,12 +11,16 @@ import {
   EmailPreviewError,
 } from '@/api/fellows';
 
-// Mock the auth token provider — the hooks call this to attach a Bearer token.
-vi.mock('@/api/client', () => ({
-  useApiToken: () => async () => 'test-token',
-  apiUrl: (path: string) => path,
-  apiFetch: vi.fn(),
-}));
+// Partial mock: only the token hook is stubbed — apiFetch/ApiError are the
+// real implementations, so the tests cover actual header attachment and
+// error-body parsing.
+vi.mock('@/api/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/client')>();
+  return {
+    ...actual,
+    useApiToken: () => async () => 'test-token',
+  };
+});
 
 const originalFetch = globalThis.fetch;
 const fetchMock = vi.fn();
@@ -275,14 +279,11 @@ describe('useEmailPreview', () => {
     expect(result.current.data?.subject).toBe(
       'Welcome to I Tatti — Claim your VIT ID'
     );
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringMatching(
-        /\/api\/admin\/fellows\/1\/email-preview\?type=vit_id_invitation&academicYear=2026-2027/
-      ),
-      expect.objectContaining({
-        headers: { Authorization: 'Bearer test-token' },
-      })
+    expect(fetchMock.mock.calls[0][0]).toMatch(
+      /\/api\/admin\/fellows\/1\/email-preview\?type=vit_id_invitation&academicYear=2026-2027/
     );
+    const headers = fetchMock.mock.calls[0][1]?.headers as Headers;
+    expect(headers.get('Authorization')).toBe('Bearer test-token');
   });
 
   it('throws EmailPreviewError with the parsed reason on 400 {reason}', async () => {

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiFetch, apiUrl, useApiToken } from './client';
+import { ApiError, apiFetch, useApiToken } from './client';
 import type {
   FellowsDashboardResponse,
   SendBioEmailReason,
@@ -59,28 +59,24 @@ export function useSendBioEmail() {
   >({
     mutationFn: async ({ contactId, academicYear, resend }) => {
       const token = await getToken();
-      // Use fetch directly so we can distinguish 400 {reason} (eligibility) from
-      // 400 {error: 'invalid_request'} (malformed) and 500 errors. apiFetch
-      // throws on any non-2xx and strips the body shape.
-      const res = await fetch(apiUrl(`/api/admin/fellows/${contactId}/send-bio-email`), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ academicYear, ...(resend ? { resend } : {}) }),
-      });
-      if (!res.ok) {
-        const payload = await res.json().catch(() => ({}));
-        if (payload && typeof payload.reason === 'string') {
-          throw new SendBioEmailError(payload.reason as SendBioEmailReason);
+      try {
+        const res = await apiFetch(`/api/admin/fellows/${contactId}/send-bio-email`, {
+          method: 'POST',
+          token,
+          body: JSON.stringify({ academicYear, ...(resend ? { resend } : {}) }),
+        });
+        return (await res.json()) as SendBioEmailResponse;
+      } catch (err) {
+        // 400/503 { reason } is a typed eligibility/outage outcome, distinct
+        // from validation 400s and 500s — ApiError carries the parsed body.
+        if (err instanceof ApiError && err.reason) {
+          throw new SendBioEmailError(err.reason as SendBioEmailReason);
         }
-        throw new Error(payload?.error || `Request failed: ${res.status}`);
+        throw err;
       }
-      return res.json() as Promise<SendBioEmailResponse>;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['fellows'] });
+      void queryClient.invalidateQueries({ queryKey: ['fellows'] });
     },
   });
 }
@@ -111,28 +107,22 @@ export function useSendVitIdEmail() {
   >({
     mutationFn: async ({ contactId, academicYear }) => {
       const token = await getToken();
-      const res = await fetch(
-        apiUrl(`/api/admin/fellows/${contactId}/send-vit-id-email`),
-        {
+      try {
+        const res = await apiFetch(`/api/admin/fellows/${contactId}/send-vit-id-email`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
+          token,
           body: JSON.stringify({ academicYear }),
+        });
+        return (await res.json()) as SendBioEmailResponse;
+      } catch (err) {
+        if (err instanceof ApiError && err.reason) {
+          throw new SendVitIdEmailError(err.reason as SendVitIdEmailReason);
         }
-      );
-      if (!res.ok) {
-        const payload = await res.json().catch(() => ({}));
-        if (payload && typeof payload.reason === 'string') {
-          throw new SendVitIdEmailError(payload.reason as SendVitIdEmailReason);
-        }
-        throw new Error(payload?.error || `Request failed: ${res.status}`);
+        throw err;
       }
-      return res.json() as Promise<SendBioEmailResponse>;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['fellows'] });
+      void queryClient.invalidateQueries({ queryKey: ['fellows'] });
     },
   });
 }
@@ -179,18 +169,18 @@ export function useEmailPreview(args: {
         type: args.type,
         academicYear: args.academicYear as string,
       });
-      const res = await fetch(
-        apiUrl(`/api/admin/fellows/${args.contactId}/email-preview?${qs.toString()}`),
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (!res.ok) {
-        const payload = await res.json().catch(() => ({}));
-        if (payload && typeof payload.reason === 'string') {
-          throw new EmailPreviewError(payload.reason as EmailPreviewReason);
+      try {
+        const res = await apiFetch(
+          `/api/admin/fellows/${args.contactId}/email-preview?${qs.toString()}`,
+          { token }
+        );
+        return (await res.json()) as EmailPreviewResponse;
+      } catch (err) {
+        if (err instanceof ApiError && err.reason) {
+          throw new EmailPreviewError(err.reason as EmailPreviewReason);
         }
-        throw new Error(payload?.error || `Preview failed: ${res.status}`);
+        throw err;
       }
-      return res.json() as Promise<EmailPreviewResponse>;
     },
     // Previews are cheap to recompute and we want fresh data every time
     // Angela opens the modal. No stale window.

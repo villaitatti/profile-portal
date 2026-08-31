@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
+import { HttpError } from '../lib/http-error.js';
 import { listUsersByRole } from './auth0.service.js';
 import * as scim from './atlassian-scim.service.js';
 import type { ScimUser, ScimGroup } from './atlassian-scim.service.js';
@@ -15,6 +16,15 @@ export interface SyncDiff {
   usersToDeactivate: { email: string; name: string; atlassianId: string }[];
   groupsToCreate: { name: string; mappedFromRole: string }[];
   membershipChanges: { action: 'add' | 'remove'; userEmail: string; groupName: string; groupId: string | null; userScimId: string | null; reason: string }[];
+  /**
+   * RoleGroupMapping rows whose stored atlassianGroupId no longer exists in
+   * the SCIM directory, detected during diff computation. executeDiff clears
+   * these ids before applying the diff. Persisted inside `syncRun.diff` like
+   * every other field — an explicit part of the dry-run → execute contract
+   * (this used to be smuggled through a `_staleMappingIds` cast, invisible to
+   * the type and easy to drop in a refactor).
+   */
+  staleMappingIds?: string[];
 }
 
 export interface SyncOperation {
@@ -195,7 +205,7 @@ export function computeDiff(
     }
   }
   if (staleMappingIds.length > 0) {
-    (diff as SyncDiff & { _staleMappingIds?: string[] })._staleMappingIds = staleMappingIds;
+    diff.staleMappingIds = staleMappingIds;
   }
 
   // Users: create, update, membership changes
@@ -415,8 +425,12 @@ async function executeDiff(
   // Track newly created user SCIM IDs for membership resolution
   const newUserScimIds = new Map<string, string>();
 
-  // Clear stale atlassianGroupId entries detected during diff computation
-  const staleMappingIds = (diff as SyncDiff & { _staleMappingIds?: string[] })._staleMappingIds;
+  // Clear stale atlassianGroupId entries detected during diff computation.
+  // Runs also for diffs persisted before the field was typed: those carry the
+  // legacy `_staleMappingIds` key inside the stored JSON.
+  const staleMappingIds =
+    diff.staleMappingIds ??
+    (diff as SyncDiff & { _staleMappingIds?: string[] })._staleMappingIds;
   if (staleMappingIds?.length) {
     await prisma.roleGroupMapping.updateMany({
       where: { id: { in: staleMappingIds } },
@@ -676,6 +690,35 @@ async function executeDiff(
 // If a sync run has been in dry_run/executing for longer than this, treat it as crashed
 const LEASE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
+// Shared failure path for the two detached run IIFEs (dry run + execute).
+// The status write can itself throw (the DB going away is a plausible cause
+// of the outer failure); an unhandled rejection here would escape the detached
+// IIFE to the process — swallow it and still tell the client, leaving the run
+// row for the lease timeout to reclaim.
+async function failRunAndNotify(
+  runId: string,
+  emitter: EventEmitter,
+  err: unknown,
+  logEvent: string
+): Promise<void> {
+  logger.error({ err, runId }, logEvent);
+  try {
+    await prisma.syncRun.update({
+      where: { id: runId },
+      data: { status: 'failed', completedAt: new Date() },
+    });
+  } catch (updateErr) {
+    logger.error({ err: updateErr, runId }, 'Sync: could not mark run failed');
+  }
+  emitter.emit('progress', {
+    phase: 'error',
+    step: 0,
+    totalSteps: 0,
+    percentage: 0,
+    description: err instanceof Error ? err.message : 'Unknown error',
+  } satisfies SyncProgress);
+}
+
 export async function runDrySync(triggeredBy: string): Promise<{ runId: string; emitter: EventEmitter }> {
   // Atomic check-and-create inside a serializable transaction to prevent TOCTOU race
   const run = await prisma.$transaction(async (tx) => {
@@ -693,10 +736,7 @@ export async function runDrySync(triggeredBy: string): Promise<{ runId: string; 
           data: { status: 'failed', completedAt: new Date() },
         });
       } else {
-        throw Object.assign(new Error(`Sync already running by ${active.triggeredBy}`), {
-          status: 409,
-          activeRun: active,
-        });
+        throw new HttpError(409, `Sync already running by ${active.triggeredBy}`, 'SYNC_ALREADY_RUNNING', { activeRun: active });
       }
     }
     return tx.syncRun.create({
@@ -706,8 +746,8 @@ export async function runDrySync(triggeredBy: string): Promise<{ runId: string; 
 
   const emitter = new EventEmitter();
 
-  // Run async (don't await — caller consumes progress via SSE)
-  (async () => {
+  // Run async (explicitly not awaited — caller consumes progress via SSE)
+  void (async () => {
     try {
       const mappings = await prisma.roleGroupMapping.findMany();
       if (mappings.length === 0) {
@@ -751,30 +791,7 @@ export async function runDrySync(triggeredBy: string): Promise<{ runId: string; 
 
       emitter.emit('progress', { phase: 'done', step: 1, totalSteps: 1, percentage: 100, description: 'Dry run complete' } satisfies SyncProgress);
     } catch (err) {
-      logger.error({ err, runId: run.id }, 'Dry sync failed');
-      // The status write can itself throw (the DB going away is a plausible
-      // cause of the outer failure). This runs inside a detached IIFE, so an
-      // unhandled rejection here would escape to the process — swallow it and
-      // still tell the client, leaving the run row for the lease timeout to
-      // reclaim.
-      try {
-        await prisma.syncRun.update({
-          where: { id: run.id },
-          data: { status: 'failed', completedAt: new Date() },
-        });
-      } catch (updateErr) {
-        logger.error(
-          { err: updateErr, runId: run.id },
-          'Sync: could not mark run failed'
-        );
-      }
-      emitter.emit('progress', {
-        phase: 'error',
-        step: 0,
-        totalSteps: 0,
-        percentage: 0,
-        description: err instanceof Error ? err.message : 'Unknown error',
-      } satisfies SyncProgress);
+      await failRunAndNotify(run.id, emitter, err, 'Dry sync failed');
     }
   })();
 
@@ -802,29 +819,26 @@ export async function executeSync(
           data: { status: 'failed', completedAt: new Date() },
         });
       } else {
-        throw Object.assign(new Error(`Sync already running by ${active.triggeredBy}`), {
-          status: 409,
-          activeRun: active,
-        });
+        throw new HttpError(409, `Sync already running by ${active.triggeredBy}`, 'SYNC_ALREADY_RUNNING', { activeRun: active });
       }
     }
 
     const dr = await tx.syncRun.findUnique({ where: { id: dryRunId } });
-    if (!dr) throw Object.assign(new Error('Dry run not found'), { status: 404 });
-    if (dr.status !== 'completed') throw Object.assign(new Error('Can only execute a completed dry run'), { status: 400 });
-    if (!dr.completedAt) throw Object.assign(new Error('Dry run has no completion timestamp'), { status: 400 });
+    if (!dr) throw new HttpError(404, 'Dry run not found', 'NOT_FOUND');
+    if (dr.status !== 'completed') throw new HttpError(400, 'Can only execute a completed dry run', 'DRY_RUN_INVALID');
+    if (!dr.completedAt) throw new HttpError(400, 'Dry run has no completion timestamp', 'DRY_RUN_INVALID');
 
     // Prevent replay: check if this dry run was already executed
     const priorExecution = await tx.syncRun.findFirst({
       where: { dryRunId, status: { not: 'failed' } },
     });
     if (priorExecution) {
-      throw Object.assign(new Error('This dry run has already been executed'), { status: 409 });
+      throw new HttpError(409, 'This dry run has already been executed', 'DRY_RUN_ALREADY_EXECUTED');
     }
 
     const age = Date.now() - dr.completedAt.getTime();
     if (age > DRY_RUN_TTL_MS) {
-      throw Object.assign(new Error(`Dry run expired (${Math.round(age / 60_000)} minutes old, max 60)`), { status: 400 });
+      throw new HttpError(400, `Dry run expired (${Math.round(age / 60_000)} minutes old, max 60)`, 'DRY_RUN_EXPIRED');
     }
 
     const created = await tx.syncRun.create({
@@ -836,7 +850,8 @@ export async function executeSync(
 
   const emitter = new EventEmitter();
 
-  (async () => {
+  // Explicitly not awaited — caller consumes progress via SSE.
+  void (async () => {
     try {
       const startTime = Date.now();
       const diff = dryRun.diff as unknown as SyncDiff;
@@ -870,30 +885,7 @@ export async function executeSync(
 
       emitter.emit('progress', { phase: 'done', step: 1, totalSteps: 1, percentage: 100, description: `Execution ${status}` } satisfies SyncProgress);
     } catch (err) {
-      logger.error({ err, runId: run.id }, 'Sync execution failed');
-      // The status write can itself throw (the DB going away is a plausible
-      // cause of the outer failure). This runs inside a detached IIFE, so an
-      // unhandled rejection here would escape to the process — swallow it and
-      // still tell the client, leaving the run row for the lease timeout to
-      // reclaim.
-      try {
-        await prisma.syncRun.update({
-          where: { id: run.id },
-          data: { status: 'failed', completedAt: new Date() },
-        });
-      } catch (updateErr) {
-        logger.error(
-          { err: updateErr, runId: run.id },
-          'Sync: could not mark run failed'
-        );
-      }
-      emitter.emit('progress', {
-        phase: 'error',
-        step: 0,
-        totalSteps: 0,
-        percentage: 0,
-        description: err instanceof Error ? err.message : 'Unknown error',
-      } satisfies SyncProgress);
+      await failRunAndNotify(run.id, emitter, err, 'Sync execution failed');
     }
   })();
 

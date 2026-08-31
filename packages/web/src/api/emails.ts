@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
-import { apiUrl, useApiToken } from './client';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { ApiError, apiFetch, useApiToken } from './client';
 
 export interface EmailEvent {
   id: string;
@@ -45,31 +45,33 @@ export interface EmailEventsResponse {
   nextCursor: string | null;
 }
 
-export function useEmailEvents(params: EmailEventsParams = {}) {
+export function useEmailEvents(params: Omit<EmailEventsParams, 'cursor'> = {}) {
   const getToken = useApiToken();
 
-  return useQuery({
+  // Filters live in the query key, so changing a filter starts a fresh
+  // paginated list; the cursor is TanStack's page param, not a filter.
+  return useInfiniteQuery({
     queryKey: ['admin-emails', params],
-    queryFn: async () => {
+    queryFn: async ({ pageParam }) => {
       const token = await getToken();
-      const url = new URL(apiUrl('/api/admin/emails'), window.location.origin);
-      if (params.limit) url.searchParams.set('limit', String(params.limit));
-      if (params.cursor) url.searchParams.set('cursor', params.cursor);
-      if (params.year && params.year !== 'all') url.searchParams.set('year', params.year);
-      if (params.type && params.type !== 'all') url.searchParams.set('type', params.type);
-      if (params.status) url.searchParams.set('status', params.status);
-
-      const res = await fetch(url.toString(), {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      if (!res.ok) throw new Error(`Failed to load emails: ${res.status}`);
+      const qs = emailEventsQueryString({ ...params, cursor: pageParam });
+      const res = await apiFetch(`/api/admin/emails?${qs}`, { token });
       return (await res.json()) as EmailEventsResponse;
     },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
     staleTime: 60_000,
   });
+}
+
+export function emailEventsQueryString(params: EmailEventsParams): string {
+  const qs = new URLSearchParams();
+  if (params.limit) qs.set('limit', String(params.limit));
+  if (params.cursor) qs.set('cursor', params.cursor);
+  if (params.year && params.year !== 'all') qs.set('year', params.year);
+  if (params.type && params.type !== 'all') qs.set('type', params.type);
+  if (params.status) qs.set('status', params.status);
+  return qs.toString();
 }
 
 export function useEmailEventPreview(eventId: string | null) {
@@ -80,17 +82,15 @@ export function useEmailEventPreview(eventId: string | null) {
     queryFn: async () => {
       if (!eventId) return null;
       const token = await getToken();
-      const res = await fetch(apiUrl(`/api/admin/emails/${eventId}/preview`), {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.reason || body.error || `Preview failed: ${res.status}`);
+      try {
+        const res = await apiFetch(`/api/admin/emails/${eventId}/preview`, { token });
+        return (await res.json()) as EmailEventPreview;
+      } catch (err) {
+        // The 503 body is { reason: 'civicrm_unavailable' } — surface the
+        // reason as the message the page renders, as before.
+        if (err instanceof ApiError && err.reason) throw new Error(err.reason);
+        throw err;
       }
-      return (await res.json()) as EmailEventPreview;
     },
     enabled: !!eventId,
     staleTime: 5 * 60_000,
@@ -105,13 +105,7 @@ export function useTemplatePreview(type: 'vit-id-invitation' | 'bio-project-desc
     queryFn: async () => {
       if (!type) return null;
       const token = await getToken();
-      const res = await fetch(apiUrl(`/api/admin/emails/templates/${type}/preview`), {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      if (!res.ok) throw new Error(`Template preview failed: ${res.status}`);
+      const res = await apiFetch(`/api/admin/emails/templates/${type}/preview`, { token });
       return (await res.json()) as TemplatePreview;
     },
     enabled: !!type,

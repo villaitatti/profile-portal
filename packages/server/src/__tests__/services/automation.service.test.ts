@@ -44,7 +44,8 @@ vi.mock('../../lib/logger.js', () => ({
 }));
 vi.mock('../../env.js', () => ({ env: envMock, isDevMode: false }));
 
-import { executeAutomation } from '../../services/automation.service.js';
+import cron from 'node-cron';
+import { executeAutomation, registerCronJobs } from '../../services/automation.service.js';
 
 const EMAILS = ['a@x.org', 'b@x.org', 'c@x.org'];
 
@@ -114,5 +115,55 @@ describe('executeAutomation status derivation', () => {
       executeAutomation('dry-1', 'admin:test', 'backfill')
     ).rejects.toThrow(/is a "end-of-year-cleanup" run, not "backfill"/);
     expect(mockPrisma.automationRun.create).not.toHaveBeenCalled();
+  });
+});
+
+// Regression: the two cron flags must be independent gates. An earlier version
+// of registerCronJobs returned early when AUTOMATIONS_ENABLED was false, which
+// silently disabled the bio-email cron too — a deployment setting only
+// APPOINTEE_EMAIL_CRON_ENABLED=true never dispatched, and claim-enqueued rows
+// stayed PENDING forever.
+describe('registerCronJobs flag gating', () => {
+  const scheduleMock = vi.mocked(cron.schedule);
+
+  function scheduledExpressions(): string[] {
+    return scheduleMock.mock.calls.map((call) => call[0] as string);
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    envMock.AUTOMATIONS_ENABLED = false;
+    envMock.APPOINTEE_EMAIL_CRON_ENABLED = false;
+  });
+
+  it('registers the daily bio-email cron even when AUTOMATIONS_ENABLED is false', () => {
+    envMock.APPOINTEE_EMAIL_CRON_ENABLED = true;
+
+    registerCronJobs();
+
+    expect(scheduledExpressions()).toEqual(['0 9 * * *']);
+  });
+
+  it('registers the July crons without the bio-email cron when only AUTOMATIONS_ENABLED is true', () => {
+    envMock.AUTOMATIONS_ENABLED = true;
+
+    registerCronJobs();
+
+    expect(scheduledExpressions()).toEqual(['0 4 1 7 *', '0 4 2 7 *']);
+  });
+
+  it('registers all three crons when both flags are true', () => {
+    envMock.AUTOMATIONS_ENABLED = true;
+    envMock.APPOINTEE_EMAIL_CRON_ENABLED = true;
+
+    registerCronJobs();
+
+    expect(scheduledExpressions()).toEqual(['0 4 1 7 *', '0 4 2 7 *', '0 9 * * *']);
+  });
+
+  it('registers nothing when both flags are false', () => {
+    registerCronJobs();
+
+    expect(scheduleMock).not.toHaveBeenCalled();
   });
 });

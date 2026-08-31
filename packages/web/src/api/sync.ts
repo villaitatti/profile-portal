@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import i18n from '@/i18n/config';
 import { apiFetch, apiUrl, useApiToken } from './client';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -126,8 +127,8 @@ export function useCreateMapping() {
       return res.json() as Promise<RoleGroupMapping>;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sync-mappings'] });
-      queryClient.invalidateQueries({ queryKey: ['sync-groups'] });
+      void queryClient.invalidateQueries({ queryKey: ['sync-mappings'] });
+      void queryClient.invalidateQueries({ queryKey: ['sync-groups'] });
     },
   });
 }
@@ -193,10 +194,19 @@ export function useSyncRunDetail(runId: string | null) {
 
 // ── SSE token + stream helper ──────────────────────────────────────
 
-// Fetch a short-lived SSE token (5 min expiry) so we never put the full JWT in a URL.
-export async function fetchSseToken(getToken: () => Promise<string>): Promise<string> {
+// Fetch a short-lived SSE token (5 min expiry) so we never put the full JWT
+// in a URL. The token is bound to one runId — the server refuses it for any
+// other run's stream — so it can only be requested once the run exists.
+export async function fetchSseToken(
+  getToken: () => Promise<string>,
+  runId: string
+): Promise<string> {
   const jwt = await getToken();
-  const res = await apiFetch('/api/admin/sync/sse-token', { method: 'POST', token: jwt });
+  const res = await apiFetch('/api/admin/sync/sse-token', {
+    method: 'POST',
+    token: jwt,
+    body: JSON.stringify({ runId }),
+  });
   const data = await res.json() as { token: string };
   return data.token;
 }
@@ -230,7 +240,9 @@ export function subscribeSyncProgress(
 
   source.onerror = () => {
     source.close();
-    onError('Connection lost');
+    // Translated here rather than by the consumer: AtlassianSyncPage renders
+    // this message verbatim in the run-failure banner.
+    onError(i18n.t('admin.atlassian.sync.connectionLost'));
   };
 
   return () => source.close();

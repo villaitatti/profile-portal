@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router';
 import { useAuth0 } from '@auth0/auth0-react';
 import { useTranslation } from 'react-i18next';
 import { LogOut, User } from 'lucide-react';
@@ -52,10 +52,15 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
     (item.end ?? true) ? pathname === item.path : pathname.startsWith(item.path);
 
   const handleLogout = () =>
-    logout({ logoutParams: { returnTo: window.location.origin } });
+    void logout({ logoutParams: { returnTo: window.location.origin } });
 
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar
+      collapsible="icon"
+      // The ui/sidebar primitive stays i18n-free; translated copy is injected here.
+      sheetTitle={t('common.sidebar')}
+      sheetDescription={t('common.mobileSidebarDescription')}
+    >
       <SidebarHeader>
         <div className="flex items-center px-2 pt-2">
           <img
@@ -130,7 +135,7 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
           v{__APP_VERSION__}
         </p>
       </SidebarFooter>
-      <SidebarRail />
+      <SidebarRail aria-label={t('common.toggleSidebar')} title={t('common.toggleSidebar')} />
     </Sidebar>
   );
 }

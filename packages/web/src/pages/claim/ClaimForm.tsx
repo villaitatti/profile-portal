@@ -64,7 +64,7 @@ export function ClaimForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="rounded-xl border bg-card p-8">
+    <form onSubmit={(e) => void handleSubmit(onSubmit)(e)} className="rounded-xl border bg-card p-8">
       <h2 className="text-xl font-semibold mb-2">{t('claim.form.title')}</h2>
       <p className="text-muted-foreground mb-6 text-sm">{t('claim.form.description')}</p>
 

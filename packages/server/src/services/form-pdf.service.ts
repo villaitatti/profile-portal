@@ -1,6 +1,20 @@
 import ReactPDF from '@react-pdf/renderer';
 import React from 'react';
-import type { FormDef, FormFieldDef, FormPdfKind } from '@itatti/shared';
+import type { FormDef, FormFieldDef, FormPdfKind, VisibleField } from '@itatti/shared';
+import {
+  formatRepeatableGroupValue,
+  formatValue,
+  getVisibleFields,
+  isDataField,
+  isFieldVisible,
+} from '@itatti/shared';
+
+// The display walker (visibility filtering + value formatting) lives in
+// @itatti/shared/form-render — one implementation for PDF and web. This
+// module keeps only the PDF-specific layout: section selection per pdfKind,
+// the legal-address block, inline row grouping, and the ReactPDF document.
+export { getVisibleFields };
+export type { VisibleField };
 
 const { Document, Page, Text, View, StyleSheet } = ReactPDF;
 
@@ -20,18 +34,6 @@ export interface FormPdfAttachment {
   kind?: FormPdfKind;
   label: string;
   buffer: Buffer;
-}
-
-/**
- * Canonical (label, value) pair that appears in the rendered form output.
- * Produced by {@link getVisibleFields}; consumed by archive/detail callers and
- * by the parity test that compares server-side field formatting to the web
- * detail pane.
- */
-export interface VisibleField {
-  name: string;
-  label: string;
-  value: string;
 }
 
 export interface VisibleFieldRow extends VisibleField {
@@ -172,43 +174,6 @@ export function getFormPdfKindLabel(formDef: FormDef, kind: FormPdfKind): string
   return pdfKindLabel(kind);
 }
 
-function isFieldVisible(field: FormFieldDef, data: Record<string, unknown>): boolean {
-  if (!field.conditionalOn) return true;
-  return data[field.conditionalOn.field] === field.conditionalOn.value;
-}
-
-function isDataField(field: FormFieldDef): boolean {
-  return field.type !== 'subheader';
-}
-
-/**
- * Walks formDef.sections in order, filters fields by their conditionalOn
- * against the response data, and returns the canonical (label, value) list
- * the UI/PDF should render. Shared with the web walker so the two surfaces
- * cannot drift silently. See {@link VisibleField}.
- */
-export function getVisibleFields(
-  formDef: FormDef,
-  data: Record<string, unknown>
-): VisibleField[] {
-  const out: VisibleField[] = [];
-  for (const section of formDef.sections) {
-    for (const field of section.fields) {
-      if (!isFieldVisible(field, data)) continue;
-      if (!isDataField(field)) continue;
-      out.push({
-        name: field.name,
-        label: field.label,
-        value:
-          field.type === 'repeatable-group'
-            ? formatRepeatableGroupValue(data[field.name], field)
-            : formatValue(data[field.name], field.type),
-      });
-    }
-  }
-  return out;
-}
-
 export function getVisiblePdfSections(
   formDef: FormDef,
   data: Record<string, unknown>,
@@ -324,70 +289,6 @@ function buildRepeatableGroupRow(
   };
 }
 
-function formatRepeatableGroupValue(value: unknown, field: FormFieldDef): string {
-  if (!Array.isArray(value) || value.length === 0) return '—';
-  const childFields = field.fields?.filter(isDataField) ?? [];
-  return value
-    .map((item, index) => {
-      if (!item || typeof item !== 'object' || Array.isArray(item)) {
-        return String(item);
-      }
-      const data = item as Record<string, unknown>;
-      const lines = childFields.map((childField) => {
-        const formatted = formatValue(data[childField.name], childField.type);
-        return `${childField.label}: ${formatted}`;
-      });
-      return `${field.itemLabel ?? 'Entry'} ${index + 1}\n${lines.join('\n')}`;
-    })
-    .join('\n\n');
-}
-
-/**
- * Format a single response value for rendering. Explicit rule table to avoid
- * coercion bugs (notably: `0` must render as "0", not "—"; `false` renders
- * as "No", not "—"). Kept intentionally in lockstep with the web walker at
- * packages/web/src/lib/form-render.ts#formatValue.
- */
-function formatValue(value: unknown, fieldType?: FormFieldDef['type']): string {
-  if (value === null || value === undefined) return '—';
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-  if (typeof value === 'string') {
-    if (value === '') return '—';
-    if (fieldType === 'date') return formatDateOnly(value);
-    return value;
-  }
-  if (typeof value === 'number') return String(value);
-  if (Array.isArray(value)) return value.length === 0 ? '—' : value.map(String).join(', ');
-  if (typeof value === 'object') {
-    try {
-      return JSON.stringify(value);
-    } catch {
-      return '[unserializable]';
-    }
-  }
-  return String(value);
-}
-
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-function formatDateOnly(s: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
-  if (!match) return s;
-  const y = Number(match[1]);
-  const m = Number(match[2]);
-  const d = Number(match[3]);
-  if (!y || m < 1 || m > 12 || d < 1 || d > 31) return s;
-  const date = new Date(y, m - 1, d);
-  if (
-    date.getFullYear() !== y ||
-    date.getMonth() !== m - 1 ||
-    date.getDate() !== d
-  ) {
-    return s;
-  }
-  return `${d} ${MONTHS[m - 1]} ${y}`;
-}
-
 function FormDocument({
   formDef,
   data,
@@ -500,8 +401,13 @@ export async function generateFormPdf(
     data,
     kind: options?.kind,
     metadata: options?.metadata,
-  }) as any;
-  const stream = await ReactPDF.renderToStream(element);
+  });
+  // react-pdf's renderToStream expects its own Document element type, which
+  // React 19's createElement typing can't express — bridge via the function's
+  // declared parameter type instead of `any`.
+  const stream = await ReactPDF.renderToStream(
+    element as unknown as Parameters<typeof ReactPDF.renderToStream>[0]
+  );
 
   const chunks: Buffer[] = [];
   for await (const chunk of stream) {

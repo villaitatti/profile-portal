@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Application } from '@itatti/shared';
 import { Pencil, Trash2, ExternalLink } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 
 interface AppTableProps {
@@ -14,6 +14,17 @@ interface AppTableProps {
 export function AppTable({ applications, onDelete, isDeleting }: AppTableProps) {
   const { t } = useTranslation();
   const [deleteTarget, setDeleteTarget] = useState<Application | null>(null);
+
+  const handleConfirmDelete = async () => {
+    if (deleteTarget) {
+      try {
+        await onDelete(deleteTarget.id);
+        setDeleteTarget(null);
+      } catch {
+        // Dialog stays open — error surfaced by parent via toast
+      }
+    }
+  };
 
   return (
     <>
@@ -107,16 +118,7 @@ export function AppTable({ applications, onDelete, isDeleting }: AppTableProps) 
       </div>
       <ConfirmDialog
         open={!!deleteTarget}
-        onConfirm={async () => {
-          if (deleteTarget) {
-            try {
-              await onDelete(deleteTarget.id);
-              setDeleteTarget(null);
-            } catch {
-              // Dialog stays open — error surfaced by parent via toast
-            }
-          }
-        }}
+        onConfirm={() => void handleConfirmDelete()}
         onCancel={() => setDeleteTarget(null)}
         title={t('admin.apps.table.deleteTitle')}
         description={

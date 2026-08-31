@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router';
 import type { ReactNode } from 'react';
 
 // Hoisted mocks for the hooks
@@ -19,21 +20,35 @@ vi.mock('@/api/emails', () => ({
   useTemplatePreview: mockUseTemplatePreview,
 }));
 
-// "Load more" bypasses the query hooks and fetches the next cursor page itself.
-vi.mock('@/api/client', () => ({
-  apiUrl: (path: string) => path,
-  useApiToken: () => async () => 'test-token',
-}));
-
 import { EmailsPage } from '@/pages/admin/EmailsPage';
-import type { EmailEvent } from '@/api/emails';
+import type { EmailEvent, EmailEventsResponse } from '@/api/emails';
 
-function makeWrapper() {
+// Builds the useInfiniteQuery-shaped result the page consumes.
+function infiniteResult(
+  pages: EmailEventsResponse[] | undefined,
+  overrides: Record<string, unknown> = {}
+) {
+  return {
+    data: pages ? { pages, pageParams: pages.map((_, i) => (i === 0 ? undefined : `c${i}`)) } : undefined,
+    isLoading: false,
+    error: null,
+    fetchNextPage: vi.fn(),
+    hasNextPage: pages ? pages[pages.length - 1].nextCursor != null : false,
+    isFetchingNextPage: false,
+    isFetchNextPageError: false,
+    ...overrides,
+  };
+}
+
+// The page persists its filters/sort in the URL, so it needs a router.
+function makeWrapper(initialPath = '/admin/emails') {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0, staleTime: 0 } },
   });
   return ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={[initialPath]}>{children}</MemoryRouter>
+    </QueryClientProvider>
   );
 }
 
@@ -101,14 +116,17 @@ function getStableResponse(params: Record<string, string | number | undefined>) 
   return stableResponses.get(key)!;
 }
 
+const stableResults = new Map<string, ReturnType<typeof infiniteResult>>();
+
 function setDefaultHookStates() {
   stableResponses.clear();
+  stableResults.clear();
   mockUseEmailEvents.mockImplementation((params: Record<string, string | number | undefined> = {}) => {
-    return {
-      data: getStableResponse(params),
-      isLoading: false,
-      error: null,
-    };
+    const key = JSON.stringify(params);
+    if (!stableResults.has(key)) {
+      stableResults.set(key, infiniteResult([getStableResponse(params)]));
+    }
+    return stableResults.get(key)!;
   });
   mockUseEmailEventPreview.mockReturnValue({
     data: null,
@@ -158,11 +176,7 @@ describe('EmailsPage — structure', () => {
 
 describe('EmailsPage — Sent emails tab — loading state', () => {
   it('shows skeleton blocks while loading', () => {
-    mockUseEmailEvents.mockReturnValue({
-      data: undefined,
-      isLoading: true,
-      error: null,
-    });
+    mockUseEmailEvents.mockReturnValue(infiniteResult(undefined, { isLoading: true }));
     const Wrapper = makeWrapper();
     const { container } = render(
       <Wrapper>
@@ -178,11 +192,9 @@ describe('EmailsPage — Sent emails tab — loading state', () => {
 
 describe('EmailsPage — Sent emails tab — error state', () => {
   it('shows error message when loading fails', () => {
-    mockUseEmailEvents.mockReturnValue({
-      data: undefined,
-      isLoading: false,
-      error: new Error('Network error'),
-    });
+    mockUseEmailEvents.mockReturnValue(
+      infiniteResult(undefined, { error: new Error('Network error') })
+    );
     const Wrapper = makeWrapper();
     render(
       <Wrapper>
@@ -197,11 +209,7 @@ describe('EmailsPage — Sent emails tab — error state', () => {
 
 describe('EmailsPage — Sent emails tab — empty state', () => {
   it('shows "No emails sent yet" when there are zero events', () => {
-    mockUseEmailEvents.mockReturnValue({
-      data: { events: [], nextCursor: null },
-      isLoading: false,
-      error: null,
-    });
+    mockUseEmailEvents.mockReturnValue(infiniteResult([{ events: [], nextCursor: null }]));
     const Wrapper = makeWrapper();
     render(
       <Wrapper>
@@ -348,6 +356,66 @@ describe('EmailsPage — Sent emails tab — filters', () => {
     expect(screen.queryByText('Elena Petrova')).not.toBeInTheDocument();
   });
 
+  it('initializes the year filter from the URL', () => {
+    const Wrapper = makeWrapper('/admin/emails?year=2024-2025');
+    render(
+      <Wrapper>
+        <EmailsPage />
+      </Wrapper>
+    );
+
+    expect(screen.getByText('Elena Petrova')).toBeInTheDocument();
+    expect(screen.queryByText('Sophie Laurent')).not.toBeInTheDocument();
+    expect(screen.queryByText('James Chen')).not.toBeInTheDocument();
+    // The dropdown must DISPLAY the active year, not the "All years"
+    // placeholder — on a deep link the year isn't in knownYears yet, so the
+    // page splices the active value into the options.
+    expect(
+      screen.getByRole('combobox', { name: 'Filter by academic year' })
+    ).toHaveTextContent('2024-2025');
+  });
+
+  it('initializes the type filter from the URL', () => {
+    const Wrapper = makeWrapper('/admin/emails?type=VIT_ID_INVITATION');
+    render(
+      <Wrapper>
+        <EmailsPage />
+      </Wrapper>
+    );
+
+    expect(screen.getByText('James Chen')).toBeInTheDocument();
+    expect(screen.queryByText('Sophie Laurent')).not.toBeInTheDocument();
+  });
+
+  it('initializes the status filter from the URL', () => {
+    const Wrapper = makeWrapper('/admin/emails?status=FAILED');
+    render(
+      <Wrapper>
+        <EmailsPage />
+      </Wrapper>
+    );
+
+    expect(screen.getByText('James Chen')).toBeInTheDocument();
+    expect(screen.queryByText('Sophie Laurent')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Failed status filter' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+  });
+
+  it('ignores invalid type/status values in the URL and shows everything', () => {
+    const Wrapper = makeWrapper('/admin/emails?type=BOGUS&status=NOT_A_STATUS');
+    render(
+      <Wrapper>
+        <EmailsPage />
+      </Wrapper>
+    );
+
+    expect(screen.getByText('Sophie Laurent')).toBeInTheDocument();
+    expect(screen.getByText('James Chen')).toBeInTheDocument();
+    expect(screen.getByText('Elena Petrova')).toBeInTheDocument();
+  });
+
   it('shows "No emails match these filters" when filters exclude all events', () => {
     const Wrapper = makeWrapper();
     render(
@@ -367,13 +435,10 @@ describe('EmailsPage — Sent emails tab — filters', () => {
 // ─── Sent Emails Tab — Pagination ───────────────────────────────────────────
 
 describe('EmailsPage — Sent emails tab — pagination', () => {
-  it('shows "Load more" button when nextCursor is present', () => {
-    const stableData = { events: mockEvents.slice(0, 2), nextCursor: 'cursor-abc' };
-    mockUseEmailEvents.mockReturnValue({
-      data: stableData,
-      isLoading: false,
-      error: null,
-    });
+  it('shows "Load more" button when hasNextPage is true', () => {
+    mockUseEmailEvents.mockReturnValue(
+      infiniteResult([{ events: mockEvents.slice(0, 2), nextCursor: 'cursor-abc' }])
+    );
 
     const Wrapper = makeWrapper();
     render(
@@ -385,7 +450,7 @@ describe('EmailsPage — Sent emails tab — pagination', () => {
     expect(screen.getByRole('button', { name: 'Load more' })).toBeInTheDocument();
   });
 
-  it('does not show "Load more" button when nextCursor is null', () => {
+  it('does not show "Load more" button when there is no next page', () => {
     const Wrapper = makeWrapper();
     render(
       <Wrapper>
@@ -396,53 +461,49 @@ describe('EmailsPage — Sent emails tab — pagination', () => {
     expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
   });
 
-  it('keeps loaded pages when the first-page query returns a new object for the same filters', async () => {
-    // staleTime + window-focus refetch hands back a fresh object identity. That
-    // must not collapse pages the admin already loaded.
-    const firstPage = { events: [mockEvents[0]], nextCursor: 'cursor-abc' };
-    mockUseEmailEvents.mockReturnValue({ data: firstPage, isLoading: false, error: null });
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ events: [mockEvents[1]], nextCursor: null }), { status: 200 })
+  it('renders rows from every loaded page', () => {
+    mockUseEmailEvents.mockReturnValue(
+      infiniteResult([
+        { events: [mockEvents[0]], nextCursor: 'cursor-abc' },
+        { events: [mockEvents[1]], nextCursor: null },
+      ])
     );
 
     const Wrapper = makeWrapper();
-    const { rerender } = render(
+    render(
+      <Wrapper>
+        <EmailsPage />
+      </Wrapper>
+    );
+
+    expect(screen.getByText('Sophie Laurent')).toBeInTheDocument();
+    expect(screen.getByText('James Chen')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+  });
+
+  it('wires "Load more" to fetchNextPage', async () => {
+    const result = infiniteResult([{ events: [mockEvents[0]], nextCursor: 'cursor-abc' }]);
+    mockUseEmailEvents.mockReturnValue(result);
+
+    const Wrapper = makeWrapper();
+    render(
       <Wrapper>
         <EmailsPage />
       </Wrapper>
     );
 
     await userEvent.setup().click(screen.getByRole('button', { name: 'Load more' }));
-    await waitFor(() => expect(screen.getByText('James Chen')).toBeInTheDocument());
 
-    // Same filters, new object identity — a background refetch.
-    mockUseEmailEvents.mockReturnValue({
-      data: { events: [mockEvents[0]], nextCursor: 'cursor-abc' },
-      isLoading: false,
-      error: null,
-    });
-    rerender(
-      <Wrapper>
-        <EmailsPage />
-      </Wrapper>
-    );
-
-    expect(screen.getByText('James Chen')).toBeInTheDocument();
+    expect(result.fetchNextPage).toHaveBeenCalledTimes(1);
   });
 
-  it('resets loaded pages when a filter changes', async () => {
-    mockUseEmailEvents.mockImplementation((params: Record<string, string | number | undefined> = {}) => ({
-      data: params.status
-        ? { events: [mockEvents[1]], nextCursor: null }
-        : { events: [mockEvents[0]], nextCursor: 'cursor-abc' },
-      isLoading: false,
-      error: null,
-    }));
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ events: [mockEvents[2]], nextCursor: null }), { status: 200 })
+  it('disables the button and shows the loading label while fetching the next page', () => {
+    mockUseEmailEvents.mockReturnValue(
+      infiniteResult([{ events: [mockEvents[0]], nextCursor: 'cursor-abc' }], {
+        isFetchingNextPage: true,
+      })
     );
 
-    const user = userEvent.setup();
     const Wrapper = makeWrapper();
     render(
       <Wrapper>
@@ -450,29 +511,17 @@ describe('EmailsPage — Sent emails tab — pagination', () => {
       </Wrapper>
     );
 
-    await user.click(screen.getByRole('button', { name: 'Load more' }));
-    await waitFor(() => expect(screen.getByText('Elena Petrova')).toBeInTheDocument());
-
-    await user.click(screen.getByRole('button', { name: 'Failed status filter' }));
-
-    await waitFor(() => expect(screen.queryByText('Elena Petrova')).not.toBeInTheDocument());
-    expect(screen.getByText('James Chen')).toBeInTheDocument();
+    const button = screen.getByRole('button', { name: 'Loading...' });
+    expect(button).toBeDisabled();
   });
 
-  it('reports a failed "Load more" and offers a retry', async () => {
-    mockUseEmailEvents.mockReturnValue({
-      data: { events: [mockEvents[0]], nextCursor: 'cursor-abc' },
-      isLoading: false,
-      error: null,
+  it('reports a failed "Load more" inline, keeps loaded rows, and offers a retry', async () => {
+    const result = infiniteResult([{ events: [mockEvents[0]], nextCursor: 'cursor-abc' }], {
+      error: new Error('boom'),
+      isFetchNextPageError: true,
     });
-    const fetchMock = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(new Response('nope', { status: 500 }))
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ events: [mockEvents[1]], nextCursor: null }), { status: 200 })
-      );
+    mockUseEmailEvents.mockReturnValue(result);
 
-    const user = userEvent.setup();
     const Wrapper = makeWrapper();
     render(
       <Wrapper>
@@ -480,19 +529,13 @@ describe('EmailsPage — Sent emails tab — pagination', () => {
       </Wrapper>
     );
 
-    await user.click(screen.getByRole('button', { name: 'Load more' }));
-
-    await waitFor(() =>
-      expect(screen.getByRole('alert')).toHaveTextContent('Could not load more emails.')
-    );
+    expect(screen.getByRole('alert')).toHaveTextContent('Could not load more emails.');
     // Rows already fetched stay on screen and the same page can be retried.
     expect(screen.getByText('Sophie Laurent')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Try again' }));
 
-    await waitFor(() => expect(screen.getByText('James Chen')).toBeInTheDocument());
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.fetchNextPage).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -556,6 +599,38 @@ describe('EmailsPage — Sent emails tab — sorting', () => {
     // In asc order by enqueuedAt: James (Apr 8) -> Sophie (Apr 10) -> Elena (Apr 27)
     expect(within(rows[0]).getByText('James Chen')).toBeInTheDocument();
     expect(within(rows[2]).getByText('Elena Petrova')).toBeInTheDocument();
+  });
+
+  it('exposes aria-sort on the sortable header and initializes sort from the URL', () => {
+    const Wrapper = makeWrapper('/admin/emails?sort=enqueuedAt&dir=asc');
+    render(
+      <Wrapper>
+        <EmailsPage />
+      </Wrapper>
+    );
+
+    const enqueuedHeader = screen
+      .getByRole('button', { name: /Enqueued/i })
+      .closest('th');
+    expect(enqueuedHeader).toHaveAttribute('aria-sort', 'ascending');
+
+    const rows = screen.getAllByRole('row').slice(1);
+    expect(within(rows[0]).getByText('James Chen')).toBeInTheDocument();
+    expect(within(rows[2]).getByText('Elena Petrova')).toBeInTheDocument();
+  });
+
+  it('marks the default sort as descending via aria-sort', () => {
+    const Wrapper = makeWrapper();
+    render(
+      <Wrapper>
+        <EmailsPage />
+      </Wrapper>
+    );
+
+    const enqueuedHeader = screen
+      .getByRole('button', { name: /Enqueued/i })
+      .closest('th');
+    expect(enqueuedHeader).toHaveAttribute('aria-sort', 'descending');
   });
 });
 

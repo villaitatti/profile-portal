@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router';
 import { useState, type ReactNode } from 'react';
 
 const { mockUsePublicForm, mockUseSubmitForm, mockMutate } = vi.hoisted(() => ({
@@ -339,7 +339,7 @@ describe('PublicFormPage — submission flow', () => {
     // same PublicFormPage instance alive and only useParams() changes.
     const NavButton = () => {
       const navigate = useNavigate();
-      return <button onClick={() => navigate('/forms/tokB')}>nav</button>;
+      return <button onClick={() => void navigate('/forms/tokB')}>nav</button>;
     };
     render(
       <QueryClientProvider client={client}>
@@ -451,7 +451,7 @@ describe('PublicFormPage — submission flow', () => {
     });
     const NavButton = () => {
       const navigate = useNavigate();
-      return <button onClick={() => navigate('/forms/tokB')}>nav</button>;
+      return <button onClick={() => void navigate('/forms/tokB')}>nav</button>;
     };
     render(
       <QueryClientProvider client={client}>
