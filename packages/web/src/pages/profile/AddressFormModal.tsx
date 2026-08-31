@@ -1,10 +1,54 @@
-import { useState, useEffect } from 'react';
+// Form rule: static forms use react-hook-form + zod (schema messages are i18n
+// keys, translated at the render site), like ClaimForm and ClaimHelpForm.
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { useCountries, useStateProvinces } from '@/api/contact';
 import { SearchableCombobox } from '@/components/shared/SearchableCombobox';
 import { LOCATION_TYPES } from '@itatti/shared';
 import type { CiviCRMAddress, CreateAddressInput } from '@itatti/shared';
+
+const addressSchema = z.object({
+  streetAddress: z.string().min(1, 'profile.addressForm.errors.streetRequired'),
+  supplementalAddress1: z.string(),
+  city: z.string().min(1, 'profile.addressForm.errors.cityRequired'),
+  postalCode: z.string(),
+  // Country is enforced by the disabled submit button (like street and city,
+  // which additionally carry the native `required` attribute); the optional
+  // schema field mirrors the empty pre-selection state.
+  countryId: z.number().optional(),
+  stateProvinceId: z.number().optional(),
+  locationTypeId: z.number(),
+});
+
+type AddressFormValues = z.infer<typeof addressSchema>;
+
+function toFormValues(address: CiviCRMAddress | null, usedLocationTypes: number[]): AddressFormValues {
+  if (address) {
+    return {
+      streetAddress: address.streetAddress || '',
+      supplementalAddress1: address.supplementalAddress1 || '',
+      city: address.city || '',
+      postalCode: address.postalCode || '',
+      countryId: address.countryId,
+      stateProvinceId: address.stateProvinceId,
+      locationTypeId: address.locationTypeId || 1,
+    };
+  }
+  const firstAvailable = LOCATION_TYPES.find((t) => !usedLocationTypes.includes(t.id));
+  return {
+    streetAddress: '',
+    supplementalAddress1: '',
+    city: '',
+    postalCode: '',
+    countryId: undefined,
+    stateProvinceId: undefined,
+    locationTypeId: firstAvailable?.id ?? LOCATION_TYPES[0]?.id ?? 1,
+  };
+}
 
 interface AddressFormModalProps {
   open: boolean;
@@ -17,13 +61,24 @@ interface AddressFormModalProps {
 
 export function AddressFormModal({ open, onClose, onSave, address, isSaving, usedLocationTypes }: AddressFormModalProps) {
   const { t } = useTranslation();
-  const [streetAddress, setStreetAddress] = useState('');
-  const [supplementalAddress1, setSupplementalAddress1] = useState('');
-  const [city, setCity] = useState('');
-  const [postalCode, setPostalCode] = useState('');
-  const [countryId, setCountryId] = useState<number | undefined>(undefined);
-  const [stateProvinceId, setStateProvinceId] = useState<number | undefined>(undefined);
-  const [locationTypeId, setLocationTypeId] = useState<number>(LOCATION_TYPES[0]?.id ?? 1);
+
+  const {
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    reset,
+    formState: { errors },
+  } = useForm<AddressFormValues>({
+    resolver: zodResolver(addressSchema),
+    defaultValues: toFormValues(address, usedLocationTypes),
+  });
+
+  const streetAddress = watch('streetAddress');
+  const city = watch('city');
+  const countryId = watch('countryId');
+  const stateProvinceId = watch('stateProvinceId');
+  const locationTypeId = watch('locationTypeId');
 
   const { data: countries } = useCountries();
   const { data: states } = useStateProvinces(countryId);
@@ -31,52 +86,32 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving, use
   useEffect(() => {
     if (stateProvinceId && states && states.length > 0) {
       const stillValid = states.some((s) => s.id === stateProvinceId);
-      if (!stillValid) setStateProvinceId(undefined);
+      if (!stillValid) setValue('stateProvinceId', undefined);
     }
-  }, [states, stateProvinceId]);
+  }, [states, stateProvinceId, setValue]);
 
   useEffect(() => {
-    if (open) {
-      if (address) {
-        setStreetAddress(address.streetAddress || '');
-        setSupplementalAddress1(address.supplementalAddress1 || '');
-        setCity(address.city || '');
-        setPostalCode(address.postalCode || '');
-        setCountryId(address.countryId);
-        setStateProvinceId(address.stateProvinceId);
-        setLocationTypeId(address.locationTypeId || 1);
-      } else {
-        setStreetAddress('');
-        setSupplementalAddress1('');
-        setCity('');
-        setPostalCode('');
-        setCountryId(undefined);
-        setStateProvinceId(undefined);
-        const firstAvailable = LOCATION_TYPES.find((t) => !usedLocationTypes.includes(t.id));
-        setLocationTypeId(firstAvailable?.id ?? LOCATION_TYPES[0]?.id ?? 1);
-      }
-    }
-  }, [open, address, usedLocationTypes]);
+    if (open) reset(toFormValues(address, usedLocationTypes));
+  }, [open, address, usedLocationTypes, reset]);
 
   function handleCountryChange(value: string) {
-    setCountryId(Number(value));
-    setStateProvinceId(undefined);
+    setValue('countryId', Number(value));
+    setValue('stateProvinceId', undefined);
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!countryId) return;
+  const onSubmit = async (values: AddressFormValues) => {
+    if (!values.countryId) return;
 
     await onSave({
-      streetAddress,
-      supplementalAddress1: supplementalAddress1 || undefined,
-      city,
-      postalCode: postalCode || undefined,
-      stateProvinceId,
-      countryId,
-      locationTypeId: address?.isPrimary ? undefined : locationTypeId,
+      streetAddress: values.streetAddress,
+      supplementalAddress1: values.supplementalAddress1 || undefined,
+      city: values.city,
+      postalCode: values.postalCode || undefined,
+      stateProvinceId: values.stateProvinceId,
+      countryId: values.countryId,
+      locationTypeId: address?.isPrimary ? undefined : values.locationTypeId,
     });
-  }
+  };
 
   const countryOptions = (countries || []).map((c) => ({
     value: String(c.id),
@@ -101,7 +136,7 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving, use
             {address ? t('profile.addressForm.editTitle') : t('profile.addressForm.addTitle')}
           </DialogTitle>
 
-          <form onSubmit={(e) => void handleSubmit(e)} className="mt-5 space-y-4">
+          <form onSubmit={(e) => void handleSubmit(onSubmit)(e)} className="mt-5 space-y-4">
             {address?.isPrimary ? (
               <p className="text-[0.88rem] text-muted-foreground">
                 {t('profile.addressForm.typeLabel')}:{' '}
@@ -130,7 +165,7 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving, use
                         name="location-type"
                         value={type.id}
                         checked={locationTypeId === type.id}
-                        onChange={() => setLocationTypeId(type.id)}
+                        onChange={() => setValue('locationTypeId', type.id)}
                         disabled={isDisabled}
                         className="h-4 w-4 accent-primary"
                       />
@@ -147,19 +182,20 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving, use
 
             <Field label={t('profile.addressForm.street')} required>
               <input
+                {...register('streetAddress')}
                 type="text"
-                value={streetAddress}
-                onChange={(e) => setStreetAddress(e.target.value)}
                 required
                 className="w-full rounded-md border bg-background px-3.5 py-2.5 text-[0.95rem] focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
               />
+              {errors.streetAddress?.message && (
+                <p className="mt-1 text-sm text-destructive">{t(errors.streetAddress.message)}</p>
+              )}
             </Field>
 
             <Field label={t('profile.addressForm.line2')}>
               <input
+                {...register('supplementalAddress1')}
                 type="text"
-                value={supplementalAddress1}
-                onChange={(e) => setSupplementalAddress1(e.target.value)}
                 placeholder={t('profile.addressForm.line2Placeholder')}
                 className="w-full rounded-md border bg-background px-3.5 py-2.5 text-[0.95rem] placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
               />
@@ -168,19 +204,20 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving, use
             <div className="grid grid-cols-2 gap-4">
               <Field label={t('profile.addressForm.city')} required>
                 <input
+                  {...register('city')}
                   type="text"
-                  value={city}
-                  onChange={(e) => setCity(e.target.value)}
                   required
                   className="w-full rounded-md border bg-background px-3.5 py-2.5 text-[0.95rem] focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                 />
+                {errors.city?.message && (
+                  <p className="mt-1 text-sm text-destructive">{t(errors.city.message)}</p>
+                )}
               </Field>
 
               <Field label={t('profile.addressForm.postalCode')}>
                 <input
+                  {...register('postalCode')}
                   type="text"
-                  value={postalCode}
-                  onChange={(e) => setPostalCode(e.target.value)}
                   className="w-full rounded-md border bg-background px-3.5 py-2.5 text-[0.95rem] focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                 />
               </Field>
@@ -192,7 +229,7 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving, use
                 value={countryId ? String(countryId) : ''}
                 displayValue={selectedCountry?.name}
                 onSelect={handleCountryChange}
-                onClear={() => { setCountryId(undefined); setStateProvinceId(undefined); }}
+                onClear={() => { setValue('countryId', undefined); setValue('stateProvinceId', undefined); }}
                 placeholder={t('profile.addressForm.countryPlaceholder')}
               />
             </Field>
@@ -203,8 +240,8 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving, use
                   options={stateOptions}
                   value={stateProvinceId ? String(stateProvinceId) : ''}
                   displayValue={selectedState?.name}
-                  onSelect={(value) => setStateProvinceId(Number(value))}
-                  onClear={() => setStateProvinceId(undefined)}
+                  onSelect={(value) => setValue('stateProvinceId', Number(value))}
+                  onClear={() => setValue('stateProvinceId', undefined)}
                   placeholder={t('profile.addressForm.statePlaceholder')}
                 />
               </Field>

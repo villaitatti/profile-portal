@@ -54,6 +54,10 @@ export const profile = {
       countryPlaceholder: 'Select country',
       stateProvince: 'State / Province',
       statePlaceholder: 'Select state/province',
+      errors: {
+        streetRequired: 'Street address is required',
+        cityRequired: 'City is required',
+      },
     },
     phones: {
       title: 'Phone Numbers',
@@ -151,6 +155,10 @@ export const profile = {
       countryPlaceholder: 'Seleziona il paese',
       stateProvince: 'Stato / Provincia',
       statePlaceholder: 'Seleziona stato/provincia',
+      errors: {
+        streetRequired: 'La via e il numero civico sono obbligatori',
+        cityRequired: 'La città è obbligatoria',
+      },
     },
     phones: {
       title: 'Numeri di telefono',

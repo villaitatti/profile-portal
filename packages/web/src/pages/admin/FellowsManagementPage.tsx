@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { SelectDropdown } from '@/components/shared/SelectDropdown';
@@ -44,14 +45,73 @@ const VIT_ID_PILLS: { key: VitIdStatus; labelKey: string; tone: string }[] = [
   { key: 'no-account', labelKey: 'fellows.filters.vitPills.noAccount', tone: 'bg-red-50 text-red-700' },
 ];
 
+// Valid values for URL-sourced filter params; anything else in the URL
+// silently falls back to the default so a mangled link never breaks the page.
+const TAB_KEYS: ReadonlySet<string> = new Set(APPOINTMENT_TABS.map((tab) => tab.key));
+const STATUS_KEYS: ReadonlySet<string> = new Set(STATUS_PILLS.map((pill) => pill.key));
+const VIT_ID_KEYS: ReadonlySet<string> = new Set(VIT_ID_PILLS.map((pill) => pill.key));
+
+const SEARCH_DEBOUNCE_MS = 250;
+
 export function FellowsManagementPage() {
   const { t } = useTranslation();
   const currentYear = getCurrentAcademicYear();
   const [selectedYear, setSelectedYear] = useState<string>(currentYear);
-  const [activeTab, setActiveTab] = useState<FilterTab>('all');
-  const [selectedStatuses, setSelectedStatuses] = useState<AppointeeStatus[]>([]);
-  const [selectedVitIdStatuses, setSelectedVitIdStatuses] = useState<VitIdStatus[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // The URL is the source of truth for tab/status/VIT-ID filters and the
+  // search query, so filtered views survive reload and are shareable. Absent
+  // params fall back to the previous local-state defaults.
+  const tabParam = searchParams.get('tab');
+  const activeTab: FilterTab =
+    tabParam && TAB_KEYS.has(tabParam) ? (tabParam as FilterTab) : 'all';
+  const selectedStatuses = useMemo(
+    () =>
+      (searchParams.get('status') ?? '')
+        .split(',')
+        .filter((s): s is AppointeeStatus => STATUS_KEYS.has(s)),
+    [searchParams]
+  );
+  const selectedVitIdStatuses = useMemo(
+    () =>
+      (searchParams.get('vitId') ?? '')
+        .split(',')
+        .filter((s): s is VitIdStatus => VIT_ID_KEYS.has(s)),
+    [searchParams]
+  );
+  const searchQuery = searchParams.get('q') ?? '';
+
+  // The input carries a debounced draft so typing doesn't thrash the URL.
+  const [searchDraft, setSearchDraft] = useState(searchQuery);
+  useEffect(() => {
+    setSearchDraft(searchQuery);
+  }, [searchQuery]);
+
+  const updateParams = useCallback(
+    (mutate: (next: URLSearchParams) => void) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          mutate(next);
+          return next;
+        },
+        { replace: true }
+      );
+    },
+    [setSearchParams]
+  );
+
+  // Flush the search draft to the URL after a quiet period.
+  useEffect(() => {
+    if (searchDraft === searchQuery) return;
+    const id = window.setTimeout(() => {
+      updateParams((next) => {
+        if (searchDraft) next.set('q', searchDraft);
+        else next.delete('q');
+      });
+    }, SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(id);
+  }, [searchDraft, searchQuery, updateParams]);
 
   const { data, isLoading, error } = useFellowsDashboard(selectedYear || undefined);
 
@@ -129,15 +189,40 @@ export function FellowsManagementPage() {
   }, [data]);
 
   function toggleStatus(status: AppointeeStatus) {
-    setSelectedStatuses((prev) =>
-      prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]
-    );
+    const next = selectedStatuses.includes(status)
+      ? selectedStatuses.filter((s) => s !== status)
+      : [...selectedStatuses, status];
+    updateParams((params) => {
+      if (next.length > 0) params.set('status', next.join(','));
+      else params.delete('status');
+    });
   }
 
   function toggleVitIdStatus(status: VitIdStatus) {
-    setSelectedVitIdStatuses((prev) =>
-      prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]
-    );
+    const next = selectedVitIdStatuses.includes(status)
+      ? selectedVitIdStatuses.filter((s) => s !== status)
+      : [...selectedVitIdStatuses, status];
+    updateParams((params) => {
+      if (next.length > 0) params.set('vitId', next.join(','));
+      else params.delete('vitId');
+    });
+  }
+
+  function selectTab(tab: FilterTab) {
+    updateParams((params) => {
+      if (tab !== 'all') params.set('tab', tab);
+      else params.delete('tab');
+      // Switching tab resets the status filters, as before.
+      params.delete('status');
+      params.delete('vitId');
+    });
+  }
+
+  function clearStatusFilters() {
+    updateParams((params) => {
+      params.delete('status');
+      params.delete('vitId');
+    });
   }
 
   if (isLoading) return <FellowsManagementSkeleton />;
@@ -183,10 +268,13 @@ export function FellowsManagementPage() {
           allowEmpty={false}
           onSelect={(year) => {
             setSelectedYear(year);
-            setActiveTab('all');
-            setSelectedStatuses([]);
-            setSelectedVitIdStatuses([]);
-            setSearchQuery('');
+            setSearchDraft('');
+            updateParams((params) => {
+              params.delete('tab');
+              params.delete('status');
+              params.delete('vitId');
+              params.delete('q');
+            });
           }}
           placeholder={currentYear}
           className="min-w-[150px]"
@@ -199,12 +287,9 @@ export function FellowsManagementPage() {
           {APPOINTMENT_TABS.map((tab) => (
             <button
               key={tab.key}
+              type="button"
               aria-pressed={activeTab === tab.key}
-              onClick={() => {
-                setActiveTab(tab.key);
-                setSelectedStatuses([]);
-                setSelectedVitIdStatuses([]);
-              }}
+              onClick={() => selectTab(tab.key)}
               className={`whitespace-nowrap rounded-t-lg border-b-2 px-3 py-2.5 text-[0.9rem] font-medium transition-colors ${
                 activeTab === tab.key
                   ? 'border-primary text-primary'
@@ -232,10 +317,8 @@ export function FellowsManagementPage() {
           <h3 className="text-sm font-semibold text-foreground">{t('fellows.filters.title')}</h3>
           {(selectedStatuses.length > 0 || selectedVitIdStatuses.length > 0) && (
             <button
-              onClick={() => {
-                setSelectedStatuses([]);
-                setSelectedVitIdStatuses([]);
-              }}
+              type="button"
+              onClick={clearStatusFilters}
               className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             >
               <X className="h-3 w-3" />
@@ -254,6 +337,7 @@ export function FellowsManagementPage() {
               return (
                 <button
                   key={pill.key}
+                  type="button"
                   aria-pressed={isActive}
                   onClick={() => toggleStatus(pill.key)}
                   className={`inline-flex items-center rounded-full px-2.5 py-1 text-[0.8rem] font-medium transition-colors ${
@@ -277,6 +361,7 @@ export function FellowsManagementPage() {
               return (
                 <button
                   key={pill.key}
+                  type="button"
                   aria-pressed={isActive}
                   onClick={() => toggleVitIdStatus(pill.key)}
                   className={`inline-flex items-center rounded-full px-2.5 py-1 text-[0.8rem] font-medium transition-colors ${
@@ -298,8 +383,9 @@ export function FellowsManagementPage() {
           <input
             type="text"
             placeholder={t('fellows.manage.searchPlaceholder')}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            aria-label={t('fellows.manage.searchPlaceholder')}
+            value={searchDraft}
+            onChange={(e) => setSearchDraft(e.target.value)}
             className="w-full rounded-md border bg-background py-2.5 pl-10 pr-4 text-base outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
         </div>

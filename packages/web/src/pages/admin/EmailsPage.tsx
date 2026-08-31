@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetClose, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -8,14 +9,13 @@ import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { useEmailEvents, useEmailEventPreview, useTemplatePreview } from '@/api/emails';
 import { SelectDropdown } from '@/components/shared/SelectDropdown';
 import type { EmailEvent } from '@/api/emails';
+import { SortableHeader } from '@/components/shared/SortableHeader';
 import {
   AlertCircle,
   X,
   Copy,
   Check,
   ExternalLink,
-  ChevronDown,
-  ChevronUp,
   ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -53,6 +53,21 @@ function formatEmailType(type: EmailEvent['emailType'], t: TFunction): string {
     : t('fellows.emails.typeBio');
 }
 
+// Valid values for URL-sourced filter/sort params; anything else in the URL
+// silently falls back to the default so a mangled link never breaks the page.
+const EMAIL_TYPES: ReadonlySet<string> = new Set([
+  'VIT_ID_INVITATION',
+  'BIO_PROJECT_DESCRIPTION',
+]);
+const EMAIL_STATUSES: ReadonlySet<string> = new Set([
+  'PENDING',
+  'SENDING',
+  'SENT',
+  'FAILED',
+  'SKIPPED',
+]);
+const SORT_FIELDS: ReadonlySet<string> = new Set(['enqueuedAt', 'sentAt']);
+
 const STATUS_STYLES: Record<EmailEvent['status'], string> = {
   PENDING: 'bg-blue-50 text-blue-700',
   SENDING: 'bg-amber-50 text-amber-700',
@@ -81,14 +96,66 @@ function StatusBadge({ status, failureReason }: { status: EmailEvent['status']; 
 
 function SentEmailsTab() {
   const { t, i18n } = useTranslation();
-  const [yearFilter, setYearFilter] = useState<string>('all');
-  const [typeFilter, setTypeFilter] = useState<TypeFilter | 'all'>('all');
-  const [statusFilters, setStatusFilters] = useState<Set<StatusFilter>>(new Set());
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // The URL is the source of truth for the server-side filters (year/type/
+  // status) and the sort, so filtered views survive reload and are shareable.
+  // Absent params fall back to the previous local-state defaults.
+  const yearFilter = searchParams.get('year') ?? 'all';
+  const typeParam = searchParams.get('type');
+  const typeFilter: TypeFilter | 'all' =
+    typeParam && EMAIL_TYPES.has(typeParam) ? (typeParam as TypeFilter) : 'all';
+  const statusFilters = useMemo(
+    () =>
+      new Set(
+        (searchParams.get('status') ?? '')
+          .split(',')
+          .filter((s): s is StatusFilter => EMAIL_STATUSES.has(s))
+      ),
+    [searchParams]
+  );
+  const sortParam = searchParams.get('sort');
+  const sortField: SortField =
+    sortParam && SORT_FIELDS.has(sortParam) ? (sortParam as SortField) : 'enqueuedAt';
+  const sortDir: SortDir = searchParams.get('dir') === 'asc' ? 'asc' : 'desc';
+
   const [nameSearch, setNameSearch] = useState('');
-  const [sortField, setSortField] = useState<SortField>('enqueuedAt');
-  const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [knownYears, setKnownYears] = useState<string[]>([]);
+
+  const updateParams = useCallback(
+    (mutate: (next: URLSearchParams) => void) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          mutate(next);
+          return next;
+        },
+        { replace: true }
+      );
+    },
+    [setSearchParams]
+  );
+
+  const setYearFilter = useCallback(
+    (year: string) => {
+      updateParams((next) => {
+        if (year !== 'all') next.set('year', year);
+        else next.delete('year');
+      });
+    },
+    [updateParams]
+  );
+
+  const setTypeFilter = useCallback(
+    (type: TypeFilter | 'all') => {
+      updateParams((next) => {
+        if (type !== 'all') next.set('type', type);
+        else next.delete('type');
+      });
+    },
+    [updateParams]
+  );
 
   const statusParam = statusFilters.size > 0 ? [...statusFilters].join(',') : undefined;
 
@@ -145,16 +212,28 @@ function SentEmailsTab() {
   );
 
   function toggleSort(field: SortField) {
-    if (sortField === field) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
-    else { setSortField(field); setSortDir('desc'); }
+    const nextField = field;
+    const nextDir: SortDir =
+      sortField === field ? (sortDir === 'asc' ? 'desc' : 'asc') : 'desc';
+    updateParams((next) => {
+      // Keep the URL clean: the default sort (enqueuedAt desc) carries no params.
+      if (nextField === 'enqueuedAt' && nextDir === 'desc') {
+        next.delete('sort');
+        next.delete('dir');
+      } else {
+        next.set('sort', nextField);
+        next.set('dir', nextDir);
+      }
+    });
   }
 
   function toggleStatus(status: StatusFilter) {
-    setStatusFilters((prev) => {
-      const next = new Set(prev);
-      if (next.has(status)) next.delete(status);
-      else next.add(status);
-      return next;
+    const nextSet = new Set(statusFilters);
+    if (nextSet.has(status)) nextSet.delete(status);
+    else nextSet.add(status);
+    updateParams((next) => {
+      if (nextSet.size > 0) next.set('status', [...nextSet].join(','));
+      else next.delete('status');
     });
   }
 
@@ -216,6 +295,7 @@ function SentEmailsTab() {
           {(['PENDING', 'SENDING', 'SENT', 'FAILED', 'SKIPPED'] as StatusFilter[]).map((s) => (
             <button
               key={s}
+              type="button"
               onClick={() => toggleStatus(s)}
               aria-label={t('fellows.emails.statusFilterAria', { status: t(`fellows.emails.status.${s}`) })}
               aria-pressed={statusFilters.has(s)}
@@ -248,12 +328,15 @@ function SentEmailsTab() {
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t('fellows.emails.colYear')}</th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t('fellows.emails.colType')}</th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t('fellows.emails.colStatus')}</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">
-                  <button onClick={() => toggleSort('enqueuedAt')} className="inline-flex items-center gap-1 hover:text-foreground">
-                    {t('fellows.emails.colEnqueued')}
-                    {sortField === 'enqueuedAt' && (sortDir === 'desc' ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />)}
-                  </button>
-                </th>
+                <SortableHeader
+                  field="enqueuedAt"
+                  label={t('fellows.emails.colEnqueued')}
+                  sortField={sortField}
+                  sortDir={sortDir}
+                  onSort={toggleSort}
+                  className="px-4 py-3 font-medium text-muted-foreground"
+                  buttonClassName="text-sm normal-case tracking-normal"
+                />
                 <th className="hidden px-4 py-3 text-left font-medium text-muted-foreground lg:table-cell">{t('fellows.emails.colTriggeredBy')}</th>
                 <th className="w-10 px-4 py-3"><span className="sr-only">{t('fellows.emails.colDetails')}</span></th>
               </tr>
@@ -308,6 +391,7 @@ function SentEmailsTab() {
             </p>
           )}
           <button
+            type="button"
             onClick={() => void fetchNextPage()}
             disabled={isFetchingNextPage}
             className="rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"
@@ -352,7 +436,7 @@ function EmailDrawer({ event, onClose }: { event: EmailEvent | null; onClose: ()
           <div className="flex items-center justify-between border-b border-border px-6 py-4">
             <SheetTitle className="text-lg font-semibold">{t('fellows.emails.drawerTitle')}</SheetTitle>
             <SheetClose
-              render={<button className="rounded-md p-1.5 hover:bg-muted" aria-label={t('common.close')} />}
+              render={<button type="button" className="rounded-md p-1.5 hover:bg-muted" aria-label={t('common.close')} />}
             >
               <X className="h-4 w-4" />
             </SheetClose>
@@ -425,6 +509,7 @@ function EmailDrawer({ event, onClose }: { event: EmailEvent | null; onClose: ()
                   <span className="text-xs text-muted-foreground">{t('fellows.emails.sesId')}</span>
                   <code className="flex-1 truncate text-xs">{event.sesMessageId}</code>
                   <button
+                    type="button"
                     onClick={copyMessageId}
                     className="rounded p-1 hover:bg-muted"
                     aria-label={t('fellows.emails.copySesAria')}

@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { formatHumanDateTime } from '@/lib/dates';
 import { PageHeader } from '@/components/shared/PageHeader';
+import { SortableHeader } from '@/components/shared/SortableHeader';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useClaims } from '@/api/claims';
@@ -134,11 +135,11 @@ export function ClaimLogPage() {
                 <table className="w-full text-[0.95rem]">
                   <thead>
                     <tr className="border-b text-left">
-                      <SortHeader field="name" label={t('admin.claimLog.colName')} current={sortField} dir={sortDir} onSort={toggleSort} />
-                      <SortHeader field="email" label={t('admin.claimLog.colEmail')} current={sortField} dir={sortDir} onSort={toggleSort} className="hidden md:table-cell" />
-                      <SortHeader field="status" label={t('admin.claimLog.colStatus')} current={sortField} dir={sortDir} onSort={toggleSort} />
+                      <SortableHeader field="name" label={t('admin.claimLog.colName')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="pb-3" />
+                      <SortableHeader field="email" label={t('admin.claimLog.colEmail')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="pb-3 hidden md:table-cell" />
+                      <SortableHeader field="status" label={t('admin.claimLog.colStatus')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="pb-3" />
                       <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">{t('admin.claimLog.colRoles')}</th>
-                      <SortHeader field="claimedAt" label={t('admin.claimLog.colClaimedAt')} current={sortField} dir={sortDir} onSort={toggleSort} />
+                      <SortableHeader field="claimedAt" label={t('admin.claimLog.colClaimedAt')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="pb-3" />
                       <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">{t('admin.claimLog.colActions')}</th>
                     </tr>
                   </thead>
@@ -236,36 +237,6 @@ function ClaimRow({ claim }: { claim: VitIdClaim }) {
         )}
       </td>
     </tr>
-  );
-}
-
-function SortHeader({
-  field,
-  label,
-  current,
-  dir,
-  onSort,
-  className,
-}: {
-  field: SortField;
-  label: string;
-  current: string;
-  dir: SortDir;
-  onSort: (field: SortField) => void;
-  className?: string;
-}) {
-  const active = current === field;
-  return (
-    <th className={`pb-3 text-left ${className || ''}`}>
-      <button
-        type="button"
-        onClick={() => onSort(field)}
-        className="inline-flex select-none items-center text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground"
-      >
-        {label}
-        {active && <span className="ml-1">{dir === 'asc' ? '↑' : '↓'}</span>}
-      </button>
-    </th>
   );
 }
 

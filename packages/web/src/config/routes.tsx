@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
-import { KnownRoles } from '@itatti/shared';
+import { requiredRolesFor } from '@/config/access';
 
 // Safe to translate: this boundary can only render under <RouterProvider>,
 // which App mounts after its import of @/i18n/config has synchronously
@@ -27,18 +27,24 @@ function RouteErrorPage() {
   );
 }
 
+// Guard roles come from the access config (src/config/access.ts), the single
+// source of truth shared with the sidebar and the Access & Permissions page.
 const fellowsAdminGuard = async () => {
   const { RoleGuard } = await import('@/components/auth/RoleGuard');
   return {
     Component: () => (
-      <RoleGuard requiredRoles={[KnownRoles.FELLOWS_ADMIN, KnownRoles.STAFF_IT]} />
+      <RoleGuard requiredRoles={requiredRolesFor('vitIdAdministration')} />
     ),
   };
 };
 
+// Portal Settings and Atlassian Cloud share the same staff-only audience, so
+// one guard covers both sections' routes (the access test keeps them aligned).
 const staffGuard = async () => {
   const { RoleGuard } = await import('@/components/auth/RoleGuard');
-  return { Component: () => <RoleGuard requiredRoles={[KnownRoles.STAFF_IT]} /> };
+  return {
+    Component: () => <RoleGuard requiredRoles={requiredRolesFor('portalSettings')} />,
+  };
 };
 
 export const router = createBrowserRouter([

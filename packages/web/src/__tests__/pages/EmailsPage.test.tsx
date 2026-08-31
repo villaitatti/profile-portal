@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import type { ReactNode } from 'react';
 
 // Hoisted mocks for the hooks
@@ -39,12 +40,15 @@ function infiniteResult(
   };
 }
 
-function makeWrapper() {
+// The page persists its filters/sort in the URL, so it needs a router.
+function makeWrapper(initialPath = '/admin/emails') {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0, staleTime: 0 } },
   });
   return ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={[initialPath]}>{children}</MemoryRouter>
+    </QueryClientProvider>
   );
 }
 
@@ -352,6 +356,60 @@ describe('EmailsPage — Sent emails tab — filters', () => {
     expect(screen.queryByText('Elena Petrova')).not.toBeInTheDocument();
   });
 
+  it('initializes the year filter from the URL', () => {
+    const Wrapper = makeWrapper('/admin/emails?year=2024-2025');
+    render(
+      <Wrapper>
+        <EmailsPage />
+      </Wrapper>
+    );
+
+    expect(screen.getByText('Elena Petrova')).toBeInTheDocument();
+    expect(screen.queryByText('Sophie Laurent')).not.toBeInTheDocument();
+    expect(screen.queryByText('James Chen')).not.toBeInTheDocument();
+  });
+
+  it('initializes the type filter from the URL', () => {
+    const Wrapper = makeWrapper('/admin/emails?type=VIT_ID_INVITATION');
+    render(
+      <Wrapper>
+        <EmailsPage />
+      </Wrapper>
+    );
+
+    expect(screen.getByText('James Chen')).toBeInTheDocument();
+    expect(screen.queryByText('Sophie Laurent')).not.toBeInTheDocument();
+  });
+
+  it('initializes the status filter from the URL', () => {
+    const Wrapper = makeWrapper('/admin/emails?status=FAILED');
+    render(
+      <Wrapper>
+        <EmailsPage />
+      </Wrapper>
+    );
+
+    expect(screen.getByText('James Chen')).toBeInTheDocument();
+    expect(screen.queryByText('Sophie Laurent')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Failed status filter' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+  });
+
+  it('ignores invalid type/status values in the URL and shows everything', () => {
+    const Wrapper = makeWrapper('/admin/emails?type=BOGUS&status=NOT_A_STATUS');
+    render(
+      <Wrapper>
+        <EmailsPage />
+      </Wrapper>
+    );
+
+    expect(screen.getByText('Sophie Laurent')).toBeInTheDocument();
+    expect(screen.getByText('James Chen')).toBeInTheDocument();
+    expect(screen.getByText('Elena Petrova')).toBeInTheDocument();
+  });
+
   it('shows "No emails match these filters" when filters exclude all events', () => {
     const Wrapper = makeWrapper();
     render(
@@ -535,6 +593,38 @@ describe('EmailsPage — Sent emails tab — sorting', () => {
     // In asc order by enqueuedAt: James (Apr 8) -> Sophie (Apr 10) -> Elena (Apr 27)
     expect(within(rows[0]).getByText('James Chen')).toBeInTheDocument();
     expect(within(rows[2]).getByText('Elena Petrova')).toBeInTheDocument();
+  });
+
+  it('exposes aria-sort on the sortable header and initializes sort from the URL', () => {
+    const Wrapper = makeWrapper('/admin/emails?sort=enqueuedAt&dir=asc');
+    render(
+      <Wrapper>
+        <EmailsPage />
+      </Wrapper>
+    );
+
+    const enqueuedHeader = screen
+      .getByRole('button', { name: /Enqueued/i })
+      .closest('th');
+    expect(enqueuedHeader).toHaveAttribute('aria-sort', 'ascending');
+
+    const rows = screen.getAllByRole('row').slice(1);
+    expect(within(rows[0]).getByText('James Chen')).toBeInTheDocument();
+    expect(within(rows[2]).getByText('Elena Petrova')).toBeInTheDocument();
+  });
+
+  it('marks the default sort as descending via aria-sort', () => {
+    const Wrapper = makeWrapper();
+    render(
+      <Wrapper>
+        <EmailsPage />
+      </Wrapper>
+    );
+
+    const enqueuedHeader = screen
+      .getByRole('button', { name: /Enqueued/i })
+      .closest('th');
+    expect(enqueuedHeader).toHaveAttribute('aria-sort', 'descending');
   });
 });
 

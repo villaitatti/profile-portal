@@ -55,7 +55,12 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
     void logout({ logoutParams: { returnTo: window.location.origin } });
 
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar
+      collapsible="icon"
+      // The ui/sidebar primitive stays i18n-free; translated copy is injected here.
+      sheetTitle={t('common.sidebar')}
+      sheetDescription={t('common.mobileSidebarDescription')}
+    >
       <SidebarHeader>
         <div className="flex items-center px-2 pt-2">
           <img
@@ -130,7 +135,7 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
           v{__APP_VERSION__}
         </p>
       </SidebarFooter>
-      <SidebarRail />
+      <SidebarRail aria-label={t('common.toggleSidebar')} title={t('common.toggleSidebar')} />
     </Sidebar>
   );
 }

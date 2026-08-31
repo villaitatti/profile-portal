@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { SearchableCombobox } from '@/components/shared/SearchableCombobox';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { SortableHeader } from '@/components/shared/SortableHeader';
 import { useRoles } from '@/api/roles';
 import {
   useMappings,
@@ -202,6 +203,7 @@ export function AtlassianMappingsPage() {
               })}
             </p>
             <button
+              type="button"
               onClick={retryLoad}
               className="inline-flex items-center gap-1 rounded-md border border-destructive/30 px-3 py-1.5 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10"
             >
@@ -290,6 +292,7 @@ export function AtlassianMappingsPage() {
           )}
 
           <button
+            type="button"
             onClick={handleAdd}
             disabled={!canAdd}
             className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
@@ -319,6 +322,7 @@ export function AtlassianMappingsPage() {
               <input
                 type="text"
                 placeholder={t('admin.atlassian.mappings.filterPlaceholder')}
+                aria-label={t('admin.atlassian.mappings.filterPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full rounded-md border bg-background py-2.5 pl-10 pr-4 text-base outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
@@ -334,12 +338,12 @@ export function AtlassianMappingsPage() {
                 <table className="w-full text-[0.95rem]">
                   <thead>
                     <tr className="border-b text-left">
-                      <SortHeader field="auth0RoleName" label={t('admin.atlassian.mappings.auth0Role')} current={sortField} dir={sortDir} onSort={toggleSort} />
-                      <SortHeader field="atlassianGroupName" label={t('admin.atlassian.mappings.atlassianGroup')} current={sortField} dir={sortDir} onSort={toggleSort} />
+                      <SortableHeader field="auth0RoleName" label={t('admin.atlassian.mappings.auth0Role')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="pb-3" />
+                      <SortableHeader field="atlassianGroupName" label={t('admin.atlassian.mappings.atlassianGroup')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="pb-3" />
                       <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">{t('admin.atlassian.mappings.colAuth0RoleId')}</th>
                       <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">{t('admin.atlassian.mappings.colAtlassianGroupId')}</th>
-                      <SortHeader field="createdBy" label={t('admin.atlassian.mappings.colAddedBy')} current={sortField} dir={sortDir} onSort={toggleSort} />
-                      <SortHeader field="createdAt" label={t('admin.atlassian.mappings.colAddedOn')} current={sortField} dir={sortDir} onSort={toggleSort} />
+                      <SortableHeader field="createdBy" label={t('admin.atlassian.mappings.colAddedBy')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="pb-3" />
+                      <SortableHeader field="createdAt" label={t('admin.atlassian.mappings.colAddedOn')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="pb-3" />
                       <th className="w-12 pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground"></th>
                     </tr>
                   </thead>
@@ -358,6 +362,7 @@ export function AtlassianMappingsPage() {
                         </td>
                         <td className="py-3">
                           <button
+                            type="button"
                             onClick={() => setDeleteTarget(m)}
                             className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                             aria-label={t('admin.atlassian.mappings.remove')}
@@ -404,34 +409,6 @@ export function AtlassianMappingsPage() {
         variant="danger"
       />
     </div>
-  );
-}
-
-function SortHeader({
-  field,
-  label,
-  current,
-  dir,
-  onSort,
-}: {
-  field: 'auth0RoleName' | 'atlassianGroupName' | 'createdBy' | 'createdAt';
-  label: string;
-  current: string;
-  dir: 'asc' | 'desc';
-  onSort: (field: 'auth0RoleName' | 'atlassianGroupName' | 'createdBy' | 'createdAt') => void;
-}) {
-  const active = current === field;
-  return (
-    <th className="pb-3 text-left">
-      <button
-        type="button"
-        onClick={() => onSort(field)}
-        className="inline-flex select-none items-center text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground"
-      >
-        {label}
-        {active && <span className="ml-1">{dir === 'asc' ? '↑' : '↓'}</span>}
-      </button>
-    </th>
   );
 }
 

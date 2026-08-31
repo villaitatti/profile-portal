@@ -1,9 +1,13 @@
 "use client"
 
+// Generated shadcn primitive: keep it free of app-level dependencies (i18n,
+// api, app config) so it can be regenerated. English fallbacks below match
+// the stock component; consumers inject translated copy via props
+// (sheetTitle/sheetDescription on <Sidebar>, aria-label/title on
+// <SidebarRail> and <SidebarTrigger>).
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { PanelLeftIcon } from "lucide-react"
-import { useTranslation } from "react-i18next"
 
 import { cn } from "@/lib/utils"
 import { useIsMobile } from "@/lib/use-mobile"
@@ -170,14 +174,19 @@ function SidebarProvider({
 function Sidebar({
   side = "left",
   collapsible = "icon",
+  sheetTitle = "Sidebar",
+  sheetDescription = "Displays the mobile sidebar.",
   className,
   children,
   ...props
 }: React.ComponentProps<"div"> & {
   side?: "left" | "right"
   collapsible?: "offcanvas" | "icon" | "none"
+  /** Screen-reader-only title for the mobile sheet; pass translated copy. */
+  sheetTitle?: string
+  /** Screen-reader-only description for the mobile sheet; pass translated copy. */
+  sheetDescription?: string
 }) {
-  const { t } = useTranslation()
   const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
 
   if (collapsible === "none") {
@@ -207,8 +216,8 @@ function Sidebar({
           side={side}
         >
           <SheetHeader className="sr-only">
-            <SheetTitle>{t('common.sidebar')}</SheetTitle>
-            <SheetDescription>{t('common.mobileSidebarDescription')}</SheetDescription>
+            <SheetTitle>{sheetTitle}</SheetTitle>
+            <SheetDescription>{sheetDescription}</SheetDescription>
           </SheetHeader>
           <div className="flex h-full w-full flex-col">{children}</div>
         </SheetContent>
@@ -266,7 +275,6 @@ function SidebarTrigger({
   onClick,
   ...props
 }: React.ComponentProps<typeof Button>) {
-  const { t } = useTranslation()
   const { toggleSidebar } = useSidebar()
 
   return (
@@ -283,7 +291,8 @@ function SidebarTrigger({
       {...props}
     >
       <PanelLeftIcon />
-      <span className="sr-only">{t('common.toggleSidebar')}</span>
+      {/* Fallback name only; consumers pass a translated aria-label, which wins. */}
+      <span className="sr-only">Toggle Sidebar</span>
     </Button>
   )
 }
@@ -306,7 +315,6 @@ type RailDrag = {
 }
 
 function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
-  const { t } = useTranslation()
   const { toggleSidebar, state, setWidth } = useSidebar()
   const drag = React.useRef<RailDrag | null>(null)
   const suppressClick = React.useRef(false)
@@ -327,7 +335,7 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
     <button
       data-sidebar="rail"
       data-slot="sidebar-rail"
-      aria-label={t('common.toggleSidebar')}
+      aria-label="Toggle Sidebar"
       tabIndex={-1}
       onPointerDown={(event) => {
         if (state !== "expanded" || event.button !== 0) return
@@ -374,7 +382,7 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
         }
         toggleSidebar()
       }}
-      title={t('common.toggleSidebar')}
+      title="Toggle Sidebar"
       className={cn(
         "absolute inset-y-0 z-20 hidden w-4 -translate-x-1/2 transition-all ease-linear group-data-[side=left]:-right-4 group-data-[side=right]:left-0 after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] hover:after:bg-sidebar-border sm:flex",
         // Expanded: the rail drags both ways, so the honest cursor is col-resize.

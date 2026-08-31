@@ -19,7 +19,7 @@ import { formatHumanDate } from '@/lib/dates';
 import type { FellowDashboardEntry } from '@itatti/shared';
 import type { SortField, SortDir, ActiveSend, ActiveNominationSent } from './types';
 import { getPrimaryConfiguredForm, getFormInvitation } from './helpers';
-import { SortHeader } from './SortHeader';
+import { SortableHeader } from '@/components/shared/SortableHeader';
 import { FellowRow } from './FellowRow';
 import { ConfirmResendDialog, NominationSentDialog } from './dialogs';
 
@@ -279,13 +279,13 @@ export function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEn
         <table className="w-full text-[0.95rem]">
           <thead>
             <tr className="border-b bg-muted/50">
-              <SortHeader field="name" label={t('fellows.table.name')} sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
-              <SortHeader field="appointeeStatus" label={t('fellows.table.appointeeStatus')} sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
-              <SortHeader field="appointment" label={t('fellows.table.appointment')} sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
-              <SortHeader field="fellowship" label={t('fellows.table.fellowshipType')} sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
-              <SortHeader field="form" label={t('fellows.table.form')} sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
-              <SortHeader field="status" label={t('fellows.table.vitIdStatus')} sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
-              <SortHeader field="bioEmail" label={t('fellows.table.bioEmail')} sortField={sortField} sortDir={sortDir} toggleSort={toggleSort} />
+              <SortableHeader field="name" label={t('fellows.table.name')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="px-3 py-3" buttonClassName="text-[0.75rem]" />
+              <SortableHeader field="appointeeStatus" label={t('fellows.table.appointeeStatus')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="px-3 py-3" buttonClassName="text-[0.75rem]" />
+              <SortableHeader field="appointment" label={t('fellows.table.appointment')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="px-3 py-3" buttonClassName="text-[0.75rem]" />
+              <SortableHeader field="fellowship" label={t('fellows.table.fellowshipType')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="px-3 py-3" buttonClassName="text-[0.75rem]" />
+              <SortableHeader field="form" label={t('fellows.table.form')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="px-3 py-3" buttonClassName="text-[0.75rem]" />
+              <SortableHeader field="status" label={t('fellows.table.vitIdStatus')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="px-3 py-3" buttonClassName="text-[0.75rem]" />
+              <SortableHeader field="bioEmail" label={t('fellows.table.bioEmail')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="px-3 py-3" buttonClassName="text-[0.75rem]" />
               <th className="px-3 py-3 text-center text-[0.75rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">
                 {t('fellows.table.actions')}
               </th>
@@ -415,6 +415,7 @@ export function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEn
           </span>
           <div className="flex gap-2">
             <button
+              type="button"
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
               className="rounded-md border px-3 py-1 text-sm transition-colors hover:bg-muted disabled:opacity-50"
@@ -422,6 +423,7 @@ export function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEn
               {t('fellows.table.previous')}
             </button>
             <button
+              type="button"
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
               className="rounded-md border px-3 py-1 text-sm transition-colors hover:bg-muted disabled:opacity-50"
