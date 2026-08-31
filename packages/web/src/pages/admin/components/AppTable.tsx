@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Application } from '@itatti/shared';
 import { Pencil, Trash2, ExternalLink } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 
 interface AppTableProps {

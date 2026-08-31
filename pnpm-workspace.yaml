@@ -29,10 +29,10 @@ auditConfig:
     # GHSA-qwww-vcr4-c8h2 — "React Router: RSC Mode CSRF Bypass Allows Action
     # Execution Before 400 Response" (react-router >=7.12.0 <8.3.0).
     #
-    # Not applicable here, and there is no 7.x fix — the advisory is only patched
-    # in 8.3.0, and react-router-dom (which this app imports from) has no v8
-    # release, so clearing it means migrating 28 files off react-router-dom AND
-    # taking a major version bump.
+    # Not applicable here, and there is no 7.x fix — the advisory is only
+    # patched in 8.3.0. The app now imports from the single react-router
+    # package (react-router-dom was removed 2026-08), so clearing this is
+    # just the v8 major bump.
     #
     # Why it cannot affect us: the vulnerability is in RSC mode, where a server
     # action runs before the CSRF check rejects the request. packages/web is a

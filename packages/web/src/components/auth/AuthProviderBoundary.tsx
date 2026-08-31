@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { Auth0Provider, type AppState } from '@auth0/auth0-react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useNavigate } from 'react-router';
 import { auth0Config } from '@/config/auth0';
 import { getSafeReturnTo } from '@/config/auth-redirect';
 import { getRuntimeConfig } from '@/config/runtime';
