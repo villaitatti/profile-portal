@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import type { ReactNode } from 'react';
 import type { FellowDashboardEntry } from '@itatti/shared';
 
@@ -106,6 +106,83 @@ beforeEach(() => {
     },
     isLoading: false,
     error: null,
+  });
+});
+
+describe('FellowsManagementPage — page states', () => {
+  it('shows skeleton blocks while the dashboard loads', () => {
+    mockUseFellowsDashboard.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      error: null,
+    });
+
+    const Wrapper = makeWrapper();
+    const { container } = render(
+      <Wrapper>
+        <FellowsManagementPage />
+      </Wrapper>
+    );
+
+    expect(container.querySelectorAll('[class*="bg-muted"]').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Manage Appointees')).not.toBeInTheDocument();
+  });
+
+  it('shows the failure title and error message when loading fails', () => {
+    mockUseFellowsDashboard.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: new Error('CiviCRM down'),
+    });
+
+    const Wrapper = makeWrapper();
+    render(
+      <Wrapper>
+        <FellowsManagementPage />
+      </Wrapper>
+    );
+
+    expect(screen.getByText('Failed to load appointees')).toBeInTheDocument();
+    expect(screen.getByText('CiviCRM down')).toBeInTheDocument();
+  });
+
+  it('shows the per-year empty state when the year has no appointees', () => {
+    mockUseFellowsDashboard.mockReturnValue({
+      data: { fellows: [], academicYears: ['2025-2026'], summary: { total: 0 } },
+      isLoading: false,
+      error: null,
+    });
+
+    const Wrapper = makeWrapper();
+    render(
+      <Wrapper>
+        <FellowsManagementPage />
+      </Wrapper>
+    );
+
+    expect(screen.getByText('No appointees found')).toBeInTheDocument();
+    expect(screen.getByText(/No appointees on file for/)).toBeInTheDocument();
+    expect(screen.queryByTestId('fellows-table')).not.toBeInTheDocument();
+  });
+
+  it('tells the admin to adjust the search when a query hides everyone', async () => {
+    const user = userEvent.setup();
+    const Wrapper = makeWrapper();
+    render(
+      <Wrapper>
+        <FellowsManagementPage />
+      </Wrapper>
+    );
+
+    await user.type(
+      screen.getByRole('textbox', { name: 'Search by name or email...' }),
+      'nobody-matches-this'
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('No appointees found')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Try adjusting your search query.')).toBeInTheDocument();
   });
 });
 

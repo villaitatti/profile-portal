@@ -27,26 +27,25 @@ export function ConfirmResendDialog({
   onConfirm: () => Promise<void> | void;
 }) {
   const { t } = useTranslation();
-  if (!open) return null;
 
+  // A real (nested) Base UI dialog, like NominationSentDialog below. The
+  // previous hand-rolled sibling div was marked aria-hidden by the still-open
+  // preview modal, making the confirmation invisible to assistive technology.
   return (
-    <div
-      role="presentation"
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-[rgba(29,37,44,0.38)] px-4"
+    <Dialog
+      open={open}
+      onOpenChange={(isOpen) => {
+        if (!isOpen && !submitting) onCancel();
+      }}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="confirm-resend-title"
-        className="w-full max-w-md rounded-lg border bg-card shadow-lg"
+      <DialogContent
+        showCloseButton={false}
+        className="block max-w-[calc(100vw-2rem)] gap-0 rounded-lg border bg-card p-0 sm:max-w-md"
       >
         <div className="border-b px-5 py-4">
-          <h2
-            id="confirm-resend-title"
-            className="text-lg font-semibold tracking-tight text-foreground"
-          >
+          <DialogTitle className="text-lg font-semibold tracking-tight text-foreground">
             {t('fellows.dialogs.resendTitle')}
-          </h2>
+          </DialogTitle>
         </div>
         <div className="space-y-3 px-5 py-4 text-[0.95rem] leading-6 text-muted-foreground">
           <p>{t('fellows.dialogs.resendBody', { name: fellowName })}</p>
@@ -73,8 +72,8 @@ export function ConfirmResendDialog({
             {t('fellows.dialogs.sendAgain')}
           </button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
