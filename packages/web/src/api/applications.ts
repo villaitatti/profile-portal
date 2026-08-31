@@ -44,7 +44,7 @@ export function useCreateApplication() {
       return res.json() as Promise<Application>;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['applications'] });
+      void queryClient.invalidateQueries({ queryKey: ['applications'] });
     },
   });
 }
@@ -64,7 +64,7 @@ export function useUpdateApplication() {
       return res.json() as Promise<Application>;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['applications'] });
+      void queryClient.invalidateQueries({ queryKey: ['applications'] });
     },
   });
 }
@@ -82,7 +82,7 @@ export function useDeleteApplication() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['applications'] });
+      void queryClient.invalidateQueries({ queryKey: ['applications'] });
     },
   });
 }

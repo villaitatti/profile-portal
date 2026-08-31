@@ -188,7 +188,7 @@ export function EmailPreviewModal({
           <Button variant="outline" onClick={onCancel} disabled={submitting}>
             {t('common.cancel')}
           </Button>
-          <Button onClick={() => onConfirm()} disabled={sendDisabled}>
+          <Button onClick={() => void onConfirm()} disabled={sendDisabled}>
             {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
             {resolvedConfirmLabel}
           </Button>

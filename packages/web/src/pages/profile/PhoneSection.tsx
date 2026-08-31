@@ -88,7 +88,7 @@ export function PhoneSection() {
           {t('profile.phones.loadError')}
         </p>
         <button
-          onClick={() => refetch()}
+          onClick={() => void refetch()}
           className="mt-3 inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
         >
           <RefreshCw className="h-3.5 w-3.5" />
@@ -186,7 +186,7 @@ export function PhoneSection() {
 
       <ConfirmDialog
         open={deletingId !== null}
-        onConfirm={handleDelete}
+        onConfirm={() => void handleDelete()}
         onCancel={() => setDeletingId(null)}
         title={t('profile.phones.deleteTitle')}
         description={t('profile.phones.deleteDescription')}

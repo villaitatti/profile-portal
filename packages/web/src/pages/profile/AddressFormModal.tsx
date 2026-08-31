@@ -101,7 +101,7 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving, use
             {address ? t('profile.addressForm.editTitle') : t('profile.addressForm.addTitle')}
           </DialogTitle>
 
-          <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+          <form onSubmit={(e) => void handleSubmit(e)} className="mt-5 space-y-4">
             {address?.isPrimary ? (
               <p className="text-[0.88rem] text-muted-foreground">
                 {t('profile.addressForm.typeLabel')}:{' '}

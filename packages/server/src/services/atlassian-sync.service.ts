@@ -746,8 +746,8 @@ export async function runDrySync(triggeredBy: string): Promise<{ runId: string; 
 
   const emitter = new EventEmitter();
 
-  // Run async (don't await — caller consumes progress via SSE)
-  (async () => {
+  // Run async (explicitly not awaited — caller consumes progress via SSE)
+  void (async () => {
     try {
       const mappings = await prisma.roleGroupMapping.findMany();
       if (mappings.length === 0) {
@@ -850,7 +850,8 @@ export async function executeSync(
 
   const emitter = new EventEmitter();
 
-  (async () => {
+  // Explicitly not awaited — caller consumes progress via SSE.
+  void (async () => {
     try {
       const startTime = Date.now();
       const diff = dryRun.diff as unknown as SyncDiff;

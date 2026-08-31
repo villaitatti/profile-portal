@@ -339,7 +339,7 @@ describe('PublicFormPage — submission flow', () => {
     // same PublicFormPage instance alive and only useParams() changes.
     const NavButton = () => {
       const navigate = useNavigate();
-      return <button onClick={() => navigate('/forms/tokB')}>nav</button>;
+      return <button onClick={() => void navigate('/forms/tokB')}>nav</button>;
     };
     render(
       <QueryClientProvider client={client}>
@@ -451,7 +451,7 @@ describe('PublicFormPage — submission flow', () => {
     });
     const NavButton = () => {
       const navigate = useNavigate();
-      return <button onClick={() => navigate('/forms/tokB')}>nav</button>;
+      return <button onClick={() => void navigate('/forms/tokB')}>nav</button>;
     };
     render(
       <QueryClientProvider client={client}>

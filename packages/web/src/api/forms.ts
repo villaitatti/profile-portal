@@ -196,8 +196,8 @@ export function useGenerateFormInvitation() {
       return res.json() as Promise<{ id: string; token: string; created: boolean }>;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['form-invitations'] });
-      queryClient.invalidateQueries({ queryKey: ['fellows'] });
+      void queryClient.invalidateQueries({ queryKey: ['form-invitations'] });
+      void queryClient.invalidateQueries({ queryKey: ['fellows'] });
     },
   });
 }
@@ -217,8 +217,8 @@ export function useMarkNominationSent() {
       return res.json() as Promise<{ id: string; nominationSentAt: string | null }>;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['form-invitations'] });
-      queryClient.invalidateQueries({ queryKey: ['fellows'] });
+      void queryClient.invalidateQueries({ queryKey: ['form-invitations'] });
+      void queryClient.invalidateQueries({ queryKey: ['fellows'] });
     },
   });
 }
@@ -252,8 +252,8 @@ export function useResetFormInvitation() {
       return res.json() as Promise<{ token: string }>;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['form-invitations'] });
-      queryClient.invalidateQueries({ queryKey: ['fellows'] });
+      void queryClient.invalidateQueries({ queryKey: ['form-invitations'] });
+      void queryClient.invalidateQueries({ queryKey: ['fellows'] });
     },
   });
 }

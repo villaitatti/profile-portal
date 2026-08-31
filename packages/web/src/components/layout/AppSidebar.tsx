@@ -52,7 +52,7 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
     (item.end ?? true) ? pathname === item.path : pathname.startsWith(item.path);
 
   const handleLogout = () =>
-    logout({ logoutParams: { returnTo: window.location.origin } });
+    void logout({ logoutParams: { returnTo: window.location.origin } });
 
   return (
     <Sidebar collapsible="icon">

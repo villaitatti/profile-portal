@@ -34,7 +34,7 @@ export function AppFormPage() {
         {
           onSuccess: () => {
             toast.success(t('admin.apps.updated'));
-            navigate('/admin/apps');
+            void navigate('/admin/apps');
           },
           onError: () => toast.error(t('admin.apps.updateFailed')),
         }
@@ -43,7 +43,7 @@ export function AppFormPage() {
       createApp.mutate(input, {
         onSuccess: () => {
           toast.success(t('admin.apps.created'));
-          navigate('/admin/apps');
+          void navigate('/admin/apps');
         },
         onError: () => toast.error(t('admin.apps.createFailed')),
       });

@@ -107,7 +107,7 @@ export function AutomationsPage() {
             })}
           </span>
           <button
-            onClick={() => refetch()}
+            onClick={() => void refetch()}
             className="inline-flex items-center gap-1 rounded-md border border-amber-300 px-3 py-1.5 text-xs font-medium hover:bg-amber-100"
           >
             <RefreshCw className="h-3 w-3" /> {t('common.retry')}
@@ -191,7 +191,7 @@ function AutomationCard({
 
       <div className="flex items-center gap-3">
         <button
-          onClick={handleDryRun}
+          onClick={() => void handleDryRun()}
           disabled={dryRunMutation.isPending}
           className="inline-flex items-center gap-2 rounded-md border border-primary px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/5 disabled:opacity-50"
         >
@@ -201,7 +201,7 @@ function AutomationCard({
 
         {dryRunResult && dryRunResult.actions.length > 0 && (
           <button
-            onClick={handleExecute}
+            onClick={() => void handleExecute()}
             disabled={executeMutation.isPending}
             className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >

@@ -42,7 +42,7 @@ export function isAdminNotificationEmailConfigured(): boolean {
   return isAppointeeEmailConfigured() && !!env.ADMIN_NOTIFICATION_EMAIL;
 }
 
-let cachedSesClient: any = null;
+let cachedSesClient: import('@aws-sdk/client-ses').SESClient | null = null;
 async function getSesClient() {
   if (!cachedSesClient) {
     const { SESClient } = await import('@aws-sdk/client-ses');

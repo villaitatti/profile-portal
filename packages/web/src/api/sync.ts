@@ -127,8 +127,8 @@ export function useCreateMapping() {
       return res.json() as Promise<RoleGroupMapping>;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sync-mappings'] });
-      queryClient.invalidateQueries({ queryKey: ['sync-groups'] });
+      void queryClient.invalidateQueries({ queryKey: ['sync-mappings'] });
+      void queryClient.invalidateQueries({ queryKey: ['sync-groups'] });
     },
   });
 }

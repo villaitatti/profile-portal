@@ -65,6 +65,44 @@ export default tseslint.config(
       },
     },
   },
+  // Type-aware rules, scoped to src trees (config/scripts files are outside
+  // the tsconfigs and stay syntax-only). The promise rules are the payoff:
+  // a forgotten `await` in a route/service is a real production bug class,
+  // and only type-aware linting can see it.
+  {
+    name: 'repo/type-aware',
+    files: [
+      'packages/server/src/**/*.ts',
+      'packages/web/src/**/*.{ts,tsx}',
+      'packages/shared/src/**/*.ts',
+    ],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/no-misused-promises': 'error',
+      '@typescript-eslint/await-thenable': 'error',
+    },
+  },
+  // `any` is banned in production src; tests may still use it for mock
+  // plumbing (the type-aware promise rules above apply there too, which is
+  // where the actual value is).
+  {
+    name: 'repo/no-any-in-src',
+    files: [
+      'packages/server/src/**/*.ts',
+      'packages/web/src/**/*.{ts,tsx}',
+      'packages/shared/src/**/*.ts',
+    ],
+    ignores: ['**/__tests__/**', '**/*.test.*'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'error',
+    },
+  },
   {
     name: 'repo/vitest',
     files: [

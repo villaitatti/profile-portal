@@ -1651,7 +1651,7 @@ function ConfirmResendDialog({
           </button>
           <button
             type="button"
-            onClick={() => onConfirm()}
+            onClick={() => void onConfirm()}
             disabled={submitting}
             className="inline-flex items-center gap-2 rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-amber-50 transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
           >

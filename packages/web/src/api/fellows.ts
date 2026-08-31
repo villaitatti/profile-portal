@@ -76,7 +76,7 @@ export function useSendBioEmail() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['fellows'] });
+      void queryClient.invalidateQueries({ queryKey: ['fellows'] });
     },
   });
 }
@@ -122,7 +122,7 @@ export function useSendVitIdEmail() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['fellows'] });
+      void queryClient.invalidateQueries({ queryKey: ['fellows'] });
     },
   });
 }

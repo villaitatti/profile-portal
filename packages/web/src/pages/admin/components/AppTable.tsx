@@ -15,6 +15,17 @@ export function AppTable({ applications, onDelete, isDeleting }: AppTableProps) 
   const { t } = useTranslation();
   const [deleteTarget, setDeleteTarget] = useState<Application | null>(null);
 
+  const handleConfirmDelete = async () => {
+    if (deleteTarget) {
+      try {
+        await onDelete(deleteTarget.id);
+        setDeleteTarget(null);
+      } catch {
+        // Dialog stays open — error surfaced by parent via toast
+      }
+    }
+  };
+
   return (
     <>
       <div className="overflow-hidden rounded-xl border bg-card">
@@ -107,16 +118,7 @@ export function AppTable({ applications, onDelete, isDeleting }: AppTableProps) 
       </div>
       <ConfirmDialog
         open={!!deleteTarget}
-        onConfirm={async () => {
-          if (deleteTarget) {
-            try {
-              await onDelete(deleteTarget.id);
-              setDeleteTarget(null);
-            } catch {
-              // Dialog stays open — error surfaced by parent via toast
-            }
-          }
-        }}
+        onConfirm={() => void handleConfirmDelete()}
         onCancel={() => setDeleteTarget(null)}
         title={t('admin.apps.table.deleteTitle')}
         description={

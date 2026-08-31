@@ -1,6 +1,24 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch, useApiToken } from './client';
 
+export interface AutomationRunAction {
+  email: string;
+  name: string;
+  action: string;
+}
+
+/** JSON payload persisted by the server's automation service (see
+ * packages/server/src/services/automation.service.ts): dry runs store
+ * `actions` (plus `pending`/`toOnboard` for new-cohort), executions store
+ * `operations`, and failures merge in an `error` string. */
+export interface AutomationRunResult {
+  actions?: AutomationRunAction[];
+  operations?: string[];
+  pending?: AutomationRunAction[];
+  toOnboard?: unknown[];
+  error?: string;
+}
+
 export interface AutomationRun {
   id: string;
   type: string;
@@ -9,8 +27,8 @@ export interface AutomationRun {
   academicYear: string;
   startedAt: string;
   completedAt: string | null;
-  result: any;
-  stats: any;
+  result: AutomationRunResult | null;
+  stats: Record<string, number> | null;
 }
 
 export interface DryRunResult {
@@ -47,7 +65,7 @@ export function useStartDryRun(type: 'end-of-year' | 'new-cohort' | 'backfill') 
       return res.json() as Promise<DryRunResult>;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['automation-runs'] });
+      void queryClient.invalidateQueries({ queryKey: ['automation-runs'] });
     },
   });
 }
@@ -66,7 +84,7 @@ export function useExecuteAutomation(type: 'end-of-year' | 'new-cohort' | 'backf
       return res.json() as Promise<{ runId: string; status: string }>;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['automation-runs'] });
+      void queryClient.invalidateQueries({ queryKey: ['automation-runs'] });
     },
   });
 }

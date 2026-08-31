@@ -373,7 +373,7 @@ function EmailDrawer({ event, onClose }: { event: EmailEvent | null; onClose: ()
 
   const copyMessageId = useCallback(() => {
     if (event?.sesMessageId) {
-      navigator.clipboard.writeText(event.sesMessageId);
+      void navigator.clipboard.writeText(event.sesMessageId);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }

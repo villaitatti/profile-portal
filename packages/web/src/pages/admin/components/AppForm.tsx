@@ -63,7 +63,7 @@ export function AppForm({
   const blurPlaceholder = watch('blurPlaceholder');
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+    <form onSubmit={(e) => void handleSubmit(onSubmit)(e)} className="space-y-6">
       <div>
         <label htmlFor="name" className="mb-1.5 block text-[0.95rem] font-medium">
           {t('admin.apps.form.nameLabel')}

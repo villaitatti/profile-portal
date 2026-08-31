@@ -68,7 +68,7 @@ export function useCreateAddress() {
     },
     onSuccess: () => {
       toast.success(t('profile.contact.toasts.addressAdded'));
-      queryClient.invalidateQueries({ queryKey: ['profile', 'addresses'] });
+      void queryClient.invalidateQueries({ queryKey: ['profile', 'addresses'] });
     },
     onError: (err, _input, context) => {
       if (context?.previous) {
@@ -110,7 +110,7 @@ export function useUpdateAddress() {
     },
     onSuccess: () => {
       toast.success(t('profile.contact.toasts.addressUpdated'));
-      queryClient.invalidateQueries({ queryKey: ['profile', 'addresses'] });
+      void queryClient.invalidateQueries({ queryKey: ['profile', 'addresses'] });
     },
     onError: (err, _input, context) => {
       if (context?.previous) {
@@ -144,7 +144,7 @@ export function useDeleteAddress() {
     },
     onSuccess: () => {
       toast.success(t('profile.contact.toasts.addressDeleted'));
-      queryClient.invalidateQueries({ queryKey: ['profile', 'addresses'] });
+      void queryClient.invalidateQueries({ queryKey: ['profile', 'addresses'] });
     },
     onError: (err, _id, context) => {
       if (context?.previous) {
@@ -190,7 +190,7 @@ export function useSetPreferredAddress() {
       toast.error(t('profile.contact.toasts.preferredAddressFailed'));
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['profile', 'addresses'] });
+      void queryClient.invalidateQueries({ queryKey: ['profile', 'addresses'] });
     },
   });
 }
@@ -210,11 +210,11 @@ export function useReclassifyAddress() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['profile', 'addresses'] });
+      void queryClient.invalidateQueries({ queryKey: ['profile', 'addresses'] });
     },
     onError: () => {
       toast.warning(t('profile.contact.toasts.reclassifyFailed'));
-      queryClient.invalidateQueries({ queryKey: ['profile', 'addresses'] });
+      void queryClient.invalidateQueries({ queryKey: ['profile', 'addresses'] });
     },
   });
 }
@@ -267,7 +267,7 @@ export function useCreatePhone() {
     },
     onSuccess: () => {
       toast.success(t('profile.contact.toasts.phoneAdded'));
-      queryClient.invalidateQueries({ queryKey: ['profile', 'phones'] });
+      void queryClient.invalidateQueries({ queryKey: ['profile', 'phones'] });
     },
     onError: (err, _input, context) => {
       if (context?.previous) {
@@ -302,7 +302,7 @@ export function useUpdatePhone() {
     },
     onSuccess: () => {
       toast.success(t('profile.contact.toasts.phoneUpdated'));
-      queryClient.invalidateQueries({ queryKey: ['profile', 'phones'] });
+      void queryClient.invalidateQueries({ queryKey: ['profile', 'phones'] });
     },
     onError: (err, _input, context) => {
       if (context?.previous) {
@@ -336,7 +336,7 @@ export function useDeletePhone() {
     },
     onSuccess: () => {
       toast.success(t('profile.contact.toasts.phoneDeleted'));
-      queryClient.invalidateQueries({ queryKey: ['profile', 'phones'] });
+      void queryClient.invalidateQueries({ queryKey: ['profile', 'phones'] });
     },
     onError: (err, _id, context) => {
       if (context?.previous) {
@@ -378,7 +378,7 @@ export function useSetPreferredPhone() {
       toast.error(t('profile.contact.toasts.preferredPhoneFailed'));
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['profile', 'phones'] });
+      void queryClient.invalidateQueries({ queryKey: ['profile', 'phones'] });
     },
   });
 }

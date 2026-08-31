@@ -472,7 +472,7 @@ export function AtlassianSyncPage() {
       setRunError({ kind, message, started: true });
       // A failed run is still recorded server-side — refresh history so the
       // failure row appears instead of leaving the page looking untouched.
-      queryClient.invalidateQueries({ queryKey: ['sync-runs'] });
+      void queryClient.invalidateQueries({ queryKey: ['sync-runs'] });
       // Drop the previewed diff: after a failure we can no longer claim it
       // describes the current Atlassian state, so it must not stay on screen
       // next to an Execute button.
@@ -534,8 +534,8 @@ export function AtlassianSyncPage() {
         startSseSubscription(runId, sseToken, 'dry-run', () => {
           setLastDryRunId(runId);
           setActiveRunId(null);
-          queryClient.invalidateQueries({ queryKey: ['sync-runs'] });
-          queryClient.invalidateQueries({ queryKey: ['sync-run', runId] });
+          void queryClient.invalidateQueries({ queryKey: ['sync-runs'] });
+          void queryClient.invalidateQueries({ queryKey: ['sync-run', runId] });
         });
       },
       onError: (err) => failRun('dry-run', getErrorMessage(err)),
@@ -562,7 +562,7 @@ export function AtlassianSyncPage() {
         startSseSubscription(runId, sseToken, 'execute', () => {
           setLastDryRunId(null);
           setActiveRunId(null);
-          queryClient.invalidateQueries({ queryKey: ['sync-runs'] });
+          void queryClient.invalidateQueries({ queryKey: ['sync-runs'] });
         });
       },
       onError: (err) => failRun('execute', getErrorMessage(err)),
@@ -642,7 +642,7 @@ export function AtlassianSyncPage() {
         {/* Sync actions */}
         <div className="flex items-center gap-3">
           <button
-            onClick={handleDryRun}
+            onClick={() => void handleDryRun()}
             disabled={
               isRunning ||
               startDryRun.isPending ||
@@ -732,7 +732,7 @@ export function AtlassianSyncPage() {
         open={showExecuteConfirm}
         onConfirm={() => {
           setShowExecuteConfirm(false);
-          if (canExecute) handleExecute();
+          if (canExecute) void handleExecute();
         }}
         onCancel={() => setShowExecuteConfirm(false)}
         title={t('admin.atlassian.sync.confirmTitle')}

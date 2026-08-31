@@ -215,7 +215,7 @@ export function FormsSubmissionsPage() {
         />
 
         {isError ? (
-          <ErrorBanner onRetry={refetch} />
+          <ErrorBanner onRetry={() => void refetch()} />
         ) : isLoading ? (
           <ListSkeleton />
         ) : items.length === 0 ? (
