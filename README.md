@@ -46,12 +46,12 @@ auth0/       # Auth0 configuration reference files
 ## Key Features
 
 - **Auth0 Login** — Supports VIT ID (email/password) and Microsoft Entra ID (staff)
-- **Role-Based Sections** — Sidebar and content driven by Auth0 roles (`fellows`, `fellows-current`, `staff-it`)
+- **Role-Based Sections** — Sidebar and content driven by Auth0 roles (`fellows`, `fellows-current`, `fellows-admin`, `staff-IT`)
 - **My Profile** — Read-only CiviCRM profile data (falls back to Auth0 profile for staff)
 - **Applications Catalog** — Internal apps filtered by user roles
-- **Admin Section** — `staff-it` users manage the applications catalog and assign role visibility
+- **Admin Section** — `staff-IT` users manage the applications catalog and assign role visibility
 - **Claim VIT ID** — Self-service flow: email → CiviCRM eligibility check → 4-tier VIT ID match ladder (primary email, Auth0 `civicrm_id`, CiviCRM secondary emails, normalized name) → Auth0 account creation or password reset to the existing account. Returning fellows whose email changed between fellowships are routed to their existing account instead of spawning a duplicate.
-- **VIT ID lookup** — Staff-only `/admin/has-vitid` page with unified server-side search (`GET /api/admin/vit-id-lookup?q=...`). Handles email-style queries (full reverse ladder) and name-style queries (substring match) so staff can find a fellow's VIT ID even when it's stored under an older email.
+- **VIT ID lookup** — `/admin/has-vitid` page (for `fellows-admin` or `staff-IT`) with unified server-side search (`POST /api/admin/vit-id-lookup` with body `{ q }` — POST so email addresses never land in access logs or proxies). Handles email-style queries (full reverse ladder) and name-style queries (substring match) so staff can find a fellow's VIT ID even when it's stored under an older email.
 - **Manage Appointees** — Staff dashboard with a seven-state lifecycle column (*Nominated* → *Nomination Sent* → *Form Submitted* → *Accepted* → *VIT ID Sent* → *VIT ID Claimed* → *Enrolled*) derived from `(fellowshipAccepted, VIT ID match tier, invitation event, bio email event, form invitation events)`. A dedicated Form column uses the labels **Ready** (configured but no link yet), **Not configured**, **Link Generated**, **Waiting**, **Submitted**, and **Expired**. Row actions include **Generate Form Link** (only for appointment/fellowship combinations with configured forms), **Nomination sent** (records the external email date), **Send VIT ID email** (invites a new appointee to claim), and **Send bio email** (requests bio + project description from a claimed appointee); the email actions route through a shared email preview modal so Angela sees the full rendered HTML before hitting Send.
 - **HTML appointee emails** — Both appointee-facing emails (VIT ID invitation + bio & project description) ship as brand-styled HTML via an MJML 5 template pipeline. I Tatti logo header, Georgia serif body, squared crimson CTA, multipart/alternative plaintext fallback for spam scoring. Compiled HTML is checked in; production never loads MJML at runtime.
 - **Appointee forms** — Public fellowship forms are token-based, sectioned, and backed by shared form definitions. New Full year Fellow invitations use the active `fellow-memorandum-v3` template, while short-term Fellow appointment rows can route to standard term, Dumbarton Oaks, or Graduate Fellow templates based on the raw CiviCRM `Fellowship` value. Retired definitions stay available so old submissions and PDFs keep rendering correctly.
@@ -75,7 +75,10 @@ auth0/       # Auth0 configuration reference files
 |------|-----------------|
 | `fellows` | All appointees (former + current) |
 | `fellows-current` | Current academic year appointees |
-| `staff-it` | IT staff with admin access |
+| `fellows-admin` | Staff managing appointees (Manage Appointees, emails, forms, VIT ID lookup) |
+| `staff-IT` | IT staff with full admin access |
+
+Role strings are matched exactly (see `packages/shared/src/constants/roles.ts`) — the casing of `staff-IT` matters.
 
 ## Environment Variables
 
@@ -149,7 +152,7 @@ See the "Single-instance constraint" section of [`DEPLOYMENT.md`](./DEPLOYMENT.m
 2. Auth0 database connection is named `Username-Password-Authentication`
 3. Jira SM uses REST API with Basic auth (email + API token)
 4. Application logos are stored as URLs (not file uploads)
-5. Auth0 custom claim namespace: `https://itatti.harvard.edu`
+5. Auth0 custom claim namespace: `https://auth0.itatti.harvard.edu`
 
 ## Documentation
 

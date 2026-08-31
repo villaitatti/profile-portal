@@ -77,14 +77,14 @@ Outcomes: `no-account`, `active`, `active-different-email`, `needs-review` (with
 
 Two appointee-facing emails share one infrastructure: the **VIT ID invitation** (sent when an appointee is accepted, invites them to claim) and the **bio & project description** request (sent 24h after a successful claim).
 
-**Lifecycle derivation** (`packages/shared/src/appointee-status.ts`):
+**Lifecycle derivation** (`packages/server/src/services/appointee-status.ts`):
 Appointee status is a pure function of `(fellowshipAccepted, matchTier, invitationEvent, bioEmailEvent, formInvitationEvents)` — no separate state column in the database. The seven states are *Nominated*, *Nomination Sent*, *Form Submitted*, *Accepted*, *VIT ID Sent*, *VIT ID Claimed*, *Enrolled*. Returning fellows (match ladder finds an existing VIT ID) skip straight from *Form Submitted* → *VIT ID Claimed* the moment the fellowship is accepted.
 
 **MJML template pipeline** (`packages/server/src/templates/emails/*.mjml`):
 Authoring format is MJML 5 with shared `_head.mjml` / `_header.mjml` / `_footer.mjml` partials. `pnpm --filter @itatti/server build:email-templates` compiles each `*.mjml` to a checked-in `*.compiled.html` next to a hand-authored `*.txt` plaintext fallback. Production never loads MJML at runtime — it reads the pre-compiled HTML off disk. CI re-runs the compile on every PR and fails on a non-empty `git diff` to prevent stale compiled output.
 
 **Tracking & idempotency** (`AppointeeEmailEvent` in Prisma):
-Unique constraint is `(fellowshipId, emailType)` — one invitation row and one bio row per fellowship, forever. Prior to v0.8.0 the key was `(contactId, academicYear, emailType)`; that assumed CiviCRM's "one fellowship per appointee per year" policy was a schema invariant, which it isn't. `contactId` and `academicYear` stay as non-unique audit columns.
+Multiple rows may exist per `(fellowshipId, emailType)` so resend history is preserved; a partial unique index (migration `20260424170000`) allows only one *in-flight* row (`PENDING`/`SENDING`) per pair, and dashboard state reads the latest row. Prior to v0.8.0 the key was `(contactId, academicYear, emailType)`; that assumed CiviCRM's "one fellowship per appointee per year" policy was a schema invariant, which it isn't. `contactId` and `academicYear` stay as non-unique audit columns.
 
 **Dispatch paths:**
 - **Manual send** (Angela clicks Send in the Manage Appointees modal) — goes through `sendVitIdInvitationManually` / `sendBioEmailManually`.
