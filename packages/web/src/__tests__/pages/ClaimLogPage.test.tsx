@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const { mockUseClaims } = vi.hoisted(() => ({
@@ -326,5 +326,50 @@ describe('ClaimLogPage — pagination', () => {
     render(<ClaimLogPage />);
 
     expect(screen.getByRole('button', { name: 'Loading…' })).toBeDisabled();
+  });
+});
+
+describe('ClaimLogPage — search/sort over the FULL log', () => {
+  it('drains remaining pages automatically while a search query is active', async () => {
+    const fetchNextPage = vi.fn();
+    mockUseClaims.mockReturnValue(
+      infiniteResult([{ claims: mockClaims, nextCursor: 'cursor-2' }], { fetchNextPage })
+    );
+    render(<ClaimLogPage />);
+    expect(fetchNextPage).not.toHaveBeenCalled();
+
+    await userEvent.setup().type(screen.getByRole('textbox'), 'sophie');
+
+    await waitFor(() => expect(fetchNextPage).toHaveBeenCalled());
+    // While draining, the provisional state is announced instead of the
+    // manual Load more button.
+    expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+    expect(screen.getByText(/Loading older claims/)).toBeInTheDocument();
+  });
+
+  it('drains remaining pages when a non-default sort is chosen', async () => {
+    const fetchNextPage = vi.fn();
+    mockUseClaims.mockReturnValue(
+      infiniteResult([{ claims: mockClaims, nextCursor: 'cursor-2' }], { fetchNextPage })
+    );
+    render(<ClaimLogPage />);
+
+    await userEvent.setup().click(screen.getByRole('button', { name: /Name/ }));
+
+    await waitFor(() => expect(fetchNextPage).toHaveBeenCalled());
+  });
+
+  it('shows the loading message, not a false "no match", while searching unloaded pages', async () => {
+    mockUseClaims.mockReturnValue(
+      infiniteResult([{ claims: mockClaims, nextCursor: 'cursor-2' }], {
+        isFetchingNextPage: true,
+      })
+    );
+    render(<ClaimLogPage />);
+
+    await userEvent.setup().type(screen.getByRole('textbox'), 'zzz-no-such-person');
+
+    expect(screen.getAllByText(/Loading older claims/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/No claims match/)).not.toBeInTheDocument();
   });
 });

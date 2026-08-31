@@ -188,7 +188,17 @@ function SentEmailsTab() {
     setKnownYears((prev) => (years.join(',') === prev.join(',') ? prev : years));
   }, [isUnfiltered, events]);
 
-  const academicYears = knownYears;
+  // The active filter must always be among the options: on a deep link
+  // (?year=X) knownYears is still empty, and SelectDropdown renders its
+  // placeholder ("All years") for values it doesn't know — while the list IS
+  // filtered by X. Splice the active year in until the unfiltered seed runs.
+  const academicYears = useMemo(
+    () =>
+      yearFilter !== 'all' && !knownYears.includes(yearFilter)
+        ? [...knownYears, yearFilter].sort().reverse()
+        : knownYears,
+    [knownYears, yearFilter]
+  );
   const hasActiveFilters = yearFilter !== 'all' || typeFilter !== 'all' || statusFilters.size > 0 || nameSearch.length > 0;
 
   const sorted = useMemo(() => {

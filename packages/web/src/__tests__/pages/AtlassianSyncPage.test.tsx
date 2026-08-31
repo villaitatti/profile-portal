@@ -140,6 +140,10 @@ describe('AtlassianSyncPage — run failures stay visible', () => {
     expect(mockStartDryRunMutate).toHaveBeenCalled();
     expect(mockFetchSseToken).toHaveBeenCalledWith(expect.any(Function), 'dry_token_fail');
     expect(mockSubscribeSyncProgress).not.toHaveBeenCalled();
+    // The page must not stay locked in the running state: with no SSE
+    // subscription there is nothing left to clear activeRunId, so the
+    // token-failure path itself must re-enable the buttons.
+    expect(screen.getByRole('button', { name: /Preview Changes/ })).toBeEnabled();
   });
 
   it('surfaces a dry-run mutation failure', async () => {
@@ -285,6 +289,8 @@ describe('AtlassianSyncPage — run failures stay visible', () => {
     // The previewed diff described pre-run state — it must not stay on
     // screen next to an Execute button.
     expect(screen.queryByText(/Users to Create/)).not.toBeInTheDocument();
+    // And the page must not stay locked running.
+    expect(screen.getByRole('button', { name: /Preview Changes/ })).toBeEnabled();
   });
 });
 

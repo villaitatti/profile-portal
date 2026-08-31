@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { formatHumanDateTime } from '@/lib/dates';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -21,6 +21,19 @@ export function ClaimLogPage() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   const claims = useMemo(() => data?.pages.flatMap((p) => p.claims), [data]);
+
+  // Search and sort run client-side, so they are only honest over the FULL
+  // log. The default view (claimedAt desc) matches the server's page order
+  // and stays lazily paginated; the moment the admin searches or re-sorts,
+  // drain the remaining pages so a match on an unloaded page can't be
+  // silently hidden.
+  const needsFullLog = searchQuery.trim() !== '' || sortField !== 'claimedAt' || sortDir !== 'desc';
+  useEffect(() => {
+    if (needsFullLog && hasNextPage && !isFetchingNextPage) {
+      void fetchNextPage();
+    }
+  }, [needsFullLog, hasNextPage, isFetchingNextPage, fetchNextPage]);
+  const loadingFullLog = needsFullLog && (hasNextPage || isFetchingNextPage);
 
   const filtered = useMemo(() => {
     if (!claims) return [];
@@ -127,8 +140,10 @@ export function ClaimLogPage() {
             </div>
 
             {filtered.length === 0 ? (
-              <p className="py-8 text-center text-[0.95rem] text-muted-foreground">
-                {t('admin.claimLog.noMatch', { query: searchQuery })}
+              <p className="py-8 text-center text-[0.95rem] text-muted-foreground" role="status">
+                {loadingFullLog
+                  ? t('admin.claimLog.searchingOlder')
+                  : t('admin.claimLog.noMatch', { query: searchQuery })}
               </p>
             ) : (
               <div className="overflow-x-auto">
@@ -153,11 +168,12 @@ export function ClaimLogPage() {
             )}
 
             <div className="mt-4 flex items-center justify-between gap-4">
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground" role="status">
                 {t('admin.claimLog.totalClaims', { count: claims.length })}
                 {searchQuery.trim() ? t('admin.claimLog.matching', { count: filtered.length }) : ''}
+                {loadingFullLog ? ` — ${t('admin.claimLog.searchingOlder')}` : ''}
               </p>
-              {hasNextPage && (
+              {!needsFullLog && hasNextPage && (
                 <button
                   type="button"
                   onClick={() => void fetchNextPage()}

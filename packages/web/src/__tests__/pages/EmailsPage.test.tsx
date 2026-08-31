@@ -367,6 +367,12 @@ describe('EmailsPage — Sent emails tab — filters', () => {
     expect(screen.getByText('Elena Petrova')).toBeInTheDocument();
     expect(screen.queryByText('Sophie Laurent')).not.toBeInTheDocument();
     expect(screen.queryByText('James Chen')).not.toBeInTheDocument();
+    // The dropdown must DISPLAY the active year, not the "All years"
+    // placeholder — on a deep link the year isn't in knownYears yet, so the
+    // page splices the active value into the options.
+    expect(
+      screen.getByRole('combobox', { name: 'Filter by academic year' })
+    ).toHaveTextContent('2024-2025');
   });
 
   it('initializes the type filter from the URL', () => {

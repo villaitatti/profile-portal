@@ -517,13 +517,16 @@ export function AtlassianSyncPage() {
         setProgress({ phase: 'starting', step: 0, totalSteps: 0, percentage: 0, description: t('admin.atlassian.sync.startingDryRun') });
         // SSE tokens are bound to the run id, so the token can only be
         // requested once the run exists. A token failure here means the run
-        // continues server-side without a progress view — surface it as a
+        // continues server-side without a progress view — clear the running
+        // state (or the buttons stay disabled forever) and surface it as a
         // run error so the admin refreshes the history instead of waiting.
         void (async () => {
           let sseToken: string;
           try {
             sseToken = await fetchSseToken(getToken, runId);
           } catch (err) {
+            setActiveRunId(null);
+            setProgress(null);
             failRun('dry-run', getErrorMessage(err));
             return;
           }
@@ -549,12 +552,15 @@ export function AtlassianSyncPage() {
         setActiveRunId(runId);
         setStartTime(Date.now());
         setProgress({ phase: 'starting', step: 0, totalSteps: 0, percentage: 0, description: t('admin.atlassian.sync.startingExecution') });
-        // Run-bound SSE token: request it now that the run id exists.
+        // Run-bound SSE token: request it now that the run id exists. On
+        // failure, clear the running state or the page locks up.
         void (async () => {
           let sseToken: string;
           try {
             sseToken = await fetchSseToken(getToken, runId);
           } catch (err) {
+            setActiveRunId(null);
+            setProgress(null);
             failRun('execute', getErrorMessage(err));
             return;
           }
