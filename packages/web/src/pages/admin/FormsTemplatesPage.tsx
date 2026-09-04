@@ -109,7 +109,7 @@ function TemplateTabs({
               className={cn(
                 'relative px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground',
                 isActive &&
-                  'text-primary after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-primary'
+                  'text-foreground after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-crimson-mark'
               )}
             >
               {label}
@@ -134,7 +134,7 @@ function FormCard({ form }: { form: FormDef }) {
               registry id so staff can tell otherwise-identical cards apart. */}
           <p className="mt-0.5 font-mono text-xs text-muted-foreground">{form.id}</p>
           {!isActiveFormDef(form) && (
-            <p className="mt-1 text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
+            <p className="mt-1 text-[0.82rem] font-medium text-muted-foreground">
               {t('fellows.forms.templates.retiredKept')}
             </p>
           )}
@@ -147,7 +147,7 @@ function FormCard({ form }: { form: FormDef }) {
             className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
               isActiveFormDef(form)
                 ? 'bg-primary/10 text-primary'
-                : 'bg-muted text-muted-foreground'
+                : 'tone-neutral'
             }`}
           >
             {isActiveFormDef(form)

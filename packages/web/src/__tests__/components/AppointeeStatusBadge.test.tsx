@@ -52,7 +52,7 @@ describe('AppointeeStatusBadge', () => {
 
     fireEvent.click(screen.getByLabelText('View appointee lifecycle stages'));
 
-    expect(document.querySelectorAll('.border-green-600')).toHaveLength(3);
+    expect(document.querySelectorAll('.border-success')).toHaveLength(3);
     expect(document.querySelectorAll('.border-primary')).toHaveLength(1);
     expect(document.querySelectorAll('.border-muted-foreground\\/40')).toHaveLength(3);
   });

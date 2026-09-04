@@ -1,4 +1,5 @@
 import { Languages, Moon, Sun } from 'lucide-react';
+import { useLocation } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
@@ -7,12 +8,28 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { ItattiLogo } from '@/components/shared/ItattiLogo';
+import { navSections } from '@/config/navigation';
 import { useTheme } from '@/lib/theme';
 import { persistLanguage } from '@/i18n/config';
 
+const navItems = navSections.flatMap((section) => section.items);
+
+/**
+ * The header carries three things: the sidebar toggle with the current
+ * section's name, the I Tatti wordmark centred (the institutional anchor
+ * shared with Libra), and the language/theme controls. Sign-out lives in the
+ * sidebar footer next to the account it signs out.
+ */
 export function AppHeader() {
   const { t, i18n } = useTranslation();
   const { theme, toggleTheme } = useTheme();
+  const { pathname } = useLocation();
+
+  // Longest-prefix match so subroutes (/admin/apps/new) still name their section.
+  const activeItem = navItems
+    .filter((item) => pathname === item.path || pathname.startsWith(`${item.path}/`))
+    .sort((a, b) => b.path.length - a.path.length)[0];
 
   const toggleLanguage = () => {
     const next = i18n.language === 'it' ? 'en' : 'it';
@@ -21,7 +38,7 @@ export function AppHeader() {
   };
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2 border-b bg-background px-3 sm:px-4">
+    <header className="relative flex h-14 shrink-0 items-center gap-2 border-b bg-background px-3 sm:px-4">
       <Tooltip>
         <TooltipTrigger render={<SidebarTrigger aria-label={t('common.toggleSidebar')} />} />
         <TooltipContent side="bottom">
@@ -31,6 +48,14 @@ export function AppHeader() {
           </kbd>
         </TooltipContent>
       </Tooltip>
+      <div aria-hidden className="mr-1 h-4 w-px shrink-0 bg-border max-sm:hidden" />
+      {/* The page repeats its own title as an h1, so this is a plain label. */}
+      <p className="truncate text-[0.9rem] font-semibold text-ink-soft max-sm:hidden">
+        {activeItem ? t(activeItem.labelKey) : t('common.appName')}
+      </p>
+      <div className="header-brand">
+        <ItattiLogo className="header-brand-logo" />
+      </div>
       <div className="ml-auto flex items-center gap-1.5">
         <Tooltip>
           <TooltipTrigger

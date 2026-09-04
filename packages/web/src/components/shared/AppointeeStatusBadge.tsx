@@ -104,13 +104,13 @@ export function AppointeeStatusBadge({
                           isCurrent
                             ? 'border-primary bg-primary'
                             : isComplete
-                              ? 'border-green-600 bg-green-600 dark:border-green-500 dark:bg-green-500'
+                              ? 'border-success bg-success'
                               : 'border-muted-foreground/40 bg-background'
                         )}
                       >
                         {isComplete && (
                           <Check
-                            className="h-2.5 w-2.5 text-primary-foreground dark:text-green-950"
+                            className="h-2.5 w-2.5 text-white"
                             aria-hidden="true"
                           />
                         )}
@@ -119,7 +119,7 @@ export function AppointeeStatusBadge({
                         <div
                           className={cn(
                             'h-4 w-0.5',
-                            i < currentIndex ? 'bg-green-600/60 dark:bg-green-500/60' : 'bg-muted-foreground/20'
+                            i < currentIndex ? 'bg-success/60' : 'bg-muted-foreground/20'
                           )}
                         />
                       )}
@@ -130,7 +130,7 @@ export function AppointeeStatusBadge({
                           isCurrent
                             ? 'text-primary'
                             : isComplete
-                              ? 'text-green-700 dark:text-green-400'
+                              ? 'text-success'
                               : 'text-foreground'
                         )}
                       >
@@ -157,37 +157,37 @@ const VISUAL: Record<
 > = {
   nominated: {
     labelKey: 'fellows.status.nominated',
-    tone: 'bg-muted text-muted-foreground',
+    tone: 'tone-neutral',
     titleKey: 'fellows.badges.appointee.titles.nominated',
   },
   'nomination-sent': {
     labelKey: 'fellows.status.nominationSent',
-    tone: 'bg-secondary text-secondary-foreground',
+    tone: 'tone-neutral',
     titleKey: 'fellows.badges.appointee.titles.nominationSent',
   },
   'form-submitted': {
     labelKey: 'fellows.status.formSubmitted',
-    tone: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300',
+    tone: 'tone-progress',
     titleKey: 'fellows.badges.appointee.titles.formSubmitted',
   },
   accepted: {
     labelKey: 'fellows.status.accepted',
-    tone: 'bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300',
+    tone: 'tone-info',
     titleKey: 'fellows.badges.appointee.titles.accepted',
   },
   'vit-id-sent': {
     labelKey: 'fellows.status.vitIdSent',
-    tone: 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
+    tone: 'tone-warning',
     titleKey: 'fellows.badges.appointee.titles.vitIdSent',
   },
   'vit-id-claimed': {
     labelKey: 'fellows.status.vitIdClaimed',
-    tone: 'bg-lime-50 text-lime-700 dark:bg-lime-500/15 dark:text-lime-300',
+    tone: 'tone-claimed',
     titleKey: 'fellows.badges.appointee.titles.vitIdClaimed',
   },
   enrolled: {
     labelKey: 'fellows.status.enrolled',
-    tone: 'bg-green-50 text-green-700 dark:bg-green-500/15 dark:text-green-300',
+    tone: 'tone-success',
     titleKey: 'fellows.badges.appointee.titles.enrolled',
   },
 };

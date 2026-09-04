@@ -1,4 +1,5 @@
 import { createBrowserRouter, Navigate } from 'react-router';
+import { Button } from '@/components/ui/button';
 import { useTranslation } from 'react-i18next';
 import { RootLayout } from '@/components/layout/RootLayout';
 import { PublicLayout } from '@/components/layout/PublicLayout';
@@ -14,15 +15,11 @@ function RouteErrorPage() {
   const { t } = useTranslation();
   return (
     <div className="mx-auto max-w-md py-20 text-center">
-      <h1 className="mb-2 text-2xl font-bold">{t('common.routeError.title')}</h1>
+      <h1 className="mb-2 font-heading text-[1.8rem] leading-tight">{t('common.routeError.title')}</h1>
       <p className="text-muted-foreground">{t('common.routeError.description')}</p>
-      <button
-        type="button"
-        className="mt-6 rounded-md bg-primary px-4 py-2 text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-        onClick={() => window.location.reload()}
-      >
+      <Button type="button" size="lg" className="mt-6" onClick={() => window.location.reload()}>
         {t('common.routeError.reload')}
-      </button>
+      </Button>
     </div>
   );
 }

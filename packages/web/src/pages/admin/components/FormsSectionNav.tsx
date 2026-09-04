@@ -18,11 +18,12 @@ export function FormsSectionNav() {
             key={tab.path}
             to={tab.path}
             end={tab.end}
+            viewTransition
             className={({ isActive }) =>
               cn(
                 'relative px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground',
                 isActive &&
-                  'text-primary after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-primary'
+                  'text-foreground after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-crimson-mark'
               )
             }
           >

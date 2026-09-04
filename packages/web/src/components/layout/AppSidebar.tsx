@@ -1,7 +1,7 @@
 import { NavLink, useLocation } from 'react-router';
 import { useAuth0 } from '@auth0/auth0-react';
 import { useTranslation } from 'react-i18next';
-import { LogOut, User } from 'lucide-react';
+import { IdCard, LogOut, User } from 'lucide-react';
 import { useProfile } from '@/api/profile';
 import { useUserRoles } from '@/hooks/useUserRoles';
 import { hasAnyRole } from '@itatti/shared';
@@ -20,8 +20,6 @@ import {
   SidebarRail,
   useSidebar,
 } from '@/components/ui/sidebar';
-import itattiLogo from '@/assets/itatti-logo.png';
-import itattiMarchio from '@/assets/itatti-marchio.png';
 
 interface AppSidebarProps {
   onNavigate?: () => void;
@@ -62,21 +60,29 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
       sheetDescription={t('common.mobileSidebarDescription')}
     >
       <SidebarHeader>
-        <div className="flex items-center px-2 pt-2">
-          <img
-            src={itattiLogo}
-            alt="I Tatti"
-            className="h-8 object-contain group-data-[collapsible=icon]:hidden"
-          />
-          <img
-            src={itattiMarchio}
-            alt="I Tatti"
-            className="mx-auto hidden h-8 object-contain group-data-[collapsible=icon]:block"
-          />
-        </div>
-        <h1 className="px-2 text-[1.05rem] font-semibold tracking-[0.01em] text-primary group-data-[collapsible=icon]:hidden">
-          {t('common.appName')}
-        </h1>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            {/* Product identity: crimson tile + Bodoni product name + a one-line
+                descriptor. The institution's wordmark sits in the header, so the
+                sidebar names the product, not the institute (same split as Libra). */}
+            <SidebarMenuButton
+              size="lg"
+              tooltip={t('common.appName')}
+              render={<NavLink to="/dashboard" viewTransition onClick={handleNavigate} />}
+            >
+              <span className="brand-mark flex aspect-square size-8 shrink-0 items-center justify-center rounded-lg shadow-sm">
+                <IdCard className="size-4.5" aria-hidden />
+              </span>
+              <span className="grid flex-1 text-left leading-tight">
+                <span className="truncate font-heading text-[1.3rem]">{t('common.appName')}</span>
+                {/* Brandon, not Bodoni: at this size the didone sits under its hairline floor. */}
+                <span className="truncate text-[0.72rem] text-sidebar-foreground/70">
+                  {t('common.productEyebrow')}
+                </span>
+              </span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
         <nav aria-label={t('nav.mainNavigation')} className="contents">
@@ -92,10 +98,14 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
                       <SidebarMenuButton
                         isActive={isItemActive(item)}
                         tooltip={t(item.labelKey)}
+                        // The active item's icon takes the crimson mark: one
+                        // quiet brand touch per screen.
+                        className="data-[active=true]:[&>svg]:text-crimson-mark"
                         render={
                           <NavLink
                             to={item.path}
                             end={item.end ?? true}
+                            viewTransition
                             onClick={handleNavigate}
                           />
                         }

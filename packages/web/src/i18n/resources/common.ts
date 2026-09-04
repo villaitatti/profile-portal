@@ -4,6 +4,7 @@
 export const common = {
   en: {
     appName: 'Profile Portal',
+    productEyebrow: 'Your I Tatti account',
     save: 'Save',
     cancel: 'Cancel',
     confirm: 'Confirm',
@@ -41,6 +42,7 @@ export const common = {
   },
   it: {
     appName: 'Profile Portal',
+    productEyebrow: 'Il tuo account I Tatti',
     save: 'Salva',
     cancel: 'Annulla',
     confirm: 'Conferma',

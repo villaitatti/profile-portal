@@ -1,4 +1,5 @@
 import { useParams } from 'react-router';
+import { Button } from '@/components/ui/button';
 import { useTranslation } from 'react-i18next';
 import { formatHumanDate } from '@/lib/dates';
 import { PublicFormRequestError, PublicFormSubmitError, usePublicForm, useSubmitForm } from '@/api/forms';
@@ -48,7 +49,7 @@ function PublicFormView({ token }: { token: string }) {
     const isRateLimited = status === 429;
     return (
       <div className="text-center py-20 max-w-md mx-auto">
-        <h1 className="text-2xl font-bold mb-2">
+        <h1 className="mb-2 font-heading text-[1.8rem] leading-tight">
           {isExpired
             ? t('forms.loadError.expiredTitle')
             : isInvalid
@@ -65,14 +66,9 @@ function PublicFormView({ token }: { token: string }) {
               : t('forms.loadError.unavailableBody')}
         </p>
         {!isExpired && !isInvalid && (
-          <button
-            type="button"
-            className="mt-6 rounded-md bg-primary px-4 py-2 text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-            onClick={() => void refetch()}
-            disabled={isFetching}
-          >
+          <Button type="button" size="lg" className="mt-6" onClick={() => void refetch()} disabled={isFetching}>
             {isFetching ? t('forms.tryingAgain') : t('forms.tryAgain')}
-          </button>
+          </Button>
         )}
       </div>
     );
@@ -82,8 +78,8 @@ function PublicFormView({ token }: { token: string }) {
     const submittedDate = data.submittedAt ? formatHumanDate(data.submittedAt, i18n.language) : '';
     return (
       <div className="text-center py-20 max-w-md mx-auto">
-        <CheckCircle2 className="h-16 w-16 text-green-600 mx-auto mb-4" />
-        <h1 className="text-2xl font-bold mb-2">{t('forms.alreadySubmittedTitle')}</h1>
+        <CheckCircle2 className="h-16 w-16 text-success mx-auto mb-4" />
+        <h1 className="mb-2 font-heading text-[1.8rem] leading-tight">{t('forms.alreadySubmittedTitle')}</h1>
         <p className="text-muted-foreground">
           {submittedDate
             ? t('forms.submittedOn', { date: submittedDate })
@@ -97,7 +93,7 @@ function PublicFormView({ token }: { token: string }) {
   if (data.status === 'expired') {
     return (
       <div className="text-center py-20 max-w-md mx-auto">
-        <h1 className="text-2xl font-bold mb-2">{t('forms.loadError.expiredTitle')}</h1>
+        <h1 className="mb-2 font-heading text-[1.8rem] leading-tight">{t('forms.loadError.expiredTitle')}</h1>
         <p className="text-muted-foreground">{t('forms.expiredPrivacyBody')}</p>
       </div>
     );
@@ -106,10 +102,10 @@ function PublicFormView({ token }: { token: string }) {
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-8 border-b border-primary/15 pb-6">
-        <p className="mb-2 text-sm font-semibold uppercase tracking-[0.08em] text-primary">
+        <p className="mb-2 text-[0.95rem] font-medium text-crimson">
           {t('forms.kicker')}
         </p>
-        <h1 className="text-3xl font-semibold tracking-tight">{data.formDef.title}</h1>
+        <h1 className="font-heading text-[2.3rem] leading-[1.15]">{data.formDef.title}</h1>
         {data.formDef.description && (
           <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
             {data.formDef.description}

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
 import { useTranslation } from 'react-i18next';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import type { CiviCRMPhone, CreatePhoneInput } from '@itatti/shared';
@@ -88,21 +89,12 @@ export function PhoneFormModal({ open, onClose, onSave, phone, isSaving }: Phone
           </fieldset>
 
           <div className="flex justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isSaving}
-              className="rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
-            >
+            <Button type="button" variant="outline" onClick={onClose} disabled={isSaving}>
               {t('common.cancel')}
-            </button>
-            <button
-              type="submit"
-              disabled={isSaving || !phoneNumber.trim()}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
+              </Button>
+            <Button type="submit" disabled={isSaving || !phoneNumber.trim()}>
               {isSaving ? t('profile.saving') : t('common.save')}
-            </button>
+            </Button>
           </div>
         </form>
       </DialogContent>

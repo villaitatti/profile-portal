@@ -1,16 +1,14 @@
 import { useAuth0 } from '@auth0/auth0-react';
 import { useTranslation } from 'react-i18next';
+import { Button } from '@/components/ui/button';
 
 export function LoginButton() {
   const { t } = useTranslation();
   const { loginWithRedirect } = useAuth0();
 
   return (
-    <button
-      onClick={() => void loginWithRedirect()}
-      className="inline-flex items-center justify-center rounded-md bg-primary px-6 py-3 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 transition-colors"
-    >
+    <Button size="lg" className="px-6" onClick={() => void loginWithRedirect()}>
       {t('auth.signIn')}
-    </button>
+    </Button>
   );
 }

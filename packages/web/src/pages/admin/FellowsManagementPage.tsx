@@ -29,20 +29,20 @@ const APPOINTMENT_TABS: { key: FilterTab; labelKey: string }[] = [
 ];
 
 const STATUS_PILLS: { key: AppointeeStatus; labelKey: string; tone: string }[] = [
-  { key: 'nominated', labelKey: 'fellows.status.nominated', tone: 'bg-muted text-foreground' },
-  { key: 'nomination-sent', labelKey: 'fellows.status.nominationSent', tone: 'bg-muted text-muted-foreground' },
-  { key: 'form-submitted', labelKey: 'fellows.status.formSubmitted', tone: 'bg-indigo-50 text-indigo-700' },
-  { key: 'accepted', labelKey: 'fellows.status.accepted', tone: 'bg-blue-50 text-blue-700' },
-  { key: 'vit-id-sent', labelKey: 'fellows.status.vitIdSent', tone: 'bg-amber-50 text-amber-700' },
-  { key: 'vit-id-claimed', labelKey: 'fellows.status.vitIdClaimed', tone: 'bg-lime-50 text-lime-700' },
-  { key: 'enrolled', labelKey: 'fellows.status.enrolled', tone: 'bg-green-50 text-green-700' },
+  { key: 'nominated', labelKey: 'fellows.status.nominated', tone: 'tone-neutral' },
+  { key: 'nomination-sent', labelKey: 'fellows.status.nominationSent', tone: 'tone-neutral' },
+  { key: 'form-submitted', labelKey: 'fellows.status.formSubmitted', tone: 'tone-progress' },
+  { key: 'accepted', labelKey: 'fellows.status.accepted', tone: 'tone-info' },
+  { key: 'vit-id-sent', labelKey: 'fellows.status.vitIdSent', tone: 'tone-warning' },
+  { key: 'vit-id-claimed', labelKey: 'fellows.status.vitIdClaimed', tone: 'tone-claimed' },
+  { key: 'enrolled', labelKey: 'fellows.status.enrolled', tone: 'tone-success' },
 ];
 
 const VIT_ID_PILLS: { key: VitIdStatus; labelKey: string; tone: string }[] = [
-  { key: 'active', labelKey: 'fellows.filters.vitPills.active', tone: 'bg-green-50 text-green-700' },
-  { key: 'active-different-email', labelKey: 'fellows.filters.vitPills.differentEmail', tone: 'bg-amber-50 text-amber-700' },
-  { key: 'needs-review', labelKey: 'fellows.filters.vitPills.needsReview', tone: 'bg-amber-50 text-amber-800' },
-  { key: 'no-account', labelKey: 'fellows.filters.vitPills.noAccount', tone: 'bg-red-50 text-red-700' },
+  { key: 'active', labelKey: 'fellows.filters.vitPills.active', tone: 'tone-success' },
+  { key: 'active-different-email', labelKey: 'fellows.filters.vitPills.differentEmail', tone: 'tone-warning' },
+  { key: 'needs-review', labelKey: 'fellows.filters.vitPills.needsReview', tone: 'tone-warning' },
+  { key: 'no-account', labelKey: 'fellows.filters.vitPills.noAccount', tone: 'tone-danger' },
 ];
 
 // Valid values for URL-sourced filter params; anything else in the URL
@@ -255,7 +255,7 @@ export function FellowsManagementPage() {
       />
 
       <div className="mb-6 flex items-center justify-between gap-4">
-        <h2 className="text-[1.25rem] font-semibold tracking-tight text-foreground">
+        <h2 className="font-heading text-[1.45rem] leading-tight text-foreground">
           {t('fellows.manage.yearAppointees', { year: selectedYear })}
         </h2>
         <SelectDropdown
@@ -277,7 +277,7 @@ export function FellowsManagementPage() {
             });
           }}
           placeholder={currentYear}
-          className="min-w-[150px]"
+          className="w-auto min-w-[150px]"
         />
       </div>
 
@@ -292,7 +292,7 @@ export function FellowsManagementPage() {
               onClick={() => selectTab(tab.key)}
               className={`whitespace-nowrap rounded-t-lg border-b-2 px-3 py-2.5 text-[0.9rem] font-medium transition-colors ${
                 activeTab === tab.key
-                  ? 'border-primary text-primary'
+                  ? 'border-crimson-mark text-foreground'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
@@ -301,7 +301,7 @@ export function FellowsManagementPage() {
                 className={`ml-1.5 inline-flex items-center rounded-full px-1.5 py-0.5 text-[0.75rem] ${
                   activeTab === tab.key
                     ? 'bg-primary/10 text-primary'
-                    : 'bg-muted text-muted-foreground'
+                    : 'tone-neutral'
                 }`}
               >
                 {tabCounts[tab.key] ?? 0}

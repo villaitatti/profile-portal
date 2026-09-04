@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Link } from 'react-router';
 import { useTranslation, Trans } from 'react-i18next';
 import { formatHumanDateTime } from '@/lib/dates';
@@ -291,15 +292,10 @@ export function AtlassianMappingsPage() {
             </p>
           )}
 
-          <button
-            type="button"
-            onClick={handleAdd}
-            disabled={!canAdd}
-            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
-            <Plus className="h-4 w-4" />
+          <Button type="button" size="lg" onClick={handleAdd} disabled={!canAdd}>
+            <Plus data-icon="inline-start" />
             {t('admin.atlassian.mappings.add')}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -340,11 +336,11 @@ export function AtlassianMappingsPage() {
                     <tr className="border-b text-left">
                       <SortableHeader field="auth0RoleName" label={t('admin.atlassian.mappings.auth0Role')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="pb-3" />
                       <SortableHeader field="atlassianGroupName" label={t('admin.atlassian.mappings.atlassianGroup')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="pb-3" />
-                      <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">{t('admin.atlassian.mappings.colAuth0RoleId')}</th>
-                      <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">{t('admin.atlassian.mappings.colAtlassianGroupId')}</th>
+                      <th className="pb-3 text-[0.82rem] font-semibold text-muted-foreground">{t('admin.atlassian.mappings.colAuth0RoleId')}</th>
+                      <th className="pb-3 text-[0.82rem] font-semibold text-muted-foreground">{t('admin.atlassian.mappings.colAtlassianGroupId')}</th>
                       <SortableHeader field="createdBy" label={t('admin.atlassian.mappings.colAddedBy')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="pb-3" />
                       <SortableHeader field="createdAt" label={t('admin.atlassian.mappings.colAddedOn')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="pb-3" />
-                      <th className="w-12 pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground"></th>
+                      <th className="w-12 pb-3 text-[0.82rem] font-semibold text-muted-foreground"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -381,13 +377,10 @@ export function AtlassianMappingsPage() {
 
         {hasMappings && (
           <div className="mt-6 pt-4 border-t">
-            <Link
-              to="/admin/atlassian/sync"
-              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-            >
-              <ArrowRight className="h-4 w-4" />
+            <Link to="/admin/atlassian/sync" viewTransition className={buttonVariants({ size: 'lg' })}>
+              <ArrowRight data-icon="inline-start" />
               {t('admin.atlassian.mappings.nextSyncUsers')}
-            </Link>
+              </Link>
           </div>
         )}
       </div>

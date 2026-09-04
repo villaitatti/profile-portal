@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
+import { Button } from '@/components/ui/button';
 import { useTranslation } from 'react-i18next';
 import Cropper from 'react-easy-crop';
 import type { Area } from 'react-easy-crop';
@@ -281,31 +282,19 @@ export function ImageUploader({ value, blurPlaceholder, onChange, onClear }: Ima
             </div>
 
             <div className="mt-4 flex justify-end gap-2">
-              <DialogClose
-                render={
-                  <button
-                    type="button"
-                    className="rounded-md border px-4 py-2 text-[0.95rem] font-medium hover:bg-muted/50 transition-colors"
-                  />
-                }
-              >
+              <DialogClose render={<Button type="button" variant="outline" />}>
                 {t('common.cancel')}
               </DialogClose>
-              <button
-                type="button"
-                onClick={() => void handleCropConfirm()}
-                disabled={isUploading}
-                className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-[0.95rem] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
-              >
+              <Button type="button" onClick={() => void handleCropConfirm()} disabled={isUploading}>
                 {isUploading ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Loader2 data-icon="inline-start" className="animate-spin" />
                     {t('admin.images.uploading')}
                   </>
                 ) : (
                   t('admin.images.cropAndUpload')
                 )}
-              </button>
+              </Button>
             </div>
         </DialogContent>
       </Dialog>

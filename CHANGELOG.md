@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.21.0] - 04 September 2026 - I Tatti house style: Bodoni titles, anthracite actions, shared chrome with Libra
+
+### Changed
+- **Titles are set in Bodoni.** Page titles, section titles, dialog titles, the product name in the sidebar and the person's name on the dashboard use Bodoni Moda (self-hosted, with optical sizing so the hairlines hold at dialog size). Everything operable stays on Brandon Grotesque. The same split Libra adopted in v0.7.0, so the two apps now share one typographic voice.
+- **Crimson is the mark, not the button.** Primary actions are anthracite in light mode and light grey in dark mode. Crimson is reserved for the logo, the active navigation icon, tab underlines, the hairline under section titles, links and focus rings. Destructive red is now visibly its own colour instead of a near-twin of the primary.
+- **The I Tatti wordmark moved to the header** as an inline SVG that follows the theme; on dark surfaces the old PNG lost its anthracite lettering. The header grew to 56px and names the current section. The sidebar now opens with a crimson product tile, "Profile Portal" in Bodoni and a one-line descriptor, mirroring Libra's layout.
+- **Sentence case replaces tracked uppercase** on sidebar group labels, table headers, eyebrows, the public form kicker and the claim page divider, one step larger. Brandon's small x-height made the 13px capitals read like 11px.
+- **Status colours share one recipe.** Appointee, VIT ID, form, email and login-method pills, the filter chips and the sync/automation diff colours now use brand-tuned tones that hold in both themes, replacing the Tailwind indigo/lime/sky/amber palette (the solid sky-blue "Public" badge in dark mode is gone).
+- **Every button is the shared Button component.** Hand-rolled primary links and submit buttons across the dashboard, App Catalog, Atlassian pages, automations, dialogs, profile modals, claim and public form pages now share one radius, height and hover.
+- **Filters line up.** The Emails search box and its year/type selects sit on one row; the Manage Appointees year select sits beside the section title instead of stretching across the page.
+- **Toasts moved to the bottom-right** with a close button, as in Libra.
+- **Brand fonts degrade gracefully.** A new `fonts.css` (identical to Libra's) adds an installed-Brandon tier and a size-adjusted Open Sans tier under the Adobe kit, so an unreachable typekit.net no longer changes the apparent size of the interface.
+
+### Motion
+- One 180ms cross-fade on navigation (View Transitions API via router links).
+- Removed the staggered card pop-in, hover lift and gradient "Visit" overlay on the dashboard; a card now answers hover with a crimson hairline border and the outbound icon taking colour.
+- Everything is off under the operating system's reduced-motion setting.
+
+### Documentation
+- `docs/house-style.md` records the shared I Tatti house style (type, colour, chrome, motion, words) and where the Portal and Libra differ on purpose. PRODUCT.md's aesthetic direction points to it.
+
 ## [0.20.0] - 31 August 2026 - Production-readiness: contracts, safety nets, and structure
 
 ### Added

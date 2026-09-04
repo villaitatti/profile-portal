@@ -9,7 +9,7 @@ export type SortDirection = 'asc' | 'desc';
  * "descending" on the active column, absent otherwise) with a type="button"
  * sort trigger and an ↑/↓ indicator on the active column.
  *
- * The default button typography is the uppercase micro-label shared by the
+ * The default button typography is the sentence-case column label shared by the
  * Claim Log / Atlassian tables; page-level deltas (padding, responsive
  * visibility, font size) ride `className` (the <th>) and `buttonClassName`
  * (the button) — both merged with tailwind-merge so overrides win.
@@ -45,7 +45,7 @@ export function SortableHeader<Field extends string>({
         type="button"
         onClick={() => onSort(field)}
         className={cn(
-          'inline-flex select-none items-center text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground',
+          'inline-flex select-none items-center text-[0.82rem] font-semibold text-muted-foreground transition-colors hover:text-foreground',
           buttonClassName
         )}
       >

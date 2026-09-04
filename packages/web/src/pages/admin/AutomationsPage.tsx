@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { useTranslation, Trans } from 'react-i18next';
 import { formatHumanDateTime } from '@/lib/dates';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -99,19 +100,22 @@ export function AutomationsPage() {
 
       {/* History load error (non-blocking) */}
       {error && (
-        <div className="mt-8 flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        <div className="mt-8 flex items-center gap-3 rounded-lg border border-warning-border bg-warning p-4 text-sm text-warning-foreground">
           <AlertCircle className="h-4 w-4 flex-shrink-0" />
           <span className="flex-1">
             {t('admin.automations.historyLoadError', {
               message: error instanceof Error ? error.message : t('admin.automations.unknownError'),
             })}
           </span>
-          <button
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="border-warning-border bg-transparent text-warning-foreground hover:bg-warning-border/40 hover:text-warning-foreground"
             onClick={() => void refetch()}
-            className="inline-flex items-center gap-1 rounded-md border border-amber-300 px-3 py-1.5 text-xs font-medium hover:bg-amber-100"
           >
-            <RefreshCw className="h-3 w-3" /> {t('common.retry')}
-          </button>
+            <RefreshCw data-icon="inline-start" /> {t('common.retry')}
+          </Button>
         </div>
       )}
 
@@ -190,24 +194,27 @@ function AutomationCard({
       </div>
 
       <div className="flex items-center gap-3">
-        <button
+        <Button
+          type="button"
+          variant="outline"
+          size="lg"
           onClick={() => void handleDryRun()}
           disabled={dryRunMutation.isPending}
-          className="inline-flex items-center gap-2 rounded-md border border-primary px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/5 disabled:opacity-50"
         >
-          <RefreshCw className={`h-4 w-4 ${dryRunMutation.isPending ? 'animate-spin' : ''}`} />
+          <RefreshCw data-icon="inline-start" className={dryRunMutation.isPending ? 'animate-spin' : ''} />
           {t('admin.automations.previewChanges')}
-        </button>
+        </Button>
 
         {dryRunResult && dryRunResult.actions.length > 0 && (
-          <button
+          <Button
+            type="button"
+            size="lg"
             onClick={() => void handleExecute()}
             disabled={executeMutation.isPending}
-            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
-            <Play className="h-4 w-4" />
+            <Play data-icon="inline-start" />
             {t('admin.automations.execute')}
-          </button>
+          </Button>
         )}
 
         {dryRunResult && dryRunResult.actions.length === 0 && (
@@ -215,7 +222,7 @@ function AutomationCard({
         )}
 
         {executeMutation.isSuccess && (
-          <span className="inline-flex items-center gap-1 text-sm text-green-600">
+          <span className="inline-flex items-center gap-1 text-sm text-success">
             <CheckCircle2 className="h-4 w-4" /> {t('admin.automations.executedSuccessfully')}
           </span>
         )}
@@ -260,10 +267,10 @@ function HistoryRow({ run }: { run: AutomationRun }) {
   const [expanded, setExpanded] = useState(false);
 
   const statusIcon = () => {
-    if (run.status === 'dry_run') return <Clock className="h-4 w-4 text-blue-500" />;
-    if (run.status === 'completed') return <CheckCircle2 className="h-4 w-4 text-green-500" />;
+    if (run.status === 'dry_run') return <Clock className="h-4 w-4 text-info" />;
+    if (run.status === 'completed') return <CheckCircle2 className="h-4 w-4 text-success" />;
     if (run.status === 'failed') return <XCircle className="h-4 w-4 text-destructive" />;
-    if (run.status === 'partial') return <AlertCircle className="h-4 w-4 text-amber-500" />;
+    if (run.status === 'partial') return <AlertCircle className="h-4 w-4 text-warning-foreground" />;
     return <Clock className="h-4 w-4 text-muted-foreground" />;
   };
 
@@ -306,7 +313,7 @@ function HistoryRow({ run }: { run: AutomationRun }) {
           {run.result?.operations && Array.isArray(run.result.operations) && (
             <div className="max-h-60 overflow-y-auto space-y-1">
               {(run.result.operations as string[]).map((op, i) => (
-                <div key={i} className={`text-xs py-1 ${op.startsWith('ERROR') ? 'text-destructive' : op.startsWith('PENDING') ? 'text-amber-600' : ''}`}>
+                <div key={i} className={`text-xs py-1 ${op.startsWith('ERROR') ? 'text-destructive' : op.startsWith('PENDING') ? 'text-warning-foreground' : ''}`}>
                   {op}
                 </div>
               ))}

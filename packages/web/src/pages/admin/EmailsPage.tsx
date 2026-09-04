@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
+import { Input } from '@/components/ui/input';
 import { Trans, useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -69,11 +70,11 @@ const EMAIL_STATUSES: ReadonlySet<string> = new Set([
 const SORT_FIELDS: ReadonlySet<string> = new Set(['enqueuedAt', 'sentAt']);
 
 const STATUS_STYLES: Record<EmailEvent['status'], string> = {
-  PENDING: 'bg-blue-50 text-blue-700',
-  SENDING: 'bg-amber-50 text-amber-700',
-  SENT: 'bg-green-50 text-green-700',
-  FAILED: 'bg-red-50 text-red-700',
-  SKIPPED: 'bg-muted text-muted-foreground',
+  PENDING: 'tone-info',
+  SENDING: 'tone-warning',
+  SENT: 'tone-success',
+  FAILED: 'tone-danger',
+  SKIPPED: 'tone-neutral',
 };
 
 function StatusBadge({ status, failureReason }: { status: EmailEvent['status']; failureReason?: string | null }) {
@@ -263,14 +264,14 @@ function SentEmailsTab() {
     <>
       {/* Filters */}
       <div className="mb-6 flex flex-wrap items-center gap-3">
-        <input
+        <Input
           type="search"
           placeholder={t('fellows.emails.searchPlaceholder')}
           aria-label={t('fellows.emails.searchAria')}
           value={nameSearch}
           onChange={(e) => setNameSearch(e.target.value)}
-          className="rounded-md border border-input bg-background px-3 py-1.5 text-sm w-48"
-        />
+          className="h-9 w-64"
+          />
 
         <SelectDropdown
           id="email-year-filter"
@@ -283,7 +284,7 @@ function SentEmailsTab() {
           allowEmpty={false}
           onSelect={(year) => setYearFilter(year)}
           placeholder={t('fellows.emails.allYears')}
-          className="h-9 min-w-[130px] px-3 py-1.5 text-sm"
+          className="h-9 w-auto min-w-[130px] px-3 py-1.5 text-sm"
         />
 
         <SelectDropdown
@@ -298,7 +299,7 @@ function SentEmailsTab() {
           allowEmpty={false}
           onSelect={(type) => setTypeFilter(type as TypeFilter | 'all')}
           placeholder={t('fellows.emails.allTypes')}
-          className="h-9 min-w-[150px] px-3 py-1.5 text-sm"
+          className="h-9 w-auto min-w-[150px] px-3 py-1.5 text-sm"
         />
 
         <div className="flex items-center gap-1.5" role="group" aria-label={t('fellows.emails.statusGroupAria')}>
@@ -524,7 +525,7 @@ function EmailDrawer({ event, onClose }: { event: EmailEvent | null; onClose: ()
                     className="rounded p-1 hover:bg-muted"
                     aria-label={t('fellows.emails.copySesAria')}
                   >
-                    {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                    {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
                   </button>
                 </div>
               )}
@@ -536,12 +537,12 @@ function EmailDrawer({ event, onClose }: { event: EmailEvent | null; onClose: ()
                   {t('fellows.emails.previewNote')}
                 </p>
                 {preview?.recipientStatus === 'contact_deleted' && (
-                  <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                  <div className="rounded-md border border-warning-border bg-warning px-3 py-2 text-xs text-warning-foreground">
                     {t('fellows.emails.recipientDeleted')}
                   </div>
                 )}
                 {preview?.recipientStatus === 'no_first_name' && (
-                  <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                  <div className="rounded-md border border-warning-border bg-warning px-3 py-2 text-xs text-warning-foreground">
                     {t('fellows.emails.recipientNoFirstName')}
                   </div>
                 )}
@@ -572,7 +573,7 @@ function EmailDrawer({ event, onClose }: { event: EmailEvent | null; onClose: ()
               {event.status === 'FAILED' && (
                 <a
                   href="/admin/fellows"
-                  className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                  className="inline-flex items-center gap-1.5 text-sm font-medium text-crimson hover:underline"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
                   {t('fellows.emails.openInManage')}
@@ -801,19 +802,19 @@ export function EmailsPage() {
         >
           <TabsTrigger
             value="sent"
-            className="flex-none px-4 py-2.5 after:bg-primary data-active:text-primary"
+            className="flex-none px-4 py-2.5 data-active:text-foreground"
           >
             {t('fellows.emails.tabSent')}
           </TabsTrigger>
           <TabsTrigger
             value="templates"
-            className="flex-none px-4 py-2.5 after:bg-primary data-active:text-primary"
+            className="flex-none px-4 py-2.5 data-active:text-foreground"
           >
             {t('fellows.emails.tabTemplates')}
           </TabsTrigger>
           <TabsTrigger
             value="how-it-works"
-            className="flex-none px-4 py-2.5 after:bg-primary data-active:text-primary"
+            className="flex-none px-4 py-2.5 data-active:text-foreground"
           >
             {t('fellows.emails.tabHow')}
           </TabsTrigger>

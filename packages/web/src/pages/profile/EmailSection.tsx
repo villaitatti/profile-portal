@@ -23,7 +23,7 @@ export function EmailSection({ email }: EmailSectionProps) {
 
       <a
         href={`mailto:it-help@itatti.harvard.edu?subject=${encodeURIComponent(t('profile.email.changeSubject'))}`}
-        className="mt-3 inline-flex items-center gap-1.5 text-[0.88rem] font-medium text-primary hover:underline"
+        className="mt-3 inline-flex items-center gap-1.5 text-[0.88rem] font-medium text-crimson hover:underline"
       >
         {t('profile.email.changeLink')}
         <ExternalLink className="h-3.5 w-3.5" />

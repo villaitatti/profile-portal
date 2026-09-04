@@ -97,7 +97,7 @@ export function FellowActionsMenu({
               disabled
               className="cursor-default items-start px-3 text-muted-foreground data-[disabled]:opacity-100"
             >
-              <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-700" />
+              <AlertTriangle className="mt-0.5 h-4 w-4 text-warning-foreground" />
               <span className="flex flex-col">
                 <span className="font-medium text-foreground">{t('fellows.actions.sendDisabled')}</span>
                 <span className="text-xs leading-5">
@@ -126,7 +126,7 @@ export function FellowActionsMenu({
             <DropdownMenuItem
               disabled={isPending}
               onClick={() => onSendClick('bio_project_description', 'resend')}
-              className="px-3 font-medium text-amber-900 data-highlighted:bg-amber-50 data-highlighted:text-amber-900 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 dark:text-amber-500 dark:data-highlighted:bg-amber-950 dark:data-highlighted:text-amber-500"
+              className="px-3 font-medium text-warning-foreground data-highlighted:bg-warning data-highlighted:text-warning-foreground data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 dark:text-warning-foreground dark:data-highlighted:bg-amber-950 dark:data-highlighted:text-warning-foreground"
             >
               {isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

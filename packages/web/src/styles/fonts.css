@@ -1,0 +1,116 @@
+/* ============================== Typography ==============================
+   I Tatti brand fonts. Shared recipe with Libra (packages/web/src/styles/fonts.css
+   there) — keep the two files identical so both apps degrade the same way.
+
+   SANS — Brandon Grotesque, for body and UI. Commercial (HVD Fonts), so it has
+   to come from the Adobe Fonts web project (kit prv7fdz, preloaded in
+   index.html and promoted to a stylesheet by main.tsx). That is a runtime call
+   to use.typekit.net, which an internal network may not be able to reach, so
+   two tiers sit underneath it:
+     1. brandon-grotesque        Adobe kit
+     2. Brandon Grotesque Brand  installed on the machine, or public/fonts/
+     3. Open Sans Adjusted       self-hosted here — the brand's named fallback,
+                                 size-adjusted to match Brandon's small x-height
+
+   SERIF — Bodoni Moda, self-hosted, for titles and headers. The brand font is
+   Bauer Bodoni, which is not licensable through Adobe at any price; Bodoni Moda
+   stands in for it. It is OFL (Indestructible Type, via Google Fonts), so it is
+   ours to self-host — no CDN, no licence, no third-party request.
+
+   Its opsz axis (6–96) is the reason it was chosen over Adobe's Bodoni Std.
+   A didone's hairlines vanish at small sizes; opsz redraws them thicker as the
+   size drops, which is what makes a Bodoni usable in an admin UI at all. It
+   also carries a real 400–900 weight axis, so no weight is ever synthesised.
+   ====================================================================== */
+
+/* Bodoni Moda is imported from opsz.css rather than the default index.css:
+   index.css ships the weight axis only and would drop optical sizing. */
+@import "@fontsource-variable/bodoni-moda/opsz.css";
+@import "@fontsource-variable/bodoni-moda/opsz-italic.css";
+
+/* Open Sans is declared by hand rather than imported from Fontsource so it can
+   carry size-adjust. Measured at 100px, Brandon Grotesque has an x-height of 40
+   against Open Sans's 53.5. Swapped in untouched, Open Sans would render 34%
+   larger to the eye and the whole UI would lurch the moment typekit.net was
+   unreachable. size-adjust: 75% (40 ÷ 53.5) scales it down to match. */
+@font-face {
+  font-family: "Open Sans Adjusted";
+  src: url("@fontsource-variable/open-sans/files/open-sans-latin-wght-normal.woff2") format("woff2-variations");
+  font-style: normal;
+  font-weight: 300 800;
+  font-display: swap;
+  size-adjust: 75%;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Open Sans Adjusted";
+  src: url("@fontsource-variable/open-sans/files/open-sans-latin-ext-wght-normal.woff2") format("woff2-variations");
+  font-style: normal;
+  font-weight: 300 800;
+  font-display: swap;
+  size-adjust: 75%;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* --- Brandon Grotesque, offline tier -------------------------------------
+   Only ever applies when typekit.net is unreachable; someone with Brandon
+   installed should get it rather than dropping to Open Sans. Files under
+   public/fonts/ are optional — an absent file falls through to the next family. */
+@font-face {
+  font-family: "Brandon Grotesque Brand";
+  src:
+    local("Brandon Grotesque Regular"),
+    local("BrandonGrotesque-Regular"),
+    local("Brandon Grotesque"),
+    url("/fonts/brandon-grotesque-regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Medium mirrors the Adobe kit's 500: without it this family resolves a
+   requested 500 down to 400 and font-medium loses its emphasis offline too. */
+@font-face {
+  font-family: "Brandon Grotesque Brand";
+  src:
+    local("Brandon Grotesque Medium"),
+    local("BrandonGrotesque-Medium"),
+    url("/fonts/brandon-grotesque-medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Brandon Grotesque Brand";
+  src:
+    local("Brandon Grotesque Bold"),
+    local("BrandonGrotesque-Bold"),
+    url("/fonts/brandon-grotesque-bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Brandon Grotesque Brand";
+  src:
+    local("Brandon Grotesque Regular Italic"),
+    local("BrandonGrotesque-RegularItalic"),
+    url("/fonts/brandon-grotesque-italic.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* --- Stacks -------------------------------------------------------------- */
+/* Consumed by --font-sans / --font-heading in globals.css. */
+:root {
+  --font-stack-brand-sans:
+    "brandon-grotesque", "Brandon Grotesque Brand", "Open Sans Adjusted",
+    Aptos, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-stack-brand-serif:
+    "Bodoni Moda Variable", Garamond, "Times New Roman", Georgia, ui-serif,
+    serif;
+}

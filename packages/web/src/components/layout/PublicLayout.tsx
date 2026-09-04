@@ -1,7 +1,7 @@
 import { Outlet, useLocation } from 'react-router';
 import { Languages, Moon, Sun } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import itattiLogo from '@/assets/itatti-logo.png';
+import { ItattiLogo } from '@/components/shared/ItattiLogo';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/lib/theme';
 import { persistLanguage } from '@/i18n/config';
@@ -21,11 +21,10 @@ export function PublicLayout() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="h-16 border-b border-primary/10 bg-card flex items-center px-6">
-        <div className="h-8 w-32 flex-shrink-0">
-          <img src={itattiLogo} alt="I Tatti" className="h-full w-full object-contain object-left" />
-        </div>
-        <span className="ml-3 text-sm text-muted-foreground">
+      <header className="flex h-16 items-center gap-4 border-b bg-card px-6">
+        <ItattiLogo className="h-7 w-auto shrink-0 text-foreground" />
+        <span aria-hidden className="h-6 w-px bg-border" />
+        <span className="font-heading text-[1.15rem] text-foreground">
           {t('common.appName')}
         </span>
         <div className="ml-auto flex items-center gap-1.5">

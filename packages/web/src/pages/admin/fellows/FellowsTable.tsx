@@ -279,14 +279,14 @@ export function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEn
         <table className="w-full text-[0.95rem]">
           <thead>
             <tr className="border-b bg-muted/50">
-              <SortableHeader field="name" label={t('fellows.table.name')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="px-3 py-3" buttonClassName="text-[0.75rem]" />
-              <SortableHeader field="appointeeStatus" label={t('fellows.table.appointeeStatus')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="px-3 py-3" buttonClassName="text-[0.75rem]" />
-              <SortableHeader field="appointment" label={t('fellows.table.appointment')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="px-3 py-3" buttonClassName="text-[0.75rem]" />
-              <SortableHeader field="fellowship" label={t('fellows.table.fellowshipType')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="px-3 py-3" buttonClassName="text-[0.75rem]" />
-              <SortableHeader field="form" label={t('fellows.table.form')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="px-3 py-3" buttonClassName="text-[0.75rem]" />
-              <SortableHeader field="status" label={t('fellows.table.vitIdStatus')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="px-3 py-3" buttonClassName="text-[0.75rem]" />
-              <SortableHeader field="bioEmail" label={t('fellows.table.bioEmail')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="px-3 py-3" buttonClassName="text-[0.75rem]" />
-              <th className="px-3 py-3 text-center text-[0.75rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+              <SortableHeader field="name" label={t('fellows.table.name')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="px-3 py-3" buttonClassName="text-[0.85rem]" />
+              <SortableHeader field="appointeeStatus" label={t('fellows.table.appointeeStatus')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="px-3 py-3" buttonClassName="text-[0.85rem]" />
+              <SortableHeader field="appointment" label={t('fellows.table.appointment')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="px-3 py-3" buttonClassName="text-[0.85rem]" />
+              <SortableHeader field="fellowship" label={t('fellows.table.fellowshipType')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="px-3 py-3" buttonClassName="text-[0.85rem]" />
+              <SortableHeader field="form" label={t('fellows.table.form')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="px-3 py-3" buttonClassName="text-[0.85rem]" />
+              <SortableHeader field="status" label={t('fellows.table.vitIdStatus')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="px-3 py-3" buttonClassName="text-[0.85rem]" />
+              <SortableHeader field="bioEmail" label={t('fellows.table.bioEmail')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="px-3 py-3" buttonClassName="text-[0.85rem]" />
+              <th className="px-3 py-3 text-center text-[0.85rem] font-semibold text-muted-foreground">
                 {t('fellows.table.actions')}
               </th>
             </tr>

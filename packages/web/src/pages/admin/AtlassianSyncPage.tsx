@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { Button } from '@/components/ui/button';
 import { Link } from 'react-router';
 import { useTranslation, Trans } from 'react-i18next';
 import type { TFunction } from 'i18next';
@@ -96,7 +97,7 @@ function DiffPreview({ run }: { run: SyncRunDetail }) {
   if (totalChanges === 0) {
     return (
       <div className="rounded-xl border bg-card p-6 text-center">
-        <CheckCircle2 className="h-8 w-8 text-green-500 mx-auto mb-2" />
+        <CheckCircle2 className="h-8 w-8 text-success mx-auto mb-2" />
         <p className="font-medium">{t('admin.atlassian.sync.everythingInSync')}</p>
         <p className="text-sm text-muted-foreground">{t('admin.atlassian.sync.noChangesNeeded')}</p>
       </div>
@@ -111,7 +112,7 @@ function DiffPreview({ run }: { run: SyncRunDetail }) {
 
       {diff.groupsToCreate?.length > 0 && (
         <div className="mb-4">
-          <h4 className="text-sm font-medium text-blue-600 mb-1">
+          <h4 className="text-sm font-medium text-info mb-1">
             {t('admin.atlassian.sync.groupsToCreate', { count: diff.groupsToCreate.length })}
           </h4>
           {diff.groupsToCreate.map((g, i) => (
@@ -127,7 +128,7 @@ function DiffPreview({ run }: { run: SyncRunDetail }) {
 
       {diff.usersToCreate?.length > 0 && (
         <div className="mb-4">
-          <h4 className="text-sm font-medium text-green-600 mb-1">
+          <h4 className="text-sm font-medium text-success mb-1">
             {t('admin.atlassian.sync.usersToCreate', { count: diff.usersToCreate.length })}
           </h4>
           {diff.usersToCreate.map((u, i) => (
@@ -140,7 +141,7 @@ function DiffPreview({ run }: { run: SyncRunDetail }) {
 
       {diff.usersToUpdate?.length > 0 && (
         <div className="mb-4">
-          <h4 className="text-sm font-medium text-amber-600 mb-1">
+          <h4 className="text-sm font-medium text-warning-foreground mb-1">
             {t('admin.atlassian.sync.usersToUpdate', { count: diff.usersToUpdate.length })}
           </h4>
           {diff.usersToUpdate.map((u, i) => (
@@ -158,7 +159,7 @@ function DiffPreview({ run }: { run: SyncRunDetail }) {
 
       {diff.usersToDeactivate?.length > 0 && (
         <div className="mb-4">
-          <h4 className="text-sm font-medium text-red-600 mb-1">
+          <h4 className="text-sm font-medium text-destructive mb-1">
             {t('admin.atlassian.sync.usersToDeactivate', { count: diff.usersToDeactivate.length })}
           </h4>
           {diff.usersToDeactivate.map((u, i) => (
@@ -171,12 +172,12 @@ function DiffPreview({ run }: { run: SyncRunDetail }) {
 
       {diff.membershipChanges?.length > 0 && (
         <div className="mb-4">
-          <h4 className="text-sm font-medium text-purple-600 mb-1">
+          <h4 className="text-sm font-medium text-progress mb-1">
             {t('admin.atlassian.sync.membershipChanges', { count: diff.membershipChanges.length })}
           </h4>
           {diff.membershipChanges.map((c, i) => (
             <div key={i} className="text-sm py-1 border-b last:border-0">
-              <span className={c.action === 'add' ? 'text-green-600' : 'text-red-600'}>
+              <span className={c.action === 'add' ? 'text-success' : 'text-destructive'}>
                 {c.action === 'add' ? '+' : '-'}
               </span>{' '}
               {c.userEmail} → {c.groupName}
@@ -221,12 +222,12 @@ function SyncHistory() {
 
   const statusIcon = (run: { status: string; dryRunId: string | null }) => {
     if (isDryRun(run) && run.status === 'completed') {
-      return <CheckCircle2 className="h-4 w-4 text-blue-500" />;
+      return <CheckCircle2 className="h-4 w-4 text-info" />;
     }
     switch (run.status) {
-      case 'completed': return <CheckCircle2 className="h-4 w-4 text-green-500" />;
+      case 'completed': return <CheckCircle2 className="h-4 w-4 text-success" />;
       case 'failed': return <XCircle className="h-4 w-4 text-destructive" />;
-      case 'partial': return <AlertCircle className="h-4 w-4 text-amber-500" />;
+      case 'partial': return <AlertCircle className="h-4 w-4 text-warning-foreground" />;
       default: return <Clock className="h-4 w-4 text-muted-foreground" />;
     }
   };
@@ -260,19 +261,19 @@ function SyncHistory() {
             {expandedId === run.id && detail && (
               <div className="border-t p-3 text-sm">
                 {isDryRun(run) && run.status === 'completed' && (
-                  <p className="text-xs text-blue-600 font-medium mb-3">
+                  <p className="text-xs text-info font-medium mb-3">
                     {t('admin.atlassian.sync.previewOnly')}
                   </p>
                 )}
 
                 {detail.stats && (
                   <div className="flex flex-wrap gap-4 mb-3 text-xs">
-                    {detail.stats.created > 0 && <span className="inline-flex items-center gap-1 text-green-600"><UserPlus className="h-3 w-3" />{t('admin.atlassian.sync.statCreated', { count: detail.stats.created })}</span>}
-                    {detail.stats.updated > 0 && <span className="inline-flex items-center gap-1 text-amber-600"><Pencil className="h-3 w-3" />{t('admin.atlassian.sync.statUpdated', { count: detail.stats.updated })}</span>}
-                    {detail.stats.deactivated > 0 && <span className="inline-flex items-center gap-1 text-red-600"><UserMinus className="h-3 w-3" />{t('admin.atlassian.sync.statDeactivated', { count: detail.stats.deactivated })}</span>}
-                    {detail.stats.groupsCreated > 0 && <span className="inline-flex items-center gap-1 text-blue-600"><FolderPlus className="h-3 w-3" />{t('admin.atlassian.sync.statGroupsCreated', { count: detail.stats.groupsCreated })}</span>}
-                    {detail.stats.groupsAdded > 0 && <span className="inline-flex items-center gap-1 text-purple-600"><LinkIcon className="h-3 w-3" />{t('admin.atlassian.sync.statMembershipsAdded', { count: detail.stats.groupsAdded })}</span>}
-                    {detail.stats.groupsRemoved > 0 && <span className="inline-flex items-center gap-1 text-purple-600"><XCircle className="h-3 w-3" />{t('admin.atlassian.sync.statMembershipsRemoved', { count: detail.stats.groupsRemoved })}</span>}
+                    {detail.stats.created > 0 && <span className="inline-flex items-center gap-1 text-success"><UserPlus className="h-3 w-3" />{t('admin.atlassian.sync.statCreated', { count: detail.stats.created })}</span>}
+                    {detail.stats.updated > 0 && <span className="inline-flex items-center gap-1 text-warning-foreground"><Pencil className="h-3 w-3" />{t('admin.atlassian.sync.statUpdated', { count: detail.stats.updated })}</span>}
+                    {detail.stats.deactivated > 0 && <span className="inline-flex items-center gap-1 text-destructive"><UserMinus className="h-3 w-3" />{t('admin.atlassian.sync.statDeactivated', { count: detail.stats.deactivated })}</span>}
+                    {detail.stats.groupsCreated > 0 && <span className="inline-flex items-center gap-1 text-info"><FolderPlus className="h-3 w-3" />{t('admin.atlassian.sync.statGroupsCreated', { count: detail.stats.groupsCreated })}</span>}
+                    {detail.stats.groupsAdded > 0 && <span className="inline-flex items-center gap-1 text-progress"><LinkIcon className="h-3 w-3" />{t('admin.atlassian.sync.statMembershipsAdded', { count: detail.stats.groupsAdded })}</span>}
+                    {detail.stats.groupsRemoved > 0 && <span className="inline-flex items-center gap-1 text-progress"><XCircle className="h-3 w-3" />{t('admin.atlassian.sync.statMembershipsRemoved', { count: detail.stats.groupsRemoved })}</span>}
                     {detail.stats.errors > 0 && <span className="inline-flex items-center gap-1 text-destructive"><AlertCircle className="h-3 w-3" />{t('admin.atlassian.sync.statErrors', { count: detail.stats.errors })}</span>}
                   </div>
                 )}
@@ -352,7 +353,7 @@ function HistoryDiffDetail({ diff }: { diff: SyncRunDetail['diff'] }) {
     <div className="space-y-3 mb-3 text-xs">
       {diff.usersToCreate?.length > 0 && (
         <div>
-          <h4 className="font-medium text-green-600 mb-1">{t('admin.atlassian.sync.historyUsersToCreate', { count: diff.usersToCreate.length })}</h4>
+          <h4 className="font-medium text-success mb-1">{t('admin.atlassian.sync.historyUsersToCreate', { count: diff.usersToCreate.length })}</h4>
           {diff.usersToCreate.map((u, i) => (
             <div key={i} className="py-0.5">{u.name} <span className="text-muted-foreground">({u.email})</span></div>
           ))}
@@ -360,7 +361,7 @@ function HistoryDiffDetail({ diff }: { diff: SyncRunDetail['diff'] }) {
       )}
       {diff.usersToUpdate?.length > 0 && (
         <div>
-          <h4 className="font-medium text-amber-600 mb-1">{t('admin.atlassian.sync.historyUsersToUpdate', { count: diff.usersToUpdate.length })}</h4>
+          <h4 className="font-medium text-warning-foreground mb-1">{t('admin.atlassian.sync.historyUsersToUpdate', { count: diff.usersToUpdate.length })}</h4>
           {diff.usersToUpdate.map((u, i) => (
             <div key={i} className="py-0.5">
               {u.email}{' '}
@@ -373,7 +374,7 @@ function HistoryDiffDetail({ diff }: { diff: SyncRunDetail['diff'] }) {
       )}
       {diff.usersToDeactivate?.length > 0 && (
         <div>
-          <h4 className="font-medium text-red-600 mb-1">{t('admin.atlassian.sync.historyUsersToDeactivate', { count: diff.usersToDeactivate.length })}</h4>
+          <h4 className="font-medium text-destructive mb-1">{t('admin.atlassian.sync.historyUsersToDeactivate', { count: diff.usersToDeactivate.length })}</h4>
           {diff.usersToDeactivate.map((u, i) => (
             <div key={i} className="py-0.5">{u.name} <span className="text-muted-foreground">({u.email})</span></div>
           ))}
@@ -381,7 +382,7 @@ function HistoryDiffDetail({ diff }: { diff: SyncRunDetail['diff'] }) {
       )}
       {diff.groupsToCreate?.length > 0 && (
         <div>
-          <h4 className="font-medium text-blue-600 mb-1">{t('admin.atlassian.sync.historyGroupsToCreate', { count: diff.groupsToCreate.length })}</h4>
+          <h4 className="font-medium text-info mb-1">{t('admin.atlassian.sync.historyGroupsToCreate', { count: diff.groupsToCreate.length })}</h4>
           {diff.groupsToCreate.map((g, i) => (
             <div key={i} className="py-0.5"><span className="font-mono">{g.name}</span> <span className="text-muted-foreground">{t('admin.atlassian.sync.historyFromRole', { role: g.mappedFromRole })}</span></div>
           ))}
@@ -389,10 +390,10 @@ function HistoryDiffDetail({ diff }: { diff: SyncRunDetail['diff'] }) {
       )}
       {diff.membershipChanges?.length > 0 && (
         <div>
-          <h4 className="font-medium text-purple-600 mb-1">{t('admin.atlassian.sync.historyMembershipChanges', { count: diff.membershipChanges.length })}</h4>
+          <h4 className="font-medium text-progress mb-1">{t('admin.atlassian.sync.historyMembershipChanges', { count: diff.membershipChanges.length })}</h4>
           {diff.membershipChanges.map((c, i) => (
             <div key={i} className="py-0.5">
-              <span className={c.action === 'add' ? 'text-green-600' : 'text-red-600'}>
+              <span className={c.action === 'add' ? 'text-success' : 'text-destructive'}>
                 {c.action === 'add' ? '+' : '-'}
               </span>{' '}
               {c.userEmail} → {c.groupName}
@@ -594,10 +595,10 @@ export function AtlassianSyncPage() {
       />
 
       {!status?.configured && (
-        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
+        <div className="mb-6 rounded-xl border border-warning-border bg-warning p-4">
           <div className="flex items-center gap-2">
-            <AlertCircle className="h-5 w-5 flex-shrink-0 text-amber-600" />
-            <p className="text-sm text-amber-800">
+            <AlertCircle className="h-5 w-5 flex-shrink-0 text-warning-foreground" />
+            <p className="text-sm text-warning-foreground">
               {t('admin.atlassian.sync.notConfigured')}
             </p>
           </div>
@@ -605,10 +606,10 @@ export function AtlassianSyncPage() {
       )}
 
       {mappingsEmpty && (
-        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
+        <div className="mb-6 rounded-xl border border-warning-border bg-warning p-4">
           <div className="flex items-center gap-2">
-            <AlertCircle className="h-5 w-5 flex-shrink-0 text-amber-600" />
-            <p className="text-sm text-amber-800">
+            <AlertCircle className="h-5 w-5 flex-shrink-0 text-warning-foreground" />
+            <p className="text-sm text-warning-foreground">
               <Trans
                 i18nKey="admin.atlassian.sync.noMappings"
                 components={{
@@ -647,7 +648,10 @@ export function AtlassianSyncPage() {
       <div className="space-y-6">
         {/* Sync actions */}
         <div className="flex items-center gap-3">
-          <button
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
             onClick={() => void handleDryRun()}
             disabled={
               isRunning ||
@@ -656,22 +660,22 @@ export function AtlassianSyncPage() {
               mappingsEmpty ||
               mappingsUnavailable
             }
-            className="inline-flex items-center gap-2 rounded-md border border-primary px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/5 disabled:opacity-50"
           >
-            <RefreshCw className={`h-4 w-4 ${isRunning ? 'animate-spin' : ''}`} />
+            <RefreshCw data-icon="inline-start" className={isRunning ? 'animate-spin' : ''} />
             {t('admin.atlassian.sync.previewChanges')}
-          </button>
+          </Button>
 
           {canExecute && (
             <>
-              <button
+              <Button
+                type="button"
+                size="lg"
                 onClick={() => setShowExecuteConfirm(true)}
                 disabled={isRunning}
-                className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               >
-                <Play className="h-4 w-4" />
+                <Play data-icon="inline-start" />
                 {t('admin.atlassian.sync.executeSync')}
-              </button>
+              </Button>
               {ttlRemaining !== null && (
                 <span className="text-[0.82rem] text-muted-foreground">
                   {t('admin.atlassian.sync.validFor', {

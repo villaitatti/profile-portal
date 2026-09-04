@@ -1,4 +1,5 @@
 import { useId, useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import type { FormDef, FormFieldDef, FormSectionIcon } from '@itatti/shared';
@@ -74,7 +75,7 @@ export function FormSubmittedPanel() {
       <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
         <CheckCircle2 className="h-9 w-9 text-primary" />
       </div>
-      <h2 className="mb-2 text-2xl font-semibold tracking-tight">{t('forms.thankYouTitle')}</h2>
+      <h2 className="mb-2 font-heading text-[1.8rem] leading-tight">{t('forms.thankYouTitle')}</h2>
       <p className="text-muted-foreground">{t('forms.thankYouBody')}</p>
     </div>
   );
@@ -256,14 +257,10 @@ export function PublicFormRenderer({
       )}
 
       <div className="flex justify-end border-t border-border pt-5">
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-        >
-          <Send className="h-4 w-4" />
+        <Button type="submit" size="lg" className="w-full px-5 sm:w-auto" disabled={isSubmitting}>
+          <Send data-icon="inline-start" />
           {isSubmitting ? t('forms.submitting') : t('forms.submit')}
-        </button>
+        </Button>
       </div>
     </form>
   );
@@ -362,7 +359,7 @@ function FieldRenderer({
   if (field.type === 'subheader') {
     return (
       <div className={cn(fieldLayoutClass(field), 'min-w-0 pt-1')}>
-        <h3 className="border-b border-border/70 pb-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
+        <h3 className="border-b border-border/70 pb-2 text-[1rem] font-semibold text-foreground">
           {field.label}
         </h3>
       </div>

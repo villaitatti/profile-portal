@@ -65,7 +65,7 @@ export function BioEmailPill({
         : t(resent ? 'fellows.bioEmail.titleResent' : 'fellows.bioEmail.titleSent');
     return (
       <span
-        className="inline-flex items-center rounded-full bg-green-50 px-2.5 py-0.5 text-[0.8rem] font-medium text-green-700"
+        className="inline-flex items-center rounded-full tone-success px-2.5 py-0.5 text-[0.8rem] font-medium"
         title={title}
       >
         {label}
@@ -74,7 +74,7 @@ export function BioEmailPill({
   }
   return (
     <span
-      className="inline-flex items-center rounded-full bg-red-50 px-2.5 py-0.5 text-[0.8rem] font-medium text-red-700"
+      className="inline-flex items-center rounded-full tone-danger px-2.5 py-0.5 text-[0.8rem] font-medium"
       title={t('fellows.bioEmail.failedTitle')}
     >
       {t('fellows.bioEmail.failed')}

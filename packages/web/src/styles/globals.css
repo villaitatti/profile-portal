@@ -1,93 +1,137 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+/* Brand font tiers + @font-face declarations (shared recipe with Libra). */
+@import "./fonts.css";
 
 @custom-variant dark (&:is(.dark *));
 
-/* I Tatti brand colors
-   Crimson: #ab192d | Anthracite: #1d252c | Light grey: #e5eaec | Medium grey: #b3bec5
+/* I Tatti house style — see docs/house-style.md.
+   Brand: Crimson #ab192d | Anthracite #1d252c | Light grey #e5eaec | Medium grey #b3bec5
 
-   Primitives live on :root/.dark; the @theme inline block below bridges them to
-   Tailwind utilities (bg-background, text-primary, …), so overriding the
-   primitives re-skins the whole app. */
+   Crimson is the institution's mark and accent: the logo, active navigation,
+   hairlines, links, focus rings. It is never the action colour — a crimson
+   button and a crimson "delete" would carry the same meaning to the eye, so
+   primary actions are anthracite (lifted to light grey in dark mode) and the
+   destructive red stays visibly its own hue.
+
+   Primitives live on :root/.dark; the @theme inline block below bridges them
+   to Tailwind utilities (bg-background, text-crimson, …). */
 :root {
   color-scheme: light;
+
+  /* Ink — anthracite and its softer steps. 14:1 on --card. */
+  --ink: oklch(0.26 0.0175 245);
+  --ink-soft: oklch(0.42 0.024 245);
+  --ink-muted: oklch(0.5 0.02 245);
+  /* Crimson for text accents (6.9:1 on the card surface, so it may carry small text). */
+  --crimson: oklch(0.48 0.178 21.3);
+  /* Crimson for graphics (logo mark, active rail, tab underline): true brand colour. */
+  --crimson-mark: var(--crimson);
+  /* Meaning colours for status text and icons, tuned to sit with the greys. */
+  --success: oklch(0.55 0.12 150);
+  --info: oklch(0.5 0.1 250);
+  --progress: oklch(0.5 0.12 290);
+
   --background: #eef1f3;
-  --foreground: #1d252c;
+  --foreground: var(--ink);
   --card: #f8f9fb;
-  --card-foreground: #1d252c;
+  --card-foreground: var(--ink);
   --popover: #f8f9fb;
-  --popover-foreground: #1d252c;
-  --primary: #ab192d;
+  --popover-foreground: var(--ink);
+  --primary: var(--ink);
   --primary-foreground: #fafbfc;
   --secondary: #e5eaec;
   --secondary-foreground: #2a353e;
   --muted: #e0e5e8;
-  --muted-foreground: #556170;
+  --muted-foreground: var(--ink-muted);
   --accent: #dce1e5;
-  --accent-foreground: #1d252c;
-  --destructive: #b83a47;
+  --accent-foreground: var(--ink);
+  --destructive: oklch(0.53 0.16 25);
   --destructive-foreground: #fafbfc;
   --warning: #f5efd9;
   --warning-foreground: #6b4f1d;
   --warning-border: #e4d7a6;
   --border: #cfd5db;
   --input: #bcc4cc;
-  --ring: #ab192d;
+  --ring: var(--crimson);
   --radius: 0.375rem;
   --sidebar: #e5eaec;
-  --sidebar-foreground: #1d252c;
+  --sidebar-foreground: var(--ink);
   --sidebar-border: #cfd5db;
   --sidebar-accent: #d8dee3;
-  --sidebar-accent-foreground: #1d252c;
-  --sidebar-primary: #ab192d;
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-primary: var(--ink);
   --sidebar-primary-foreground: #fafbfc;
   --sidebar-muted-foreground: #6b7685;
-  --sidebar-ring: #ab192d;
+  --sidebar-ring: var(--crimson);
+
+  /* Bodoni weight: light backgrounds eat a didone's hairlines, so light mode
+     takes the heavier cut. Matched by eye against dark mode's 600. */
+  --heading-weight: 700;
+
+  /* Motion tokens (same values as Libra). */
+  --duration-instant: 120ms;
+  --duration-state: 240ms;
+  --duration-layout: 360ms;
   --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Dark theme: cool anthracite surfaces from the brand palette. The `.dark`
-   class is set on <html> by ThemeProvider (and before first paint by
-   public/theme-init.js, an external script because the CSP is script-src
-   'self'). True crimson only reaches ~2:1 on these surfaces, so primary is
-   lifted for contrast and carries a dark label instead of white. */
+/* Dark theme: cool anthracite surfaces. The `.dark` class is set on <html> by
+   ThemeProvider (and before first paint by public/theme-init.js). Anthracite
+   cannot be the button colour on an anthracite page, so primary flips to a
+   light grey with a dark label. True crimson only reaches ~2:1 here, so the
+   text accent is lifted; the graphic mark is lifted only as far as 3:1 needs. */
 .dark {
   color-scheme: dark;
+  --ink: oklch(0.93 0.008 240);
+  --ink-soft: oklch(0.8 0.012 240);
+  --ink-muted: oklch(0.69 0.014 240);
+  --crimson: oklch(0.7 0.14 21.3);
+  --crimson-mark: oklch(0.55 0.2 21.3);
+  --success: oklch(0.74 0.12 150);
+  --info: oklch(0.75 0.09 250);
+  --progress: oklch(0.76 0.1 290);
+
   --background: oklch(0.21 0.013 240);
-  --foreground: oklch(0.93 0.008 240);
+  --foreground: var(--ink);
   --card: oklch(0.25 0.014 240);
-  --card-foreground: oklch(0.93 0.008 240);
+  --card-foreground: var(--ink);
   --popover: oklch(0.25 0.014 240);
-  --popover-foreground: oklch(0.93 0.008 240);
-  --primary: oklch(0.62 0.165 18);
-  --primary-foreground: oklch(0.17 0.03 15);
+  --popover-foreground: var(--ink);
+  --primary: oklch(0.9 0.008 240);
+  --primary-foreground: oklch(0.22 0.014 240);
   --secondary: oklch(0.3 0.014 240);
   --secondary-foreground: oklch(0.9 0.01 240);
   --muted: oklch(0.29 0.013 240);
-  --muted-foreground: oklch(0.69 0.014 240);
+  --muted-foreground: var(--ink-muted);
   --accent: oklch(0.31 0.014 240);
-  --accent-foreground: oklch(0.93 0.008 240);
-  --destructive: oklch(0.64 0.16 20);
+  --accent-foreground: var(--ink);
+  --destructive: oklch(0.68 0.15 25);
   --destructive-foreground: oklch(0.98 0.004 240);
   --warning: oklch(0.28 0.045 84);
   --warning-foreground: oklch(0.87 0.09 84);
   --warning-border: oklch(0.38 0.055 84);
   --border: oklch(0.32 0.013 240);
   --input: oklch(0.37 0.013 240);
-  --ring: oklch(0.62 0.165 18);
+  --ring: var(--crimson);
   --sidebar: oklch(0.185 0.012 240);
   --sidebar-foreground: oklch(0.92 0.008 240);
   --sidebar-border: oklch(0.27 0.012 240);
   --sidebar-accent: oklch(0.27 0.013 240);
   --sidebar-accent-foreground: oklch(0.94 0.008 240);
-  --sidebar-primary: oklch(0.62 0.165 18);
-  --sidebar-primary-foreground: oklch(0.17 0.03 15);
+  --sidebar-primary: oklch(0.9 0.008 240);
+  --sidebar-primary-foreground: oklch(0.22 0.014 240);
   --sidebar-muted-foreground: oklch(0.66 0.013 240);
-  --sidebar-ring: oklch(0.62 0.165 18);
+  --sidebar-ring: var(--crimson);
+  --heading-weight: 600;
 }
 
 @theme inline {
+  --font-sans: var(--font-stack-brand-sans);
+  --font-heading: var(--font-stack-brand-serif);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -119,6 +163,13 @@
   --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
   --color-sidebar-muted-foreground: var(--sidebar-muted-foreground);
   --color-sidebar-ring: var(--sidebar-ring);
+  /* Brand + meaning colours as utilities: text-crimson, bg-crimson/10, text-success … */
+  --color-crimson: var(--crimson);
+  --color-crimson-mark: var(--crimson-mark);
+  --color-ink-soft: var(--ink-soft);
+  --color-success: var(--success);
+  --color-info: var(--info);
+  --color-progress: var(--progress);
 
   /* Explicit radius steps (not the shadcn calc scale) to preserve the app's
      existing corner rounding exactly. */
@@ -137,7 +188,7 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: "brandon-grotesque", sans-serif;
+    font-family: var(--font-sans);
     font-weight: 400;
     font-style: normal;
     font-size: 1.06rem;
@@ -147,30 +198,138 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
+  /* Digits align down every column: Brandon and Bodoni Moda both carry tabular figures. */
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+
   :focus-visible {
-    outline: 2px solid var(--color-primary);
+    outline: 2px solid var(--color-ring);
     outline-offset: 2px;
-    transition: outline-offset 150ms cubic-bezier(0.25, 1, 0.5, 1);
+    transition: outline-offset var(--duration-instant) var(--ease-out-quart);
   }
 }
 
-@keyframes card-enter {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+/* ---------------------------- Brand headings ----------------------------
+   Bodoni on titles and headers, per the I Tatti brand guide. Scoped to
+   display-sized text only: it is a didone, so its hairline serifs thin out and
+   break up below ~15px. Table headers, form labels, badges and nav items stay
+   on Brandon Grotesque for that reason (so do empty-state titles).
+
+   Unlayered on purpose: the vendored shadcn title primitives carry
+   `font-heading font-medium`, and a layered rule would lose to that utility
+   and render Bodoni at 500 in light mode — thin and hard to focus on. */
+.font-heading,
+[data-slot="dialog-title"],
+[data-slot="alert-dialog-title"],
+[data-slot="sheet-title"] {
+  font-family: var(--font-heading);
+  font-weight: var(--heading-weight);
+  font-synthesis-weight: none;
+  font-optical-sizing: auto;
+  /* Didones need air; the sans's negative tracking closes up the hairlines. */
+  letter-spacing: 0.005em;
+}
+
+/* Dialog titles ship at text-base; Bodoni runs small on the x-height, so it
+   needs a step up to read as the title it is. */
+[data-slot="dialog-title"],
+[data-slot="alert-dialog-title"] {
+  font-size: 1.2rem;
+  line-height: 1.25;
+}
+
+/* Sidebar logo tile: the one place the true crimson stays solid in both themes —
+   it's a graphic mark, and white on #ab192d holds 7.2:1. */
+.brand-mark {
+  background: oklch(0.48 0.178 21.3);
+  color: white;
+}
+
+/* Header centrepiece: the I Tatti wordmark, true-centred on wide screens. */
+.header-brand {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  transform: translate(-50%, -50%);
+}
+.header-brand-logo {
+  display: block;
+  width: auto;
+  height: 1.45rem;
+  color: var(--ink);
+}
+/* Below ~900px true centring would collide with the flanking clusters; the
+   group rejoins normal flow and shares the slack with the icon cluster. */
+@media (max-width: 900px) {
+  .header-brand {
+    position: static;
+    margin-left: auto;
+    transform: none;
   }
 }
 
-.animate-card-enter {
-  animation: card-enter 450ms cubic-bezier(0.16, 1, 0.3, 1) both;
+/* ------------------------------ Status tones -----------------------------
+   One recipe for every status pill, only the hue varies: light bg / dark text
+   in light mode, the inverse in dark. Uniform lightness and chroma is what
+   makes a row of mixed statuses sit together as a set. Neutral is the
+   achromatic exception. */
+.tone-neutral {
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+.tone-success { --pill-hue: 150; }
+.tone-claimed { --pill-hue: 125; }
+.tone-warning { --pill-hue: 80; }
+.tone-danger { --pill-hue: 25; }
+.tone-info { --pill-hue: 250; }
+.tone-progress { --pill-hue: 290; }
+.tone-brand { --pill-hue: 21; }
+.tone-success,
+.tone-claimed,
+.tone-warning,
+.tone-danger,
+.tone-info,
+.tone-progress,
+.tone-brand {
+  background: oklch(0.94 0.045 var(--pill-hue));
+  color: oklch(0.4 0.12 var(--pill-hue));
+}
+.dark .tone-success,
+.dark .tone-claimed,
+.dark .tone-warning,
+.dark .tone-danger,
+.dark .tone-info,
+.dark .tone-progress,
+.dark .tone-brand {
+  background: oklch(0.31 0.055 var(--pill-hue));
+  color: oklch(0.86 0.09 var(--pill-hue));
 }
 
-/* Reduced motion — respect user preference */
+/* Line tabs: the active-tab bar is crimson, the brand touch. */
+[data-slot="tabs-list"][data-variant="line"] [data-slot="tabs-trigger"]::after {
+  background: var(--crimson-mark);
+}
+
+/* --------------------------------- Motion --------------------------------
+   One cross-fade on navigation (View Transitions API, via react-router's
+   viewTransition links). Everything else answers a user action: dialogs,
+   popovers, and colour transitions on state pills. No entrance stagger, no
+   hover lift. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 180ms;
+  animation-timing-function: var(--ease-out-quart);
+}
+
 @media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
   *,
   *::before,
   *::after {

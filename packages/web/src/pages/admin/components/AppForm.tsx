@@ -1,4 +1,5 @@
 import { useForm, Controller } from 'react-hook-form';
+import { Button } from '@/components/ui/button';
 import { useTranslation } from 'react-i18next';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -195,20 +196,16 @@ export function AppForm({
         )}
       </div>
 
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="inline-flex items-center justify-center rounded-md bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50"
-      >
+      <Button type="submit" size="lg" className="px-5" disabled={isSubmitting}>
         {isSubmitting ? (
           <>
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            <Loader2 data-icon="inline-start" className="animate-spin" />
             {t('admin.apps.form.saving')}
           </>
         ) : (
           submitLabel ?? t('common.save')
         )}
-      </button>
+      </Button>
     </form>
   );
 }
