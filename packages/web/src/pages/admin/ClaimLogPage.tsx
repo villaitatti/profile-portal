@@ -153,9 +153,9 @@ export function ClaimLogPage() {
                       <SortableHeader field="name" label={t('admin.claimLog.colName')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="pb-3" />
                       <SortableHeader field="email" label={t('admin.claimLog.colEmail')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="pb-3 hidden md:table-cell" />
                       <SortableHeader field="status" label={t('admin.claimLog.colStatus')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="pb-3" />
-                      <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">{t('admin.claimLog.colRoles')}</th>
+                      <th className="pb-3 text-[0.82rem] font-semibold text-muted-foreground">{t('admin.claimLog.colRoles')}</th>
                       <SortableHeader field="claimedAt" label={t('admin.claimLog.colClaimedAt')} sortField={sortField} sortDir={sortDir} onSort={toggleSort} className="pb-3" />
-                      <th className="pb-3 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">{t('admin.claimLog.colActions')}</th>
+                      <th className="pb-3 text-[0.82rem] font-semibold text-muted-foreground">{t('admin.claimLog.colActions')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -212,7 +212,7 @@ function ClaimRow({ claim }: { claim: VitIdClaim }) {
       </td>
       <td className="py-3 px-1">
         {claim.hasCurrentFellowship ? (
-          <span className="inline-flex items-center rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700">
+          <span className="inline-flex items-center rounded-full tone-success px-2.5 py-0.5 text-xs font-medium">
             {t('admin.claimLog.statusCurrent')}
           </span>
         ) : claim.hasFellowship ? (
@@ -220,7 +220,7 @@ function ClaimRow({ claim }: { claim: VitIdClaim }) {
             {t('admin.claimLog.statusFormer')}
           </span>
         ) : (
-          <span className="inline-flex items-center rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700">
+          <span className="inline-flex items-center rounded-full tone-danger px-2.5 py-0.5 text-xs font-medium">
             {t('admin.claimLog.statusNone')}
           </span>
         )}
@@ -246,7 +246,7 @@ function ClaimRow({ claim }: { claim: VitIdClaim }) {
             href={`${civicrmUrl}/civicrm/contact/view?reset=1&cid=${claim.civicrmId}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            className="inline-flex items-center gap-1 text-xs text-crimson hover:underline"
           >
             CiviCRM <ExternalLink className="h-3 w-3" />
           </a>

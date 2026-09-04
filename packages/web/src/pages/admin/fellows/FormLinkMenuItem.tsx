@@ -78,7 +78,7 @@ export function FormLinkMenuItem({ fellow }: { fellow: FellowDashboardEntry }) {
     return (
       <DropdownMenuItem
         disabled
-        className="cursor-default px-3 text-green-700 data-[disabled]:opacity-100"
+        className="cursor-default px-3 text-success data-[disabled]:opacity-100"
       >
         <Check className="h-4 w-4" />
         <span className="flex flex-col">
@@ -106,9 +106,9 @@ export function FormLinkMenuItem({ fellow }: { fellow: FellowDashboardEntry }) {
         className="px-3 font-medium text-foreground data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
       >
         {generateMutation.isPending ? (
-          <Loader2 className="h-4 w-4 animate-spin text-indigo-700" />
+          <Loader2 className="h-4 w-4 animate-spin text-progress" />
         ) : (
-          <Repeat2 className="h-4 w-4 text-indigo-700" />
+          <Repeat2 className="h-4 w-4 text-progress" />
         )}
         <span>{t('fellows.form.generateNewLink')}</span>
       </DropdownMenuItem>
@@ -125,9 +125,9 @@ export function FormLinkMenuItem({ fellow }: { fellow: FellowDashboardEntry }) {
         className="px-3 font-medium text-foreground"
       >
         {copied ? (
-          <Check className="h-4 w-4 text-green-700" />
+          <Check className="h-4 w-4 text-success" />
         ) : (
-          <Copy className="h-4 w-4 text-indigo-700" />
+          <Copy className="h-4 w-4 text-progress" />
         )}
         <span>{copied ? t('fellows.form.copied') : t('fellows.form.copyLink')}</span>
       </DropdownMenuItem>
@@ -144,9 +144,9 @@ export function FormLinkMenuItem({ fellow }: { fellow: FellowDashboardEntry }) {
       className="px-3 font-medium text-foreground data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
     >
       {generateMutation.isPending ? (
-        <Loader2 className="h-4 w-4 animate-spin text-indigo-700" />
+        <Loader2 className="h-4 w-4 animate-spin text-progress" />
       ) : (
-        <FileText className="h-4 w-4 text-indigo-700" />
+        <FileText className="h-4 w-4 text-progress" />
       )}
       <span>{t('fellows.form.generateLink')}</span>
     </DropdownMenuItem>

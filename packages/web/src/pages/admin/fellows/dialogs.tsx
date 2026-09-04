@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
 import { useTranslation } from 'react-i18next';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Loader2 } from 'lucide-react';
@@ -54,23 +55,24 @@ export function ConfirmResendDialog({
           </p>
         </div>
         <div className="flex justify-end gap-3 border-t px-5 py-4">
-          <button
+          <Button
             type="button"
+            variant="outline"
             onClick={onCancel}
             disabled={submitting}
-            className="rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-          >
+            >
             {t('common.cancel')}
-          </button>
-          <button
+            </Button>
+          <Button
             type="button"
+            variant="outline"
+            className="border-warning-border bg-warning text-warning-foreground hover:bg-warning-border/60 hover:text-warning-foreground"
             onClick={() => void onConfirm()}
             disabled={submitting}
-            className="inline-flex items-center gap-2 rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-amber-50 transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+            {submitting && <Loader2 data-icon="inline-start" className="animate-spin" />}
             {t('fellows.dialogs.sendAgain')}
-          </button>
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
@@ -141,22 +143,18 @@ export function NominationSentDialog({
                 </label>
               </div>
               <div className="flex justify-end gap-3 border-t px-5 py-4">
-                <button
+                <Button
                   type="button"
+                  variant="outline"
                   onClick={onCancel}
                   disabled={submitting}
-                  className="rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-                >
+                  >
                   {t('common.cancel')}
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                  </Button>
+                <Button type="submit" disabled={submitting}>
+                  {submitting && <Loader2 data-icon="inline-start" className="animate-spin" />}
                   {t('common.save')}
-                </button>
+                </Button>
               </div>
             </form>
           )}

@@ -32,16 +32,16 @@ export function AppTable({ applications, onDelete, isDeleting }: AppTableProps) 
         <table className="w-full text-[0.95rem]">
           <thead>
             <tr className="border-b bg-muted/50">
-              <th className="px-4 py-3 text-left text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+              <th className="px-4 py-3 text-left text-[0.82rem] font-semibold text-muted-foreground">
                 {t('admin.apps.table.colApplication')}
               </th>
-              <th className="hidden px-4 py-3 text-left text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground md:table-cell">
+              <th className="hidden px-4 py-3 text-left text-[0.82rem] font-semibold text-muted-foreground md:table-cell">
                 {t('admin.apps.table.colRoles')}
               </th>
-              <th className="hidden px-4 py-3 text-left text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground sm:table-cell">
+              <th className="hidden px-4 py-3 text-left text-[0.82rem] font-semibold text-muted-foreground sm:table-cell">
                 {t('admin.apps.table.colOrder')}
               </th>
-              <th className="px-4 py-3 text-right text-[0.68rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+              <th className="px-4 py-3 text-right text-[0.82rem] font-semibold text-muted-foreground">
                 {t('admin.apps.table.colActions')}
               </th>
             </tr>

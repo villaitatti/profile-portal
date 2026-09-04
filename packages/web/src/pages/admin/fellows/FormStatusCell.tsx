@@ -32,7 +32,7 @@ function CopyFormLinkButton({
       className="inline-flex h-7 w-7 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
     >
       {copied ? (
-        <Check className="h-3.5 w-3.5 text-green-700" aria-hidden="true" />
+        <Check className="h-3.5 w-3.5 text-success" aria-hidden="true" />
       ) : (
         <Copy className="h-3.5 w-3.5" aria-hidden="true" />
       )}
@@ -46,20 +46,20 @@ export function FormStatusCell({ fellow }: { fellow: FellowDashboardEntry }) {
   const invitation = getFormInvitation(fellow);
 
   let label = t('fellows.form.ready');
-  let tone = 'bg-muted text-muted-foreground';
+  let tone = 'tone-neutral';
   let description = t('fellows.form.readyDescription');
   let subLabel: string | null = null;
   let canCopy = false;
 
   if (!configuredForm) {
     label = t('fellows.form.notConfigured');
-    tone = 'bg-red-50 text-red-700';
+    tone = 'tone-danger';
     description = t('fellows.form.notConfiguredDescription', {
       appointment: formatLabel(fellow.appointment) || t('fellows.form.thisAppointmentType'),
     });
   } else if (invitation?.status === 'submitted') {
     label = t('fellows.form.submitted');
-    tone = 'bg-green-50 text-green-700';
+    tone = 'tone-success';
     description = t('fellows.form.submittedDescription');
     subLabel = invitation.submittedAt
       ? t('fellows.form.onDate', {
@@ -68,11 +68,11 @@ export function FormStatusCell({ fellow }: { fellow: FellowDashboardEntry }) {
       : null;
   } else if (invitation?.status === 'expired') {
     label = t('fellows.form.expired');
-    tone = 'bg-muted text-muted-foreground';
+    tone = 'tone-neutral';
     description = t('fellows.form.expiredDescription');
   } else if (invitation?.nominationSentAt) {
     label = t('fellows.form.waiting');
-    tone = 'bg-amber-50 text-amber-700';
+    tone = 'tone-warning';
     description = t('fellows.form.waitingDescription');
     subLabel = t('fellows.form.sentDate', {
       date: formatHumanDate(invitation.nominationSentAt, i18n.language),
@@ -80,7 +80,7 @@ export function FormStatusCell({ fellow }: { fellow: FellowDashboardEntry }) {
     canCopy = true;
   } else if (invitation) {
     label = t('fellows.form.linkGenerated');
-    tone = 'bg-muted text-muted-foreground';
+    tone = 'tone-neutral';
     description = t('fellows.form.linkGeneratedDescription');
     canCopy = true;
   }

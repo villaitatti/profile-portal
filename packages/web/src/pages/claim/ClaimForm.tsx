@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -56,7 +57,7 @@ export function ClaimForm() {
   if (submitted) {
     return (
       <div className="rounded-xl border bg-card p-8 text-center">
-        <CheckCircle2 className="h-12 w-12 text-green-600 mx-auto mb-4" />
+        <CheckCircle2 className="h-12 w-12 text-success mx-auto mb-4" />
         <h3 className="text-lg font-semibold mb-2">{t('claim.form.submittedTitle')}</h3>
         <p className="text-muted-foreground">{t('claim.form.submittedBody')}</p>
       </div>
@@ -65,7 +66,7 @@ export function ClaimForm() {
 
   return (
     <form onSubmit={(e) => void handleSubmit(onSubmit)(e)} className="rounded-xl border bg-card p-8">
-      <h2 className="text-xl font-semibold mb-2">{t('claim.form.title')}</h2>
+      <h2 className="mb-2 font-heading text-[1.4rem] leading-tight">{t('claim.form.title')}</h2>
       <p className="text-muted-foreground mb-6 text-sm">{t('claim.form.description')}</p>
 
       {unreachable && (
@@ -101,20 +102,16 @@ export function ClaimForm() {
           )}
         </div>
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full inline-flex items-center justify-center rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow hover:bg-primary/90 transition-colors disabled:opacity-50"
-        >
+        <Button type="submit" size="lg" className="w-full" disabled={submitting}>
           {submitting ? (
             <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              <Loader2 data-icon="inline-start" className="animate-spin" />
               {t('claim.form.processing')}
             </>
           ) : (
             t('claim.form.submit')
           )}
-        </button>
+        </Button>
       </div>
     </form>
   );

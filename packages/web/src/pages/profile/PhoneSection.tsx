@@ -115,7 +115,7 @@ export function PhoneSection() {
       </div>
 
       <p className="mt-2 text-[0.88rem] leading-6 text-muted-foreground">
-        <Star className="inline h-3.5 w-3.5 fill-primary text-primary -mt-0.5" /> {t('profile.phones.primaryHint')}
+        <Star className="inline h-3.5 w-3.5 fill-crimson-mark text-crimson-mark -mt-0.5" /> {t('profile.phones.primaryHint')}
       </p>
 
       {phones && phones.length === 0 ? (
@@ -145,9 +145,9 @@ export function PhoneSection() {
                     name="preferred-phone"
                     checked={phone.isPrimary}
                     onChange={() => handlePreferred(phone.id)}
-                    className="h-4 w-4 text-primary accent-primary"
+                    className="h-4 w-4 text-crimson accent-crimson"
                   />
-                  <span className={`flex items-center gap-1 ${phone.isPrimary ? 'font-medium text-primary' : 'text-muted-foreground'}`}>
+                  <span className={`flex items-center gap-1 ${phone.isPrimary ? 'font-medium text-crimson' : 'text-muted-foreground'}`}>
                     {phone.isPrimary && <Star className="h-3.5 w-3.5 fill-current" />}
                     {t('profile.phones.primaryLabel')}
                   </span>

@@ -1,4 +1,5 @@
 import { Link } from 'react-router';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { useTranslation } from 'react-i18next';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
@@ -31,13 +32,10 @@ export function AppCatalogPage() {
         title={t('admin.apps.catalogTitle')}
         description={t('admin.apps.catalogDescription')}
         actions={
-          <Link
-            to="/admin/apps/new"
-            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
-          >
-            <Plus className="h-4 w-4" />
+          <Link to="/admin/apps/new" viewTransition className={buttonVariants({ size: 'lg' })}>
+            <Plus data-icon="inline-start" />
             {t('admin.apps.addApplication')}
-          </Link>
+            </Link>
         }
       />
 
@@ -52,14 +50,9 @@ export function AppCatalogPage() {
             title={t('admin.apps.loadErrorTitle')}
             description={t('admin.apps.loadErrorDescription')}
             action={
-              <button
-                type="button"
-                onClick={() => void refetch()}
-                disabled={isFetching}
-                className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
-              >
+              <Button type="button" size="lg" onClick={() => void refetch()} disabled={isFetching}>
                 {isFetching ? t('admin.apps.tryingAgain') : t('admin.apps.tryAgain')}
-              </button>
+              </Button>
             }
           />
         </div>
@@ -69,13 +62,10 @@ export function AppCatalogPage() {
           title={t('admin.apps.emptyTitle')}
           description={t('admin.apps.emptyDescription')}
           action={
-            <Link
-              to="/admin/apps/new"
-              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90"
-            >
-              <Plus className="h-4 w-4" />
+            <Link to="/admin/apps/new" viewTransition className={buttonVariants({ size: 'lg' })}>
+              <Plus data-icon="inline-start" />
               {t('admin.apps.addApplication')}
-            </Link>
+              </Link>
           }
         />
       ) : (

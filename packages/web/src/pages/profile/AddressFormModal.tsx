@@ -1,6 +1,7 @@
 // Form rule: static forms use react-hook-form + zod (schema messages are i18n
 // keys, translated at the render site), like ClaimForm and ClaimHelpForm.
 import { useEffect } from 'react';
+import { Button } from '@/components/ui/button';
 import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -248,21 +249,12 @@ export function AddressFormModal({ open, onClose, onSave, address, isSaving, use
             )}
 
             <div className="flex justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={isSaving}
-                className="rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
-              >
+              <Button type="button" variant="outline" onClick={onClose} disabled={isSaving}>
                 {t('common.cancel')}
-              </button>
-              <button
-                type="submit"
-                disabled={isSaving || !streetAddress || !city || !countryId}
-                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
+                </Button>
+              <Button type="submit" disabled={isSaving || !streetAddress || !city || !countryId}>
                 {isSaving ? t('profile.saving') : t('common.save')}
-              </button>
+              </Button>
             </div>
           </form>
       </DialogContent>

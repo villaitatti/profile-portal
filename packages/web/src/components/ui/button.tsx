@@ -24,7 +24,7 @@ const buttonVariants = cva(
           "text-destructive/75 hover:text-destructive focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:text-destructive dark:hover:text-destructive dark:focus-visible:ring-destructive/40 [&_svg:not([class*='size-'])]:size-4.5 [&_svg]:transition-transform [&_svg]:duration-150 [&_svg]:ease-out motion-safe:hover:[&_svg]:scale-110",
         destructive:
           "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
-        link: "text-primary underline-offset-4 hover:underline",
+        link: "text-crimson underline-offset-4 hover:underline",
       },
       size: {
         default:

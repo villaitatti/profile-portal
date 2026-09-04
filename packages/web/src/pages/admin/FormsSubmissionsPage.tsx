@@ -229,7 +229,7 @@ export function FormsSubmissionsPage() {
             {data?.truncated && (
               <div
                 role="alert"
-                className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+                className="rounded-md border border-warning-border bg-warning px-4 py-3 text-sm text-warning-foreground"
               >
                 {t('fellows.forms.archiveTruncated')}
               </div>
@@ -577,7 +577,7 @@ function DetailFields({
     <div className="space-y-6">
       {sections.map((section) => (
         <section key={section.title}>
-          <h3 className="text-[0.8125rem] font-semibold uppercase tracking-[0.08em] text-foreground mb-4 pb-2 border-b border-border/60">
+          <h3 className="text-[1rem] font-semibold text-foreground mb-4 pb-2 border-b border-border/60">
             {section.title}
           </h3>
           <dl className="space-y-4">

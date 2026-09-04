@@ -27,11 +27,11 @@ export function AccessPermissionsPage() {
       <section className="rounded-xl border bg-card p-6">
         <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
           <div className="max-w-3xl">
-            <div className="flex items-center gap-2 text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-primary">
+            <div className="flex items-center gap-2 text-[0.85rem] font-medium text-crimson">
               <LockKeyhole className="h-4 w-4" />
               {t('admin.permissions.readOnly')}
             </div>
-            <h2 className="mt-3 text-xl font-semibold tracking-tight text-foreground">
+            <h2 className="mt-3 font-heading text-[1.35rem] leading-tight text-foreground">
               {t('admin.permissions.authHeading')}
             </h2>
             <p className="mt-2 text-[0.98rem] leading-7 text-muted-foreground">
@@ -39,7 +39,7 @@ export function AccessPermissionsPage() {
             </p>
           </div>
           <div className="min-w-64 rounded-lg border bg-secondary/35 p-4">
-            <p className="text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            <p className="text-[0.85rem] font-semibold text-muted-foreground">
               {t('admin.permissions.yourCurrentRoles')}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
@@ -55,7 +55,7 @@ export function AccessPermissionsPage() {
 
       <section className="space-y-4">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight text-foreground">
+          <h2 className="font-heading text-[1.45rem] leading-tight text-foreground">
             {t('admin.permissions.menuVisibility')}
           </h2>
           <p className="mt-1 text-[0.98rem] leading-7 text-muted-foreground">
@@ -67,16 +67,16 @@ export function AccessPermissionsPage() {
             <table className="w-full text-left text-[0.95rem]">
               <thead className="border-b bg-muted/45">
                 <tr>
-                  <th className="px-4 py-3 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                  <th className="px-4 py-3 text-[0.82rem] font-semibold text-muted-foreground">
                     {t('admin.permissions.colSection')}
                   </th>
-                  <th className="px-4 py-3 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                  <th className="px-4 py-3 text-[0.82rem] font-semibold text-muted-foreground">
                     {t('admin.permissions.colVisibleTo')}
                   </th>
-                  <th className="px-4 py-3 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                  <th className="px-4 py-3 text-[0.82rem] font-semibold text-muted-foreground">
                     {t('admin.permissions.colMenuEntries')}
                   </th>
-                  <th className="px-4 py-3 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                  <th className="px-4 py-3 text-[0.82rem] font-semibold text-muted-foreground">
                     {t('admin.permissions.colYourAccess')}
                   </th>
                 </tr>
@@ -119,7 +119,7 @@ export function AccessPermissionsPage() {
 
       <section className="space-y-4">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight text-foreground">
+          <h2 className="font-heading text-[1.45rem] leading-tight text-foreground">
             {t('admin.permissions.apiAccess')}
           </h2>
           <p className="mt-1 text-[0.98rem] leading-7 text-muted-foreground">
@@ -168,7 +168,7 @@ function AccessBadge({ allowed, index }: { allowed: boolean; index: number }) {
 
   if (allowed) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2.5 py-1 text-[0.78rem] font-semibold text-green-700">
+      <span className="inline-flex items-center gap-1.5 rounded-full tone-success px-2.5 py-1 text-[0.78rem] font-semibold">
         <CheckCircle2 className="h-3.5 w-3.5" />
         {t('admin.permissions.visible')}
       </span>

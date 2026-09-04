@@ -7,7 +7,7 @@ Mix of Harvard I Tatti staff (doing quick admin tasks — managing fellows, apps
 Warm, approachable, reliable. Friendly and inviting despite being institutional, the kind of tool that feels helpful, not bureaucratic. Three words: warm, clear, trustworthy.
 
 ### Aesthetic Direction
-Light theme (default) appropriate for daytime office use at a Renaissance research institute in Florence, with a dark counterpart since v0.18.0 (user-toggled, persisted). Cool-toned institutional greys (derived from brand light grey #e5eaec and anthracite #1d252c) with restrained crimson accents (#ab192d). Content area capped at max-w-6xl to prevent stretch on wide displays. Typography stays in Brandon Grotesque, leaning on its humanist warmth to balance the cooler surface palette.
+Light theme (default) appropriate for daytime office use at a Renaissance research institute in Florence, with a dark counterpart since v0.18.0 (user-toggled, persisted). Cool-toned institutional greys (derived from brand light grey #e5eaec and anthracite #1d252c) with restrained crimson accents (#ab192d). Content area capped at max-w-6xl to prevent stretch on wide displays. Typography follows the I Tatti house style shared with Libra (docs/house-style.md): Brandon Grotesque for everything operable, Bodoni Moda for page, section and dialog titles. Since v0.21.0 crimson is the mark and accent only (logo, active navigation, hairlines, links, focus); primary actions are anthracite, lifted to light grey in dark mode, so destructive red stays visibly its own hue.
 
 ### Design Principles
 - Let content outrank chrome. Navigation should support the task, not dominate it.

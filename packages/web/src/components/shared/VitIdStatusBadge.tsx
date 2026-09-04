@@ -101,25 +101,25 @@ function getBadgeVisual(
     case 'active':
       return {
         label: t('fellows.badges.vitId.active'),
-        tone: 'bg-green-50 text-green-700 dark:bg-green-500/15 dark:text-green-300',
+        tone: 'tone-success',
         Icon: CheckCircle2,
       };
     case 'active-different-email':
       return {
         label: t('fellows.badges.vitId.activeDifferentEmail'),
-        tone: 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
+        tone: 'tone-warning',
         Icon: Info,
       };
     case 'needs-review':
       return {
         label: t('fellows.badges.vitId.needsReview'),
-        tone: 'bg-amber-50 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200',
+        tone: 'tone-warning',
         Icon: AlertTriangle,
       };
     case 'no-account':
       return {
         label: t('fellows.badges.vitId.noAccount'),
-        tone: 'bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300',
+        tone: 'tone-danger',
         Icon: XCircle,
       };
   }

@@ -159,16 +159,16 @@ function NameSearchResult({
 function ErrorPanel({ onRetry }: { onRetry: () => void }) {
   const { t } = useTranslation();
   return (
-    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+    <div className="rounded-xl border border-warning-border bg-warning p-4">
       <div className="flex items-center gap-2">
-        <AlertCircle className="h-5 w-5 text-amber-600" />
-        <p className="text-sm text-amber-800">
+        <AlertCircle className="h-5 w-5 text-warning-foreground" />
+        <p className="text-sm text-warning-foreground">
           {t('fellows.hasVitId.searchFailed')}
         </p>
       </div>
       <button
         onClick={onRetry}
-        className="mt-2 text-sm text-amber-700 underline hover:no-underline"
+        className="mt-2 text-sm text-warning-foreground underline hover:no-underline"
       >
         {t('common.retry')}
       </button>
