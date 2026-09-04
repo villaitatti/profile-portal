@@ -60,6 +60,9 @@ auth0/       # Auth0 configuration reference files
 
 ## Auth0 Setup
 
+The full checklist of dashboard-held tenant configuration (and how to keep it
+reproducible with `a0deploy export`) lives in [`auth0/README.md`](auth0/README.md).
+
 ### Required Auth0 Configuration
 
 1. **SPA Application** — For the React frontend (`@auth0/auth0-react`)

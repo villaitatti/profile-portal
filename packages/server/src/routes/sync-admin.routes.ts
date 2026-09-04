@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { createSseToken, verifySseToken } from '../lib/sse-token.js';
 import { isScimConfigured, getGroups } from '../services/atlassian-scim.service.js';
@@ -181,6 +182,30 @@ router.get('/status', (_req, res) => {
 // Auth is handled by the short-lived SSE token validated inline.
 const sseRouter = Router();
 
+// Registry of per-connection teardown functions for open SSE streams,
+// alongside the service's emitter registry. An SSE response with its 25s
+// heartbeat is a permanently active request, so server.close() during
+// graceful shutdown would never resolve while one is open — the force-exit
+// backstop would then fire and skip the pg-boss drain, stranding in-flight
+// jobs as 'active' for up to 23h. index.ts calls closeAllSseStreams() before
+// awaiting server.close(). In-memory Set is fine: single-instance design.
+const activeSseShutdownClosers = new Set<() => void>();
+
+/**
+ * Writes a final event to every open SSE stream and ends it, clearing each
+ * connection's heartbeat timer and emitter listener. Never throws — called
+ * from the shutdown path, where one bad socket must not abort the drain.
+ */
+export function closeAllSseStreams(): void {
+  for (const close of [...activeSseShutdownClosers]) {
+    try {
+      close();
+    } catch (err) {
+      logger.error({ err }, 'Failed to close an SSE stream during shutdown');
+    }
+  }
+}
+
 sseRouter.get('/runs/:runId/stream', async (req, res) => {
   const sseToken = req.query.sse_token as string | undefined;
   const { runId } = req.params;
@@ -256,11 +281,39 @@ sseRouter.get('/runs/:runId/stream', async (req, res) => {
     flushIfBuffered();
   }, 25_000);
 
+  // Idempotent: reached via progress 'done'/'error', client disconnect, AND
+  // graceful shutdown — any two can race (e.g. shutdown ends the response,
+  // which fires req 'close').
+  let cleanedUp = false;
   const cleanup = () => {
+    if (cleanedUp) return;
+    cleanedUp = true;
     clearInterval(heartbeat);
     emitter.removeListener('progress', onProgress);
+    activeSseShutdownClosers.delete(shutdownClose);
     res.end();
   };
+
+  // Shutdown path: shutdown first gives in-flight syncs a bounded window to
+  // finish (awaitActiveSyncs) — a run that completed in budget already closed
+  // this stream via its 'done' event. The phase must be 'restarting', NOT
+  // 'error': clients key on the phase string, and 'error' made the web client
+  // report a failed sync (clearing the preview) for a run whose result is
+  // recorded in the database either way.
+  const shutdownClose = () => {
+    res.write(
+      `data: ${JSON.stringify({
+        phase: 'restarting',
+        step: 0,
+        totalSteps: 0,
+        percentage: 0,
+        description:
+          'The server is restarting; the sync run continues and its result is recorded. Reload the page to check the run status.',
+      } satisfies SyncProgress)}\n\n`
+    );
+    cleanup();
+  };
+  activeSseShutdownClosers.add(shutdownClose);
 
   emitter.on('progress', onProgress);
   req.on('close', cleanup);

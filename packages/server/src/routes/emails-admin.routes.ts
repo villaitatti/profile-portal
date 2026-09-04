@@ -165,7 +165,8 @@ function renderTemplateSafe(emailType: AppointeeEmailType, firstName: string) {
       ? renderVitIdInvitation({ firstName })
       : renderBioProjectDescription({ firstName });
   } catch (err) {
-    logger.warn({ err, emailType, firstName }, 'Admin emails: template render failed');
+    // No firstName in the log — it is the appointee's real name.
+    logger.warn({ err, emailType }, 'Admin emails: template render failed');
     return { subject: '(template render failed)', html: '<p>Template could not be rendered.</p>', text: 'Template could not be rendered.' };
   }
 }

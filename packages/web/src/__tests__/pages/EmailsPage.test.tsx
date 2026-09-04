@@ -958,7 +958,7 @@ describe('EmailsPage — Email Drawer', () => {
     expect(screen.getByText(/no first name on file/)).toBeInTheDocument();
   });
 
-  it('shows preview error when loading preview fails', () => {
+  it('shows a user-safe preview error when loading the preview fails', () => {
     mockUseEmailEventPreview.mockReturnValue({
       data: null,
       isLoading: false,
@@ -974,6 +974,9 @@ describe('EmailsPage — Email Drawer', () => {
 
     fireEvent.click(screen.getByText('Sophie Laurent'));
 
-    expect(screen.getByText(/Failed to load preview: civicrm_unavailable/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Failed to load the preview\. An unexpected error occurred/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/civicrm_unavailable/)).not.toBeInTheDocument();
   });
 });

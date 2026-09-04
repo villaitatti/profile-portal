@@ -690,6 +690,52 @@ async function executeDiff(
 // If a sync run has been in dry_run/executing for longer than this, treat it as crashed
 const LEASE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
+// In-flight detached sync tasks (the dry-run and execute IIFEs below). The SSE
+// request used to be the only thing incidentally keeping server.close()
+// pending during a sync; now that shutdown drains SSE streams first, nothing
+// else stops process.exit() from killing an execution after partial SCIM
+// mutations, leaving the run row to the 30-minute lease. Shutdown awaits these
+// via awaitActiveSyncs. In-memory Set is fine: single-instance design.
+const activeSyncTasks = new Set<Promise<void>>();
+
+function trackSyncTask(task: Promise<void>): void {
+  activeSyncTasks.add(task);
+  // .then(onSettled, onSettled) rather than .finally: a .finally chain would
+  // re-reject if the task ever rejected, turning tracking itself into an
+  // unhandled rejection.
+  const settled = () => activeSyncTasks.delete(task);
+  void task.then(settled, settled);
+}
+
+/**
+ * Waits up to budgetMs for in-flight sync tasks to settle. Called from
+ * graceful shutdown BEFORE the SSE streams are drained, so a sync that
+ * finishes in budget still delivers its 'done' event to the open stream
+ * (whose cleanup then deregisters it). Never throws: allSettled cannot
+ * reject and the race's other arm is a plain timer.
+ */
+export async function awaitActiveSyncs(budgetMs: number): Promise<void> {
+  if (activeSyncTasks.size === 0) return;
+  logger.info(
+    { activeSyncs: activeSyncTasks.size, budgetMs },
+    'Shutdown: waiting for in-flight Atlassian sync tasks'
+  );
+  let timer: NodeJS.Timeout | undefined;
+  await Promise.race([
+    Promise.allSettled([...activeSyncTasks]),
+    new Promise<void>((res) => {
+      timer = setTimeout(res, budgetMs);
+    }),
+  ]);
+  clearTimeout(timer);
+  if (activeSyncTasks.size > 0) {
+    logger.warn(
+      { activeSyncs: activeSyncTasks.size },
+      'Shutdown: sync tasks still running after budget — unfinished run rows are reclaimed by the lease TTL'
+    );
+  }
+}
+
 // Shared failure path for the two detached run IIFEs (dry run + execute).
 // The status write can itself throw (the DB going away is a plausible cause
 // of the outer failure); an unhandled rejection here would escape the detached
@@ -746,8 +792,9 @@ export async function runDrySync(triggeredBy: string): Promise<{ runId: string; 
 
   const emitter = new EventEmitter();
 
-  // Run async (explicitly not awaited — caller consumes progress via SSE)
-  void (async () => {
+  // Run async (explicitly not awaited — caller consumes progress via SSE).
+  // Tracked so graceful shutdown can await in-flight work (awaitActiveSyncs).
+  trackSyncTask((async () => {
     try {
       const mappings = await prisma.roleGroupMapping.findMany();
       if (mappings.length === 0) {
@@ -793,7 +840,7 @@ export async function runDrySync(triggeredBy: string): Promise<{ runId: string; 
     } catch (err) {
       await failRunAndNotify(run.id, emitter, err, 'Dry sync failed');
     }
-  })();
+  })());
 
   return { runId: run.id, emitter };
 }
@@ -850,8 +897,9 @@ export async function executeSync(
 
   const emitter = new EventEmitter();
 
-  // Explicitly not awaited — caller consumes progress via SSE.
-  void (async () => {
+  // Explicitly not awaited — caller consumes progress via SSE. Tracked so
+  // graceful shutdown can await in-flight work (awaitActiveSyncs).
+  trackSyncTask((async () => {
     try {
       const startTime = Date.now();
       const diff = dryRun.diff as unknown as SyncDiff;
@@ -887,7 +935,7 @@ export async function executeSync(
     } catch (err) {
       await failRunAndNotify(run.id, emitter, err, 'Sync execution failed');
     }
-  })();
+  })());
 
   return { runId: run.id, emitter };
 }

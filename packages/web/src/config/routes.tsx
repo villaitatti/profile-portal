@@ -65,6 +65,16 @@ export const router = createBrowserRouter([
               Component: (await import('@/pages/forms/PublicFormPage')).PublicFormPage,
             }),
           },
+          // Catch-all: a URL that matches no route gets a translated
+          // not-found page (inside the public layout so the header, theme and
+          // language toggles stay available), not the chunk-load error
+          // boundary whose "reload" advice can never fix a typo'd address.
+          {
+            path: '*',
+            lazy: async () => ({
+              Component: (await import('@/pages/NotFoundPage')).NotFoundPage,
+            }),
+          },
         ],
       },
       // Auth is loaded only for the callback and protected routes. Public form

@@ -105,9 +105,10 @@ warn_migration_may_be_applied() {
   Rolling the application image back does NOT revert migrations.
 
   Next steps:
-    1. Check what was applied:
-         docker compose -f docker-compose.yml exec portal \
-           node packages/server/node_modules/prisma/build/index.js migrate status
+    1. Check what was applied (-w matters: the Prisma 7 CLI resolves
+       prisma.config.ts from its working directory):
+         docker compose -f docker-compose.yml exec -w /app/packages/server portal \
+           node node_modules/prisma/build/index.js migrate status
     2. If the previous application version cannot run against the new schema,
        fix forward on the app code (preferred), or restore the pre-deploy
        database backup together with the previous image.

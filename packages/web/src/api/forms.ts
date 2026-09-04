@@ -70,8 +70,10 @@ export function usePublicForm(token: string, options?: { refetchOnWindowFocus?: 
       return res.json() as Promise<PublicFormData>;
     },
     enabled: !!token,
-    // Callers switch this off once a submit succeeded: the server rotates the
-    // token on submit, so a focus refetch would 404 over the confirmation.
+    // Callers switch this off once the form data has loaded (a mid-fill focus
+    // refetch could replace the form and destroy typed values) and once a
+    // submit succeeded (the server rotates the token on submit, so a focus
+    // refetch would 404 over the confirmation).
     refetchOnWindowFocus: options?.refetchOnWindowFocus ?? true,
     retry: (failureCount, error) => {
       if (

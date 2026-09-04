@@ -7,6 +7,7 @@ import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useClaims } from '@/api/claims';
 import type { VitIdClaim } from '@/api/claims';
+import { userErrorMessage } from '@/lib/errors';
 import { getCivicrmUrl } from '@/config/runtime';
 import { Search, ShieldCheck, Info, ExternalLink, AlertCircle } from 'lucide-react';
 
@@ -89,9 +90,7 @@ export function ClaimLogPage() {
         <div className="flex flex-col items-center justify-center py-16 text-destructive">
           <AlertCircle className="h-12 w-12 mb-4" />
           <h3 className="text-lg font-medium mb-1">{t('admin.claimLog.loadFailedTitle')}</h3>
-          <p className="text-sm text-muted-foreground">
-            {error instanceof Error ? error.message : t('admin.claimLog.unexpectedError')}
-          </p>
+          <p className="text-sm text-muted-foreground">{userErrorMessage(error, t)}</p>
         </div>
       </div>
     );

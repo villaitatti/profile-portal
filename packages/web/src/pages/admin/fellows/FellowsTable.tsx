@@ -16,6 +16,7 @@ import {
 } from '@/api/fellows';
 import { useMarkNominationSent } from '@/api/forms';
 import { formatHumanDate } from '@/lib/dates';
+import { userErrorMessage } from '@/lib/errors';
 import type { FellowDashboardEntry } from '@itatti/shared';
 import type { SortField, SortDir, ActiveSend, ActiveNominationSent } from './types';
 import { getPrimaryConfiguredForm, getFormInvitation } from './helpers';
@@ -264,9 +265,7 @@ export function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEn
             : t('fellows.send.bioFailedFallback', { reason: err.reason })
         );
       } else {
-        setSendError(
-          err instanceof Error ? err.message : t('fellows.send.genericFailed')
-        );
+        setSendError(userErrorMessage(err, t, t('fellows.send.genericFailed')));
       }
     } finally {
       setPendingContactId(null);
@@ -357,7 +356,7 @@ export function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEn
                 : t('fellows.send.previewFailedFallback', {
                     reason: previewQuery.error.reason,
                   })
-              : (previewQuery.error as Error).message
+              : userErrorMessage(previewQuery.error, t)
             : null
         }
         sendError={sendError}
@@ -384,9 +383,7 @@ export function FellowsTable({ fellows, paginate }: { fellows: FellowDashboardEn
             );
             setActiveNominationSent(null);
           } catch (err) {
-            toast.error(
-              err instanceof Error ? err.message : t('fellows.errors.saveNominationFailed')
-            );
+            toast.error(userErrorMessage(err, t, t('fellows.errors.saveNominationFailed')));
           }
         }}
       />

@@ -1,4 +1,6 @@
-import { useId, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useBlocker } from 'react-router';
+import type { BlockerFunction } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
@@ -16,6 +18,7 @@ import {
   User,
   Users,
 } from 'lucide-react';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { SearchableCombobox } from '@/components/shared/SearchableCombobox';
 import { SelectDropdown } from '@/components/shared/SelectDropdown';
 import { cn } from '@/lib/utils';
@@ -92,6 +95,59 @@ export function PublicFormRenderer({
   const { t } = useTranslation();
   const [values, setValues] = useState<Record<string, FormValue>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const formRef = useRef<HTMLFormElement>(null);
+  const [failedSubmitCount, setFailedSubmitCount] = useState(0);
+
+  // Whether the appointee has typed anything not yet accepted by the server.
+  // Adding a repeatable-group row counts: it is a deliberate act worth keeping.
+  const hasUnsavedInput =
+    !isSuccess &&
+    Object.values(values).some((value) =>
+      Array.isArray(value) ? value.length > 0 : value !== '' && value !== false
+    );
+
+  // There is no draft persistence, so while there is unsaved input a close,
+  // reload, or navigation away must ask for confirmation. The guard drops off
+  // on success so the confirmation screen doesn't trap the appointee.
+  useEffect(() => {
+    if (!hasUnsavedInput) return;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      // Chrome still requires returnValue to be set for the prompt to show.
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [hasUnsavedInput]);
+
+  // beforeunload only covers closing/reloading the tab. Client-side router
+  // transitions (links, back/forward) unmount this component without any
+  // browser prompt, so they get their own guard under the same condition.
+  // Language toggling is not a navigation and never trips it. Called
+  // unconditionally (hooks rules); the shouldBlock function keeps it inert
+  // while there is nothing to lose.
+  const blocker = useBlocker(
+    useCallback<BlockerFunction>(
+      ({ currentLocation, nextLocation }) =>
+        hasUnsavedInput && currentLocation.pathname !== nextLocation.pathname,
+      [hasUnsavedInput]
+    )
+  );
+
+  // After a failed validation pass, move the appointee to the first problem:
+  // on a long form every inline error may sit far above the submit button.
+  useEffect(() => {
+    if (failedSubmitCount === 0) return;
+    const invalid = formRef.current?.querySelector('[aria-invalid="true"]');
+    if (!(invalid instanceof HTMLElement)) return;
+    // A radio group carries aria-invalid on its <fieldset>, which is not
+    // focusable — descend to its first input.
+    const target = invalid.matches('input, select, textarea, button')
+      ? invalid
+      : (invalid.querySelector<HTMLElement>('input, select, textarea, button') ?? invalid);
+    target.focus();
+    target.scrollIntoView({ block: 'center' });
+  }, [failedSubmitCount]);
 
   if (isSuccess) {
     return <FormSubmittedPanel />;
@@ -193,12 +249,20 @@ export function PublicFormRenderer({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!validate()) return;
+    if (!validate()) {
+      // Bump a counter rather than focusing here: the inline errors (and their
+      // aria-invalid markers) only exist in the DOM after the next render.
+      setFailedSubmitCount((count) => count + 1);
+      return;
+    }
     onSubmit(values);
   }
 
+  const validationErrorCount = Object.keys(errors).length;
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-8" noValidate>
+    <>
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-8" noValidate>
       {formDef.sections.map((section, si) => (
         <section
           key={si}
@@ -256,6 +320,20 @@ export function PublicFormRenderer({
         </div>
       )}
 
+      {/* Summary next to the submit button: on a long form the inline errors
+          can all sit above the fold, so the click must produce visible,
+          announced feedback where it happened. Derived from `errors`, it
+          disappears as the appointee fixes the highlighted fields. */}
+      {validationErrorCount > 0 && (
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-md border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive"
+        >
+          <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
+          <p>{t('forms.validation.summary', { count: validationErrorCount })}</p>
+        </div>
+      )}
+
       <div className="flex justify-end border-t border-border pt-5">
         <Button type="submit" size="lg" className="w-full px-5 sm:w-auto" disabled={isSubmitting}>
           <Send data-icon="inline-start" />
@@ -263,6 +341,21 @@ export function PublicFormRenderer({
         </Button>
       </div>
     </form>
+
+    {/* Shown when the blocker above intercepts a client-side navigation.
+        "Stay" (cancel) resets the blocker; "Leave" proceeds and the input is
+        deliberately discarded. */}
+    <ConfirmDialog
+      open={blocker.state === 'blocked'}
+      onConfirm={() => blocker.proceed?.()}
+      onCancel={() => blocker.reset?.()}
+      title={t('forms.leaveGuard.title')}
+      description={t('forms.leaveGuard.body')}
+      confirmLabel={t('forms.leaveGuard.leave')}
+      cancelLabel={t('forms.leaveGuard.stay')}
+      variant="danger"
+    />
+    </>
   );
 }
 

@@ -1,4 +1,4 @@
-import { apiUrl, useApiToken } from './client';
+import { ApiError, apiUrl, useApiToken } from './client';
 
 export async function uploadImage(
   file: Blob,
@@ -16,8 +16,16 @@ export async function uploadImage(
   });
 
   if (!response.ok) {
-    const body = await response.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(body.error || 'Image upload failed');
+    // ApiError (not a bare Error) so lib/errors.ts can tell a user-appropriate
+    // 4xx body ("File is too large…") from a server fault to translate away.
+    const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    console.error(`[api] POST /api/admin/uploads/images failed with status ${response.status}`, body);
+    throw new ApiError(
+      response.status,
+      (typeof body.error === 'string' && body.error) || 'Request failed',
+      typeof body.code === 'string' ? body.code : undefined,
+      body
+    );
   }
 
   return response.json();

@@ -1,4 +1,5 @@
 import { env, isDevMode } from '../env.js';
+import { hashEmail } from '../lib/hash-email.js';
 import { logger } from '../lib/logger.js';
 
 interface JsmSiteConfig {
@@ -72,7 +73,7 @@ export async function ensureCustomer(
   displayName: string
 ): Promise<string> {
   if (isDevMode) {
-    logger.info({ siteUrl, email, displayName }, 'JSM (dev): would ensure customer');
+    logger.info({ siteUrl, emailHash: hashEmail(email) }, 'JSM (dev): would ensure customer');
     return `mock-account-${Date.now()}`;
   }
 
@@ -90,8 +91,10 @@ export async function ensureCustomer(
   if (res.status === 409) {
     const existing = await findCustomerByEmail(siteUrl, email);
     if (!existing) {
+      // hashEmail, not the raw address: this message lands in logs via the
+      // callers' logger.error({ err }) fields.
       throw new Error(
-        `JSM customer conflict for ${email} at ${siteUrl} but lookup by email found no account`
+        `JSM customer conflict at ${siteUrl} for emailHash ${hashEmail(email)} but lookup by email found no account`
       );
     }
     return existing;
@@ -211,9 +214,12 @@ export async function addUserToFormerAppointees(
       const accountId = await ensureCustomer(site.url, email, displayName);
       await addToOrganization(site.url, site.formerOrgId, accountId);
       results[label] = true;
-      logger.info({ email, site: site.url }, 'Added to Former Appointees');
+      logger.info({ emailHash: hashEmail(email), site: site.url }, 'Added to Former Appointees');
     } catch (err) {
-      logger.error({ err, email, site: site.url }, 'Failed to add to Former Appointees');
+      logger.error(
+        { err, emailHash: hashEmail(email), site: site.url },
+        'Failed to add to Former Appointees'
+      );
     }
   }
 
@@ -234,20 +240,33 @@ export async function addUserToCurrentAppointees(
       const accountId = await ensureCustomer(site.url, email, displayName);
       await addToOrganization(site.url, site.currentOrgId, accountId);
       results[label] = true;
-      logger.info({ email, site: site.url }, 'Added to Current Appointees');
+      logger.info({ emailHash: hashEmail(email), site: site.url }, 'Added to Current Appointees');
     } catch (err) {
-      logger.error({ err, email, site: site.url }, 'Failed to add to Current Appointees');
+      logger.error(
+        { err, emailHash: hashEmail(email), site: site.url },
+        'Failed to add to Current Appointees'
+      );
     }
   }
 
   return results;
 }
 
+// Per-site removal outcome. 'not-found' (no JSM customer for this email) is a
+// legitimate no-op — the fellow was never provisioned in JSM — and must stay
+// distinguishable from 'failed': the end-of-year cleanup used to fold both
+// into a boolean and reported a false PARTIAL run for every unprovisioned
+// fellow.
+export type JsmRemovalOutcome = 'removed' | 'not-found' | 'failed';
+
 export async function removeUserFromCurrentAppointees(
   email: string
-): Promise<{ site1: boolean; site2: boolean }> {
+): Promise<{ site1: JsmRemovalOutcome; site2: JsmRemovalOutcome }> {
   const sites = getSites();
-  const results = { site1: false, site2: false };
+  const results: { site1: JsmRemovalOutcome; site2: JsmRemovalOutcome } = {
+    site1: 'failed',
+    site2: 'failed',
+  };
 
   for (let i = 0; i < sites.length; i++) {
     const site = sites[i];
@@ -255,14 +274,21 @@ export async function removeUserFromCurrentAppointees(
     try {
       const accountId = await findCustomerByEmail(site.url, email);
       if (!accountId) {
-        logger.info({ email, site: site.url }, 'No customer found, skipping removal from Current Appointees');
+        results[label] = 'not-found';
+        logger.info(
+          { emailHash: hashEmail(email), site: site.url },
+          'No JSM customer found, nothing to remove from Current Appointees'
+        );
         continue;
       }
       await removeFromOrganization(site.url, site.currentOrgId, accountId);
-      results[label] = true;
-      logger.info({ email, site: site.url }, 'Removed from Current Appointees');
+      results[label] = 'removed';
+      logger.info({ emailHash: hashEmail(email), site: site.url }, 'Removed from Current Appointees');
     } catch (err) {
-      logger.error({ err, email, site: site.url }, 'Failed to remove from Current Appointees');
+      logger.error(
+        { err, emailHash: hashEmail(email), site: site.url },
+        'Failed to remove from Current Appointees'
+      );
     }
   }
 

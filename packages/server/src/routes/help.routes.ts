@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { ErrorCodes } from '@itatti/shared';
+import { createHash } from 'crypto';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { validate } from '../middleware/validate.js';
@@ -26,9 +27,36 @@ const helpLimiter = rateLimit({
   message: { error: 'Too many requests. Please try again later.', code: ErrorCodes.RATE_LIMITED },
 });
 
+// Second limiter, keyed on the *target* email rather than the caller —
+// mirrors claimEmailLimiter in claim.routes.ts.
+//
+// The JSM ticket is raised on behalf of contactEmail, so JSM sends its
+// request-created notification to that mailbox. The IP limiter alone cannot
+// bound how much of that mail a single third-party address receives: an
+// attacker submitting someone else's address from rotating IPs directs
+// genuine-looking JSM notifications at their inbox (harassment or a phishing
+// setup) and burns the service desk's mail quota. Mounted after `validate` so
+// only schema-valid addresses are keyed; the key is hashed and lowercased —
+// unlike the claim schema, contactEmail is not transformed, because the
+// ticket should preserve the casing the requester typed.
+//
+// The 429 body is fixed and depends only on what this caller already
+// submitted, never on whether the address exists — no enumeration oracle.
+const helpEmailLimiter = rateLimit({
+  windowMs: 24 * 60 * 60 * 1000,
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) =>
+    createHash('sha256')
+      .update(String(req.body?.contactEmail ?? '').trim().toLowerCase())
+      .digest('hex'),
+  message: { error: 'Too many requests for this address. Please try again later.', code: ErrorCodes.RATE_LIMITED },
+});
+
 const router = Router();
 
-router.post('/', helpLimiter, validate(helpSchema), async (req, res) => {
+router.post('/', helpLimiter, validate(helpSchema), helpEmailLimiter, async (req, res) => {
   try {
     const result = await jiraService.createHelpTicket(req.body);
     logger.info({ issueKey: result.issueKey }, 'Help ticket created');

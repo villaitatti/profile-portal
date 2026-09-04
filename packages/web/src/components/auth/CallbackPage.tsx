@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from 'react-i18next';
@@ -15,16 +16,29 @@ import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
  *   neither          → no code/state in the URL (refresh or bookmark of
  *                      /callback). This route sits outside AuthenticationGuard,
  *                      so nothing else would ever start a login here.
+ *
+ * The Auth0 error detail (`error_description`, raw message) is technical,
+ * English-only text — it goes to the console for IT, never on screen.
  */
 export function CallbackPage() {
   const { t } = useTranslation();
   const { error, isLoading, isAuthenticated, loginWithRedirect } = useAuth0();
 
+  useEffect(() => {
+    if (error) {
+      console.error(
+        '[auth] Auth0 callback error',
+        (error as { error_description?: unknown }).error_description ?? error.message,
+        error
+      );
+    }
+  }, [error]);
+
   if (error) {
     return (
       <div className="mx-auto max-w-md py-20 text-center">
         <h1 className="mb-2 font-heading text-[1.8rem] leading-tight">{t('auth.callbackErrorTitle')}</h1>
-        <p className="text-muted-foreground">{describeAuthError(error) ?? t('auth.noErrorReason')}</p>
+        <p className="text-muted-foreground">{t('auth.callbackErrorBody')}</p>
         <Button type="button" size="lg" className="mt-6" onClick={() => void loginWithRedirect()}>
           {t('auth.returnToSignIn')}
         </Button>
@@ -37,16 +51,4 @@ export function CallbackPage() {
   }
 
   return <Navigate to="/dashboard" replace />;
-}
-
-/**
- * Auth0 puts the OAuth `error_description` on the thrown error, but only for
- * OAuthError; generic failures carry just a message. Returns null when neither
- * is present so the caller can show a localized fallback.
- */
-function describeAuthError(error: Error): string | null {
-  const description = (error as { error_description?: unknown }).error_description;
-  if (typeof description === 'string' && description.trim() !== '') return description;
-  if (error.message.trim() !== '') return error.message;
-  return null;
 }

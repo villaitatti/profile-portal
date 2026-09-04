@@ -19,16 +19,28 @@ export async function apiFetch(
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const response = await fetch(apiUrl(path), {
-    ...fetchOptions,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(apiUrl(path), {
+      ...fetchOptions,
+      headers,
+    });
+  } catch (err) {
+    // Users see a translated "server unreachable" message (lib/errors.ts);
+    // the technical detail lives here.
+    console.error(`[api] ${fetchOptions.method ?? 'GET'} ${path} network failure`, err);
+    throw err;
+  }
 
   if (!response.ok) {
-    const body = (await response.json().catch(() => ({ error: 'Unknown error' }))) as Record<
-      string,
-      unknown
-    >;
+    // An empty body (rather than a placeholder `error` string) keeps
+    // lib/errors.ts from mistaking a parse failure for a server-authored,
+    // user-appropriate message.
+    const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    console.error(
+      `[api] ${fetchOptions.method ?? 'GET'} ${path} failed with status ${response.status}`,
+      body
+    );
     throw new ApiError(
       response.status,
       (typeof body.error === 'string' && body.error) || 'Request failed',

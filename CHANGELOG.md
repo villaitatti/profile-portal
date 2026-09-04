@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.22.0] - 04 September 2026 - Pre-launch hardening: form data safety, user-facing errors, and operational alarms
+
+### Added
+- **The public appointee form no longer loses work.** Leaving or reloading the page with unsaved input now asks for confirmation — both browser navigation and in-app link clicks — and a background refresh failure (flaky wifi, tab switching, or the invitation expiring mid-fill) can no longer replace a half-completed form with an error screen — everything typed stays on screen. Clicking Submit with invalid fields now focuses the first problem and shows a translated error summary next to the button instead of appearing to do nothing.
+- **Failures now alert someone.** The daily bio-email dispatch emails IT after three consecutive failing days — including days where individual deliveries failed or were deferred, not just outright crashes (previously it only wrote a log line nobody watches). At boot and on the daily tick, the server checks whether a July automation was missed — because the container was down at fire time or a run crashed mid-flight — and alerts IT under an unmistakable ALERT subject; a year where the automation correctly found nothing to do counts as done. Failed or partial automation reports also now say so in the email subject instead of arriving as "Complete". The backup script gained an optional dead-man's-switch ping (`BACKUP_PING_URL`), and the deployment guide's monitoring chapter is now a concrete setup checklist rather than a plan.
+- **Uploads are part of disaster recovery.** The nightly backup now archives the uploaded catalog images alongside the database dump, ships both offsite, and the restore procedure and quarterly drill cover them — previously a VM loss would have restored database rows pointing at images that were gone forever. Deleted images are kept in a trash folder for seven days, so the database dump and the image archive always agree — a file referenced by the night's dump is guaranteed to be inside the paired archive.
+- **A proper "page not found".** Typo'd URLs get a translated not-found page with a link back to the dashboard, instead of a misleading "reload to fetch the latest application files" error meant for a different failure.
+
+### Changed
+- **Errors on screen are now written for people.** A shared helper replaces every place that rendered raw exception text ("Failed to fetch", "Internal Server Error", Auth0's error dumps) with translated, user-appropriate messages; server-authored 4xx messages still pass through, and the technical detail moves to the console/log. This closes a systemic gap across the admin pages, the contact self-service toasts, the auth callback, and the public form submit banner.
+- **The July automations can no longer run twice.** Executing a dry run now consumes it atomically — a double-click or replayed request gets a clear "already executed" response instead of a second concurrent run against Auth0 and Jira. Executed dry runs show as "Dry run (executed)" in the automation history, in both languages.
+- **Deploys stop tripping over themselves.** At shutdown the server first waits for an in-flight Atlassian sync to finish (within the shutdown budget), then closes open sync-progress streams gracefully, so a deploy during a running sync no longer force-kills the job queue mid-job (which could park a job for up to 23 hours) or abandons a half-applied sync. If a stream does have to close, the page now shows a translated "server is restarting" notice — keeping the previewed changes on screen — instead of falsely reporting a failed sync. The recovery command printed on deploy failure is now actually runnable (it was missing its working directory).
+- **The production container defends its assumptions.** It refuses to start unless `NODE_ENV=production` (a copied dev `.env` used to silently disable every safety guard), the compose file pins a container name so accidentally scaling to two instances fails loudly, and the dev database now listens on localhost only.
+
+### Fixed
+- Editing a catalog application that fails to load (or was deleted) now shows a proper error with a way back, instead of a blank form that could save empty values over real data.
+- The public help form now applies a per-address limit (3 per day) matching the claim endpoint, so it can no longer be scripted to aim "request received" emails from I Tatti's helpdesk at an arbitrary mailbox.
+
+### Security
+- **Form invitation links are stored hashed.** The database keeps only a SHA-256 hash of each appointee form token, so a leaked backup or read-only database access no longer yields usable form links; existing pending invitations were converted in place and keep working. One visible consequence: the dashboard's copy-link button now always generates a fresh link (clearly labeled — the previous link stops working), because an existing link can no longer be read back.
+- **Log lines no longer carry appointee emails or names.** Email sends and Jira Service Management calls now log a hashed recipient and an email-type label instead of raw addresses and subjects (which could embed full names), matching the hashing discipline the claim flow already had.
+- Dependency audit is green again: `qs` (reachable through Express's query parser) bumped to 6.16.0, and the unused MySQL driver pinned inside the Prisma CLI overridden to a patched version — two new advisories on it would otherwise have blocked the next deploy.
+
+### Also fixed
+- The July cleanup report no longer counts appointees who never had a Jira Service Management account as failures — a run where there was nothing to remove now reports as complete instead of "partially complete".
+- The form templates page shows a proper error message with a retry button when the list fails to load, instead of pretending there are no templates.
+- A rare database error while marking a nomination as sent no longer includes internal database details in the response; they go to the server log.
+- The container healthcheck (every 15 seconds) is no longer written to the application log — about 5,700 lines a day of noise gone.
+- Documentation: the 24-hour recovery point objective is now recorded in the deployment guide as an accepted decision, the Auth0 tenant configuration has a reproducibility checklist (`auth0/README.md`), and six stale TODO entries that were already fixed in code have been closed.
+
 ## [0.21.0] - 04 September 2026 - I Tatti house style: Bodoni titles, anthracite actions, shared chrome with Libra
 
 ### Changed

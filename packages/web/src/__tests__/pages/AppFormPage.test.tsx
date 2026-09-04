@@ -42,6 +42,7 @@ vi.mock('@/pages/admin/components/ImageUploader', () => ({
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 import { AppFormPage } from '@/pages/admin/AppFormPage';
+import { ApiError } from '@/api/client';
 
 const existingApp: Application = {
   id: 7,
@@ -241,6 +242,58 @@ describe('AppFormPage — edit mode', () => {
     });
     expect(vi.mocked(toast.success)).toHaveBeenCalledWith('Application updated');
     expect(await screen.findByText('Catalog destination')).toBeInTheDocument();
+  });
+
+  it('shows a not-found state with a back link when the application does not exist', () => {
+    mockUseApplication.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: new ApiError(404, 'Application not found', 'NOT_FOUND', {
+        error: 'Application not found',
+      }),
+    });
+
+    renderPage('/admin/apps/999/edit');
+
+    expect(screen.getByText('Application not found')).toBeInTheDocument();
+    expect(
+      screen.getByText(/It may have been deleted, or the link may be out of date/)
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Back to catalog/ })).toHaveAttribute(
+      'href',
+      '/admin/apps'
+    );
+    // No editable form: saving it would overwrite the app with blank values.
+    expect(screen.queryByLabelText('Application name')).not.toBeInTheDocument();
+  });
+
+  it('shows a load-failure state instead of a blank form when the fetch fails', () => {
+    mockUseApplication.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: new ApiError(500, 'Internal Server Error', 'INTERNAL_ERROR', {
+        error: 'Internal Server Error',
+      }),
+    });
+
+    renderPage('/admin/apps/7/edit');
+
+    expect(screen.getByText('Failed to load the application')).toBeInTheDocument();
+    // Raw server text stays off screen; the generic translated copy shows.
+    expect(screen.queryByText('Internal Server Error')).not.toBeInTheDocument();
+    expect(screen.getByText(/Something went wrong while processing the request/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Application name')).not.toBeInTheDocument();
+  });
+
+  it('treats a non-numeric id as not found instead of rendering a blank edit form', () => {
+    // The query stays disabled for an invalid id, so there is no error object
+    // to branch on — the page itself must refuse to render the empty form.
+    mockUseApplication.mockReturnValue({ data: undefined, isLoading: false });
+
+    renderPage('/admin/apps/abc/edit');
+
+    expect(screen.getByText('Application not found')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Application name')).not.toBeInTheDocument();
   });
 
   it('stays on the form and shows an error toast when the update fails', async () => {

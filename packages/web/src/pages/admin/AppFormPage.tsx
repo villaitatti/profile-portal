@@ -7,9 +7,10 @@ import {
   useCreateApplication,
   useUpdateApplication,
 } from '@/api/applications';
+import { httpStatusOf, userErrorMessage } from '@/lib/errors';
 import { AppForm, type AppFormData } from './components/AppForm';
 import { toast } from 'sonner';
-import { ArrowLeft } from 'lucide-react';
+import { AlertCircle, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router';
 
 export function AppFormPage() {
@@ -17,8 +18,13 @@ export function AppFormPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const isEdit = Boolean(id);
+  const appId = Number(id);
+  // A non-numeric id (/admin/apps/abc/edit) leaves the query disabled, so it
+  // must be treated as not-found here or the page would render a blank "edit"
+  // form whose save would overwrite the application with empty values.
+  const invalidId = isEdit && (!Number.isInteger(appId) || appId <= 0);
 
-  const { data: existingApp, isLoading } = useApplication(Number(id) || 0);
+  const { data: existingApp, isLoading, error } = useApplication(Number(id) || 0);
   const createApp = useCreateApplication();
   const updateApp = useUpdateApplication();
 
@@ -52,17 +58,30 @@ export function AppFormPage() {
 
   if (isEdit && isLoading) return <AppFormPageSkeleton />;
 
+  // Without these branches, a failed or empty lookup rendered a blank "edit"
+  // form that would PUT blank values over the real application.
+  const notFound = invalidId || httpStatusOf(error) === 404;
+  if (isEdit && (notFound || error)) {
+    return (
+      <div>
+        <BackToCatalogLink />
+        <PageHeader title={t('admin.apps.editTitle')} />
+        <div className="flex flex-col items-center justify-center py-16 text-destructive">
+          <AlertCircle className="h-12 w-12 mb-4" />
+          <h3 className="text-lg font-medium mb-1">
+            {notFound ? t('admin.apps.notFoundTitle') : t('admin.apps.loadFailedTitle')}
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            {notFound ? t('admin.apps.notFoundBody') : userErrorMessage(error, t)}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
-      <div className="mb-6">
-        <Link
-          to="/admin/apps"
-          className="inline-flex items-center gap-1.5 text-[0.95rem] text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          {t('admin.apps.backToCatalog')}
-        </Link>
-      </div>
+      <BackToCatalogLink />
 
       <PageHeader
         title={isEdit ? t('admin.apps.editTitle') : t('admin.apps.addApplication')}
@@ -93,6 +112,21 @@ export function AppFormPage() {
           />
         </div>
       </div>
+    </div>
+  );
+}
+
+function BackToCatalogLink() {
+  const { t } = useTranslation();
+  return (
+    <div className="mb-6">
+      <Link
+        to="/admin/apps"
+        className="inline-flex items-center gap-1.5 text-[0.95rem] text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        {t('admin.apps.backToCatalog')}
+      </Link>
     </div>
   );
 }

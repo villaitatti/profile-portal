@@ -39,6 +39,23 @@ export const common = {
       description: 'This page could not be loaded. Reload to fetch the latest application files.',
       reload: 'Reload page',
     },
+    // Catch-all route for addresses that do not exist (src/pages/NotFoundPage.tsx).
+    notFound: {
+      title: 'Page not found',
+      description: 'There is no page at this address. Check the link, or go back to the dashboard.',
+      goToDashboard: 'Go to the dashboard',
+    },
+    // Generic user-safe error messages (src/lib/errors.ts). Shown when the
+    // real failure is technical — network, server fault, expired session —
+    // and the raw detail belongs in the console, not on screen.
+    errors: {
+      network: 'The server could not be reached. Check your internet connection and try again.',
+      server:
+        'Something went wrong while processing the request. Try again in a moment; if the problem continues, contact IT.',
+      sessionExpired: 'Your session has expired. Sign in again and retry.',
+      notAllowed: 'Your account is not allowed to perform this action. If you think it should be, contact IT.',
+      unexpected: 'An unexpected error occurred. Please try again.',
+    },
   },
   it: {
     appName: 'Profile Portal',
@@ -75,6 +92,21 @@ export const common = {
       description:
         'Non è stato possibile caricare questa pagina. Ricarica per scaricare i file più recenti dell’applicazione.',
       reload: 'Ricarica la pagina',
+    },
+    notFound: {
+      title: 'Pagina non trovata',
+      description:
+        'Non esiste alcuna pagina a questo indirizzo. Controlla il link oppure torna alla dashboard.',
+      goToDashboard: 'Vai alla dashboard',
+    },
+    errors: {
+      network: 'Impossibile raggiungere il server. Controlla la connessione a internet e riprova.',
+      server:
+        'Si è verificato un problema durante l’elaborazione della richiesta. Riprova tra qualche istante; se il problema persiste, contatta l’IT.',
+      sessionExpired: 'La sessione è scaduta. Accedi di nuovo e riprova.',
+      notAllowed:
+        'Il tuo account non è autorizzato a eseguire questa operazione. Se ritieni che dovrebbe esserlo, contatta l’IT.',
+      unexpected: 'Si è verificato un errore imprevisto. Riprova.',
     },
   },
 };

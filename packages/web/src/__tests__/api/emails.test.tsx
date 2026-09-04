@@ -229,7 +229,9 @@ describe('useEmailEventPreview', () => {
     });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
-    expect((result.current.error as Error).message).toBe('Unknown error');
+    // The placeholder message, not a fake body: lib/errors.ts relies on the
+    // body being empty to know no server-authored message exists.
+    expect((result.current.error as Error).message).toBe('Request failed');
   });
 });
 

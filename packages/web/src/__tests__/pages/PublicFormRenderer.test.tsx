@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { createMemoryRouter, Link, RouterProvider } from 'react-router';
+import { useState, type ComponentProps, type Dispatch, type SetStateAction } from 'react';
 import type { FormDef } from '@itatti/shared';
 import { COUNTRIES, TITLE_OPTIONS } from '@itatti/shared';
 import { PublicFormRenderer } from '@/pages/forms/PublicFormRenderer';
@@ -45,6 +47,40 @@ const addressForm: FormDef = {
   ],
 };
 
+type RendererProps = ComponentProps<typeof PublicFormRenderer>;
+
+/**
+ * The renderer calls useBlocker, which only works under a data router, so
+ * every test mounts through createMemoryRouter. The harness adds a link to an
+ * /away route (to exercise blocked navigation) and exposes updateProps —
+ * with a data router the route element is fixed at creation time, so plain
+ * rerender() cannot deliver new props.
+ */
+function renderForm(initialProps: RendererProps) {
+  let setProps: Dispatch<SetStateAction<RendererProps>>;
+  function Harness() {
+    const [props, set] = useState(initialProps);
+    setProps = set;
+    return (
+      <>
+        <Link to="/away">go-elsewhere</Link>
+        <PublicFormRenderer {...props} />
+      </>
+    );
+  }
+  const router = createMemoryRouter([
+    { path: '/', element: <Harness /> },
+    { path: '/away', element: <h1>Away page</h1> },
+  ]);
+  const utils = render(<RouterProvider router={router} />);
+  return {
+    ...utils,
+    router,
+    updateProps: (next: Partial<RendererProps>) =>
+      act(() => setProps((prev) => ({ ...prev, ...next }))),
+  };
+}
+
 describe('PublicFormRenderer', () => {
   it('enforces date bounds in the input and before submission', () => {
     const onSubmit = vi.fn();
@@ -69,14 +105,7 @@ describe('PublicFormRenderer', () => {
       ],
     };
 
-    render(
-      <PublicFormRenderer
-        formDef={dateForm}
-        onSubmit={onSubmit}
-        isSubmitting={false}
-        isSuccess={false}
-      />
-    );
+    renderForm({ formDef: dateForm, onSubmit, isSubmitting: false, isSuccess: false });
 
     const input = screen.getByLabelText(/^Date of birth/);
     expect(input).toHaveAttribute('min', '1900-01-01');
@@ -90,14 +119,7 @@ describe('PublicFormRenderer', () => {
 
   it('allows optional title while submitting the split legal address', () => {
     const onSubmit = vi.fn();
-    render(
-      <PublicFormRenderer
-        formDef={addressForm}
-        onSubmit={onSubmit}
-        isSubmitting={false}
-        isSuccess={false}
-      />
-    );
+    renderForm({ formDef: addressForm, onSubmit, isSubmitting: false, isSuccess: false });
 
     fireEvent.change(screen.getByLabelText(/Street address/), {
       target: { value: 'Via di Vincigliata 26' },
@@ -121,14 +143,7 @@ describe('PublicFormRenderer', () => {
 
   it('uses compact non-search selects for short option lists', async () => {
     const user = userEvent.setup();
-    render(
-      <PublicFormRenderer
-        formDef={addressForm}
-        onSubmit={vi.fn()}
-        isSubmitting={false}
-        isSuccess={false}
-      />
-    );
+    renderForm({ formDef: addressForm, onSubmit: vi.fn(), isSubmitting: false, isSuccess: false });
 
     await user.click(screen.getByRole('combobox', { name: 'Title' }));
 
@@ -141,14 +156,7 @@ describe('PublicFormRenderer', () => {
 
   it('requires street, city, and country but not title, postal code, or state/province', () => {
     const onSubmit = vi.fn();
-    render(
-      <PublicFormRenderer
-        formDef={addressForm}
-        onSubmit={onSubmit}
-        isSubmitting={false}
-        isSuccess={false}
-      />
-    );
+    renderForm({ formDef: addressForm, onSubmit, isSubmitting: false, isSuccess: false });
 
     expect(screen.getByLabelText('State / Province')).toHaveAttribute('type', 'text');
 
@@ -186,14 +194,7 @@ describe('PublicFormRenderer', () => {
       ],
     };
 
-    render(
-      <PublicFormRenderer
-        formDef={conditionalForm}
-        onSubmit={vi.fn()}
-        isSubmitting={false}
-        isSuccess={false}
-      />
-    );
+    renderForm({ formDef: conditionalForm, onSubmit: vi.fn(), isSubmitting: false, isSuccess: false });
 
     expect(screen.queryByLabelText('If other, please indicate')).not.toBeInTheDocument();
 
@@ -231,14 +232,7 @@ describe('PublicFormRenderer', () => {
       ],
     };
 
-    render(
-      <PublicFormRenderer
-        formDef={conditionalForm}
-        onSubmit={onSubmit}
-        isSubmitting={false}
-        isSuccess={false}
-      />
-    );
+    renderForm({ formDef: conditionalForm, onSubmit, isSubmitting: false, isSuccess: false });
 
     fireEvent.click(screen.getByLabelText('Other'));
     fireEvent.change(screen.getByLabelText('If other, please indicate'), {
@@ -255,19 +249,17 @@ describe('PublicFormRenderer', () => {
   });
 
   it('lists server-provided field detail under the submit error banner', () => {
-    render(
-      <PublicFormRenderer
-        formDef={addressForm}
-        onSubmit={vi.fn()}
-        isSubmitting={false}
-        isSuccess={false}
-        submitError="Validation failed"
-        submitIssues={[
-          { path: 'legalCity', message: 'String must contain at most 64 character(s)' },
-          { path: '', message: 'Payload too large' },
-        ]}
-      />
-    );
+    renderForm({
+      formDef: addressForm,
+      onSubmit: vi.fn(),
+      isSubmitting: false,
+      isSuccess: false,
+      submitError: 'Validation failed',
+      submitIssues: [
+        { path: 'legalCity', message: 'String must contain at most 64 character(s)' },
+        { path: '', message: 'Payload too large' },
+      ],
+    });
 
     const alert = screen.getByRole('alert');
     expect(alert).toHaveTextContent('Validation failed');
@@ -308,14 +300,7 @@ describe('PublicFormRenderer', () => {
       ],
     };
 
-    render(
-      <PublicFormRenderer
-        formDef={conditionalForm}
-        onSubmit={vi.fn()}
-        isSubmitting={false}
-        isSuccess={false}
-      />
-    );
+    renderForm({ formDef: conditionalForm, onSubmit: vi.fn(), isSubmitting: false, isSuccess: false });
 
     expect(screen.queryByLabelText('If other, please indicate')).not.toBeInTheDocument();
 
@@ -360,14 +345,7 @@ describe('PublicFormRenderer', () => {
       ],
     };
 
-    render(
-      <PublicFormRenderer
-        formDef={familyForm}
-        onSubmit={onSubmit}
-        isSubmitting={false}
-        isSuccess={false}
-      />
-    );
+    renderForm({ formDef: familyForm, onSubmit, isSubmitting: false, isSuccess: false });
 
     expect(screen.getByRole('heading', { name: 'Partner' })).toBeInTheDocument();
     expect(screen.getAllByRole('heading', { name: 'Children' }).length).toBeGreaterThan(0);
@@ -420,16 +398,98 @@ describe('PublicFormRenderer', () => {
       ],
     };
 
-    render(
-      <PublicFormRenderer
-        formDef={guestForm}
-        onSubmit={vi.fn()}
-        isSubmitting={false}
-        isSuccess={false}
-      />
-    );
+    renderForm({ formDef: guestForm, onSubmit: vi.fn(), isSubmitting: false, isSuccess: false });
 
     expect(screen.getByText('No guests added.')).toBeInTheDocument();
+  });
+
+  it('moves focus to the first invalid field and shows a summary when validation fails', () => {
+    const onSubmit = vi.fn();
+    renderForm({ formDef: addressForm, onSubmit, isSubmitting: false, isSuccess: false });
+
+    fireEvent.click(screen.getByRole('button', { name: /submit form/i }));
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    // Street address is the first required field in DOM order.
+    expect(screen.getByLabelText(/Street address/)).toHaveFocus();
+
+    // A visible, announced summary sits next to the submit button — on a long
+    // form the inline errors can all be above the fold.
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('3 answers need your attention');
+
+    // The summary tracks the remaining problems as the appointee fixes them.
+    fireEvent.change(screen.getByLabelText(/Street address/), {
+      target: { value: 'Via di Vincigliata 26' },
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent('2 answers need your attention');
+  });
+
+  it('focuses the first radio input when a required radio group fails validation', () => {
+    // aria-invalid lands on the (unfocusable) fieldset for radio groups, so
+    // focus must descend to the first radio inside it.
+    const radioForm: FormDef = {
+      id: 'renderer-radio-focus-test',
+      title: 'Renderer Radio Focus Test',
+      appointmentTypes: ['Fellow'],
+      sections: [
+        {
+          title: 'Status',
+          fields: [
+            {
+              name: 'statusAtItatti',
+              label: 'Status at I Tatti',
+              type: 'radio',
+              required: true,
+              options: ['Independent Scholar', 'Other'],
+            },
+          ],
+        },
+      ],
+    };
+
+    renderForm({ formDef: radioForm, onSubmit: vi.fn(), isSubmitting: false, isSuccess: false });
+
+    fireEvent.click(screen.getByRole('button', { name: /submit form/i }));
+
+    expect(screen.getByLabelText('Independent Scholar')).toHaveFocus();
+  });
+
+  it('warns before unload only while there is unsaved input', () => {
+    function dispatchBeforeUnload(): Event {
+      const event = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(event);
+      return event;
+    }
+
+    const { updateProps } = renderForm({
+      formDef: addressForm,
+      onSubmit: vi.fn(),
+      isSubmitting: false,
+      isSuccess: false,
+    });
+
+    // Untouched form: leaving must not prompt.
+    expect(dispatchBeforeUnload().defaultPrevented).toBe(false);
+
+    fireEvent.change(screen.getByLabelText(/Street address/), {
+      target: { value: 'Via di Vincigliata 26' },
+    });
+    expect(dispatchBeforeUnload().defaultPrevented).toBe(true);
+
+    // Clearing the only typed value releases the guard again.
+    fireEvent.change(screen.getByLabelText(/Street address/), { target: { value: '' } });
+    expect(dispatchBeforeUnload().defaultPrevented).toBe(false);
+
+    fireEvent.change(screen.getByLabelText(/Street address/), {
+      target: { value: 'Via di Vincigliata 26' },
+    });
+    expect(dispatchBeforeUnload().defaultPrevented).toBe(true);
+
+    // A successful submit releases it too, so the confirmation screen does not
+    // trap the appointee behind a leave prompt.
+    updateProps({ isSuccess: true });
+    expect(dispatchBeforeUnload().defaultPrevented).toBe(false);
   });
 
   it('requires every field in an added child row', () => {
@@ -460,14 +520,7 @@ describe('PublicFormRenderer', () => {
       ],
     };
 
-    render(
-      <PublicFormRenderer
-        formDef={familyForm}
-        onSubmit={onSubmit}
-        isSubmitting={false}
-        isSuccess={false}
-      />
-    );
+    renderForm({ formDef: familyForm, onSubmit, isSubmitting: false, isSuccess: false });
 
     fireEvent.click(screen.getByRole('button', { name: 'Add child' }));
     fireEvent.change(screen.getByLabelText(/^Full name/), {
@@ -477,5 +530,81 @@ describe('PublicFormRenderer', () => {
 
     expect(screen.getAllByText('This field is required')).toHaveLength(2);
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+});
+
+describe('PublicFormRenderer — client-side navigation guard', () => {
+  // beforeunload does not fire on React Router transitions, so the renderer
+  // pairs it with a useBlocker-driven confirmation dialog.
+
+  it('lets an untouched form navigate away without a prompt', async () => {
+    renderForm({ formDef: addressForm, onSubmit: vi.fn(), isSubmitting: false, isSuccess: false });
+
+    await userEvent.setup().click(screen.getByRole('link', { name: 'go-elsewhere' }));
+
+    expect(await screen.findByRole('heading', { name: 'Away page' })).toBeInTheDocument();
+    expect(screen.queryByText('Leave this form?')).not.toBeInTheDocument();
+  });
+
+  it('blocks navigation with unsaved input and keeps the answers on "stay"', async () => {
+    const user = userEvent.setup();
+    renderForm({ formDef: addressForm, onSubmit: vi.fn(), isSubmitting: false, isSuccess: false });
+
+    fireEvent.change(screen.getByLabelText(/Street address/), {
+      target: { value: 'Via di Vincigliata 26' },
+    });
+
+    await user.click(screen.getByRole('link', { name: 'go-elsewhere' }));
+
+    // Navigation is intercepted: the confirmation dialog owns the decision.
+    expect(await screen.findByText('Leave this form?')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Away page' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Stay on this page' }));
+
+    await waitFor(() =>
+      expect(screen.queryByText('Leave this form?')).not.toBeInTheDocument()
+    );
+    // Still on the form, with the typed value intact.
+    expect(screen.queryByRole('heading', { name: 'Away page' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/Street address/)).toHaveValue('Via di Vincigliata 26');
+  });
+
+  it('proceeds with the navigation on "leave"', async () => {
+    const user = userEvent.setup();
+    renderForm({ formDef: addressForm, onSubmit: vi.fn(), isSubmitting: false, isSuccess: false });
+
+    fireEvent.change(screen.getByLabelText(/Street address/), {
+      target: { value: 'Via di Vincigliata 26' },
+    });
+
+    await user.click(screen.getByRole('link', { name: 'go-elsewhere' }));
+    expect(await screen.findByText('Leave this form?')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Leave page' }));
+
+    expect(await screen.findByRole('heading', { name: 'Away page' })).toBeInTheDocument();
+  });
+
+  it('does not block navigation after a successful submit', async () => {
+    const user = userEvent.setup();
+    const { updateProps } = renderForm({
+      formDef: addressForm,
+      onSubmit: vi.fn(),
+      isSubmitting: false,
+      isSuccess: false,
+    });
+
+    fireEvent.change(screen.getByLabelText(/Street address/), {
+      target: { value: 'Via di Vincigliata 26' },
+    });
+
+    // Submit succeeded: the input is saved, so leaving loses nothing.
+    updateProps({ isSuccess: true });
+
+    await user.click(screen.getByRole('link', { name: 'go-elsewhere' }));
+
+    expect(await screen.findByRole('heading', { name: 'Away page' })).toBeInTheDocument();
+    expect(screen.queryByText('Leave this form?')).not.toBeInTheDocument();
   });
 });

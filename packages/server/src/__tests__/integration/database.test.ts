@@ -3,6 +3,7 @@ import { readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../../generated/prisma/client.js';
+import { hashToken } from '../../lib/hash-token.js';
 
 /**
  * Real-PostgreSQL behavior the unit suites can only assume:
@@ -172,7 +173,7 @@ describe('unique-race handling', () => {
 
     const results = await Promise.allSettled(
       Array.from({ length: 6 }, (_, i) =>
-        prisma.formInvitation.create({ data: { ...data, token: `race-token-${i}` } })
+        prisma.formInvitation.create({ data: { ...data, tokenHash: hashToken(`race-token-${i}`) } })
       )
     );
 
@@ -189,10 +190,10 @@ describe('unique-race handling', () => {
     expect(count).toBe(1);
   });
 
-  it('the bearer token is unique across invitations', async () => {
+  it('the bearer token hash is unique across invitations', async () => {
     await prisma.formInvitation.create({
       data: {
-        token: 'shared-token',
+        tokenHash: hashToken('shared-token'),
         fellowshipId: 7010,
         contactId: 1,
         academicYear: '2026-2027',
@@ -203,7 +204,7 @@ describe('unique-race handling', () => {
     await expect(
       prisma.formInvitation.create({
         data: {
-          token: 'shared-token',
+          tokenHash: hashToken('shared-token'),
           fellowshipId: 7011,
           contactId: 2,
           academicYear: '2026-2027',
@@ -212,6 +213,19 @@ describe('unique-race handling', () => {
         },
       })
     ).rejects.toSatisfy(isUniqueViolation);
+  });
+
+  it("pgcrypto's digest matches Node's sha256 hex (migration 20260903120000 parity)", async () => {
+    // The hash-tokens migration converted stored plaintext tokens with
+    // encode(digest(token, 'sha256'), 'hex'). Every pre-migration link keeps
+    // working only if that digest is byte-identical to lib/hash-token.ts,
+    // which now hashes the presented token at lookup time.
+    const token = 'parity-tökén-' + 'x'.repeat(32); // include non-ASCII: both sides must agree on UTF-8
+    const rows = await prisma.$queryRaw<{ hash: string }[]>`
+      SELECT encode(digest(${token}, 'sha256'), 'hex') AS hash
+    `;
+    expect(rows[0].hash).toBe(hashToken(token));
+    expect(rows[0].hash).toHaveLength(64);
   });
 });
 
@@ -239,7 +253,7 @@ describe('representative persistence workflows', () => {
   it('form workflow: invitation -> response with the FK and one-response-per-invitation enforced', async () => {
     const invitation = await prisma.formInvitation.create({
       data: {
-        token: 'workflow-token',
+        tokenHash: hashToken('workflow-token'),
         fellowshipId: 7100,
         contactId: 5,
         academicYear: '2026-2027',
@@ -271,7 +285,7 @@ describe('representative persistence workflows', () => {
     ).rejects.toThrow();
 
     const roundTrip = await prisma.formInvitation.findUniqueOrThrow({
-      where: { token: 'workflow-token' },
+      where: { tokenHash: hashToken('workflow-token') },
       include: { response: true },
     });
     expect(roundTrip.status).toBe('submitted');

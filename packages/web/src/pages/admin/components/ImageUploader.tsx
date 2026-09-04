@@ -7,6 +7,7 @@ import { Dialog, DialogClose, DialogContent, DialogTitle } from '@/components/ui
 import { ImagePlus, Loader2, Trash2, Images, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { uploadImage, useUploadToken } from '@/api/uploads';
+import { userErrorMessage } from '@/lib/errors';
 import { ImageGallery } from './ImageGallery';
 
 interface ImageUploaderProps {
@@ -135,7 +136,10 @@ export function ImageUploader({ value, blurPlaceholder, onChange, onClear }: Ima
       setCropModalOpen(false);
       setImageSrc(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('admin.images.uploadFailed'));
+      // Also covers local crop failures (canvas errors), which never reach the
+      // API layer's logging.
+      console.error('[uploads] image crop/upload failed', err);
+      setError(userErrorMessage(err, t, t('admin.images.uploadFailed')));
     } finally {
       setIsUploading(false);
     }

@@ -10,6 +10,7 @@ import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { useEmailEvents, useEmailEventPreview, useTemplatePreview } from '@/api/emails';
 import { SelectDropdown } from '@/components/shared/SelectDropdown';
 import type { EmailEvent } from '@/api/emails';
+import { userErrorMessage } from '@/lib/errors';
 import { SortableHeader } from '@/components/shared/SortableHeader';
 import {
   AlertCircle,
@@ -554,7 +555,7 @@ function EmailDrawer({ event, onClose }: { event: EmailEvent | null; onClose: ()
                 {previewError && (
                   <div className="rounded-md border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
                     {t('fellows.emails.previewLoadFailed', {
-                      message: (previewError as Error).message,
+                      message: userErrorMessage(previewError, t),
                     })}
                   </div>
                 )}

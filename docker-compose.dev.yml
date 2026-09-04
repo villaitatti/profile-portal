@@ -2,7 +2,9 @@ services:
   postgres:
     image: postgres:17-alpine
     ports:
-      - "5433:5432"
+      # Loopback only — this is a dev database with a known password; never
+      # publish it on all interfaces.
+      - "127.0.0.1:5433:5432"
     environment:
       POSTGRES_DB: profile_portal
       POSTGRES_USER: portal

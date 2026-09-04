@@ -48,6 +48,8 @@ import {
   ServiceError,
   type NameLookup,
 } from '../../services/form-invitation.service.js';
+import { hashToken } from '../../lib/hash-token.js';
+import { logger } from '../../lib/logger.js';
 import { prisma } from '../../lib/prisma.js';
 import { enqueueFormNotification } from '../../workers/form-notification.worker.js';
 
@@ -63,15 +65,81 @@ describe('generateInvitation', () => {
   it('rotates an expired invitation instead of returning a dead bearer token', async () => {
     const expired = {
       id: 'inv_expired',
-      token: 'dead-token',
+      tokenHash: hashToken('dead-token'),
       formType: 'fellow-memorandum-v3',
       status: 'expired',
       expiresAt: new Date('2026-01-01T00:00:00.000Z'),
     };
-    mockPrisma.formInvitation.findUnique
-      .mockResolvedValueOnce(expired as any)
-      .mockResolvedValueOnce({ ...expired, token: 'fresh-token', status: 'pending' } as any);
+    mockPrisma.formInvitation.findUnique.mockResolvedValueOnce(expired as any);
     mockPrisma.formInvitation.updateMany.mockResolvedValue({ count: 1 });
+
+    const result = await generateInvitation({
+      fellowshipId: 123,
+      contactId: 456,
+      academicYear: '2026-2027',
+      formType: 'fellow-memorandum-v3',
+      enforceAppointmentType: false,
+      triggeredBy: 'admin:test',
+    });
+
+    expect(result).toMatchObject({ status: 'pending', created: false });
+    expect(mockPrisma.formInvitation.updateMany).toHaveBeenCalledWith({
+      where: { id: 'inv_expired', tokenHash: hashToken('dead-token'), status: 'expired' },
+      data: {
+        tokenHash: expect.any(String),
+        status: 'pending',
+        submittedAt: null,
+        expiresAt: expect.any(Date),
+      },
+    });
+    // The raw token goes to the caller; only its hash lands in the row.
+    const stored = mockPrisma.formInvitation.updateMany.mock.calls[0]![0]!.data.tokenHash;
+    expect(stored).toBe(hashToken(result.token));
+    expect(result.token).not.toBe(stored);
+  });
+
+  it('rotates a pending invitation — the stored hash cannot be handed back as a link', async () => {
+    const pending = {
+      id: 'inv_pending',
+      tokenHash: hashToken('live-token'),
+      formType: 'fellow-memorandum-v3',
+      status: 'pending',
+      expiresAt: new Date('2099-01-01T00:00:00.000Z'),
+    };
+    mockPrisma.formInvitation.findUnique.mockResolvedValueOnce(pending as any);
+    mockPrisma.formInvitation.updateMany.mockResolvedValue({ count: 1 });
+
+    const result = await generateInvitation({
+      fellowshipId: 123,
+      contactId: 456,
+      academicYear: '2026-2027',
+      formType: 'fellow-memorandum-v3',
+      enforceAppointmentType: false,
+      triggeredBy: 'admin:test',
+    });
+
+    expect(result).toMatchObject({ id: 'inv_pending', status: 'pending', created: false });
+    expect(result.token).not.toBe('');
+    expect(result.token).not.toBe(pending.tokenHash);
+    expect(hashToken(result.token)).toBe(
+      mockPrisma.formInvitation.updateMany.mock.calls[0]![0]!.data.tokenHash
+    );
+    // The previous link dies with the rotation — compare-and-swap on the old hash.
+    expect(mockPrisma.formInvitation.updateMany).toHaveBeenCalledWith({
+      where: { id: 'inv_pending', tokenHash: hashToken('live-token'), status: 'pending' },
+      data: expect.objectContaining({ status: 'pending', submittedAt: null }),
+    });
+  });
+
+  it('surfaces a 409 when a concurrent rotation wins the compare-and-swap', async () => {
+    mockPrisma.formInvitation.findUnique.mockResolvedValueOnce({
+      id: 'inv_pending',
+      tokenHash: hashToken('live-token'),
+      formType: 'fellow-memorandum-v3',
+      status: 'pending',
+      expiresAt: new Date('2099-01-01T00:00:00.000Z'),
+    } as any);
+    mockPrisma.formInvitation.updateMany.mockResolvedValue({ count: 0 });
 
     await expect(
       generateInvitation({
@@ -82,17 +150,38 @@ describe('generateInvitation', () => {
         enforceAppointmentType: false,
         triggeredBy: 'admin:test',
       })
-    ).resolves.toMatchObject({ token: 'fresh-token', status: 'pending', created: false });
-
-    expect(mockPrisma.formInvitation.updateMany).toHaveBeenCalledWith({
-      where: { id: 'inv_expired', token: 'dead-token', status: 'expired' },
-      data: {
-        token: expect.any(String),
-        status: 'pending',
-        submittedAt: null,
-        expiresAt: expect.any(Date),
-      },
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: 'Invitation was regenerated concurrently',
     });
+  });
+
+  it('returns no token for a submitted invitation (nothing live to hand out)', async () => {
+    mockPrisma.formInvitation.findUnique.mockResolvedValueOnce({
+      id: 'inv_done',
+      tokenHash: hashToken('revoked'),
+      formType: 'fellow-memorandum-v3',
+      status: 'submitted',
+      expiresAt: new Date('2099-01-01T00:00:00.000Z'),
+    } as any);
+
+    await expect(
+      generateInvitation({
+        fellowshipId: 123,
+        contactId: 456,
+        academicYear: '2026-2027',
+        formType: 'fellow-memorandum-v3',
+        enforceAppointmentType: false,
+        triggeredBy: 'admin:test',
+      })
+    ).resolves.toEqual({
+      id: 'inv_done',
+      token: '',
+      formType: 'fellow-memorandum-v3',
+      status: 'submitted',
+      created: false,
+    });
+    expect(mockPrisma.formInvitation.updateMany).not.toHaveBeenCalled();
   });
 
   it('rejects a configured form when the appointment type is not mapped to it', async () => {
@@ -146,32 +235,31 @@ describe('generateInvitation', () => {
     mockPrisma.formInvitation.findUnique.mockResolvedValue(null);
     mockPrisma.formInvitation.create.mockResolvedValue({
       id: 'inv_term',
-      token: 'term-token',
+      tokenHash: 'stored-hash',
       formType: 'term-fellow-memorandum-v1',
       status: 'pending',
     } as any);
 
-    await expect(
-      generateInvitation({
-        fellowshipId: 123,
-        contactId: 456,
-        academicYear: '2026-2027',
-        formType: 'term-fellow-memorandum-v1',
-        appointmentType: 'Fellow (short Term)',
-        fellowshipType: 'berenson_fellow',
-        enforceAppointmentType: true,
-        triggeredBy: 'admin:test',
-      })
-    ).resolves.toMatchObject({
+    const result = await generateInvitation({
+      fellowshipId: 123,
+      contactId: 456,
+      academicYear: '2026-2027',
+      formType: 'term-fellow-memorandum-v1',
+      appointmentType: 'Fellow (short Term)',
+      fellowshipType: 'berenson_fellow',
+      enforceAppointmentType: true,
+      triggeredBy: 'admin:test',
+    });
+
+    expect(result).toMatchObject({
       id: 'inv_term',
-      token: 'term-token',
       formType: 'term-fellow-memorandum-v1',
       created: true,
     });
 
     expect(mockPrisma.formInvitation.create).toHaveBeenCalledWith({
       data: {
-        token: expect.any(String),
+        tokenHash: expect.any(String),
         fellowshipId: 123,
         contactId: 456,
         academicYear: '2026-2027',
@@ -179,6 +267,10 @@ describe('generateInvitation', () => {
         expiresAt: expect.any(Date),
       },
     });
+    // Caller receives the raw token whose hash was persisted.
+    expect(mockPrisma.formInvitation.create.mock.calls[0]![0]!.data.tokenHash).toBe(
+      hashToken(result.token)
+    );
   });
 
   it('rejects a term form when the same appointment has a different raw fellowship value', async () => {
@@ -210,7 +302,7 @@ describe('generateInvitation', () => {
   it('rejects an existing invitation when the current appointment mapping does not match', async () => {
     mockPrisma.formInvitation.findUnique.mockResolvedValue({
       id: 'inv_existing',
-      token: 'existing-token',
+      tokenHash: hashToken('existing-token'),
       formType: 'fellow-memorandum-v3',
       status: 'pending',
     } as any);
@@ -264,10 +356,20 @@ describe('generateInvitation', () => {
 });
 
 describe('public invitation lifetime', () => {
+  it('looks the invitation up by the sha256 of the presented bearer token', async () => {
+    mockPrisma.formInvitation.findUnique.mockResolvedValue(null);
+
+    await expect(getInvitationByToken('some-raw-token')).resolves.toBeNull();
+
+    expect(mockPrisma.formInvitation.findUnique).toHaveBeenCalledWith({
+      where: { tokenHash: hashToken('some-raw-token') },
+    });
+  });
+
   it('marks a pending invitation expired when its bearer link is read after expiry', async () => {
     mockPrisma.formInvitation.findUnique.mockResolvedValue({
       id: 'inv_expired',
-      token: 'expired-token',
+      tokenHash: hashToken('expired-token'),
       formType: 'fellow-memorandum-v3',
       status: 'pending',
       expiresAt: new Date('2026-01-01T00:00:00.000Z'),
@@ -291,7 +393,7 @@ describe('public invitation lifetime', () => {
   it('rejects submission through an expired bearer link before validating PII', async () => {
     mockPrisma.formInvitation.findUnique.mockResolvedValue({
       id: 'inv_expired',
-      token: 'expired-token',
+      tokenHash: hashToken('expired-token'),
       formType: 'fellow-memorandum-v3',
       status: 'pending',
       expiresAt: new Date('2026-01-01T00:00:00.000Z'),
@@ -308,7 +410,7 @@ describe('public invitation lifetime', () => {
   it('rejects an expired submitted bearer link without exposing submission metadata', async () => {
     mockPrisma.formInvitation.findUnique.mockResolvedValue({
       id: 'inv_submitted',
-      token: 'legacy-submitted-token',
+      tokenHash: hashToken('legacy-submitted-token'),
       formType: 'fellow-memorandum-v3',
       status: 'submitted',
       submittedAt: new Date('2025-01-01T00:00:00.000Z'),
@@ -321,10 +423,10 @@ describe('public invitation lifetime', () => {
     });
   });
 
-  it('atomically claims the same unexpired token before storing a response', async () => {
+  it('atomically claims the same unexpired token (by hash) before storing a response', async () => {
     mockPrisma.formInvitation.findUnique.mockResolvedValue({
       id: 'inv_pending',
-      token: 'current-token',
+      tokenHash: hashToken('current-token'),
       formType: 'fellow-memorandum-v3',
       status: 'pending',
       expiresAt: new Date('2099-01-01T00:00:00.000Z'),
@@ -341,28 +443,28 @@ describe('public invitation lifetime', () => {
     expect(mockPrisma.formInvitation.updateMany).toHaveBeenCalledWith({
       where: {
         id: 'inv_pending',
-        token: 'current-token',
+        tokenHash: hashToken('current-token'),
         status: 'pending',
         expiresAt: { gt: expect.any(Date) },
       },
       data: {
         status: 'submitted',
         submittedAt: expect.any(Date),
-        token: expect.any(String),
+        tokenHash: expect.any(String),
       },
     });
     expect(mockPrisma.formResponse.create).toHaveBeenCalledWith({
       data: { invitationId: 'inv_pending', data: { firstName: 'Maria' } },
     });
     const claim = mockPrisma.formInvitation.updateMany.mock.calls[0]![0]!;
-    expect(claim.data.token).not.toBe('current-token');
+    expect(claim.data.tokenHash).not.toBe(hashToken('current-token'));
   });
 
   it('rejects an old bearer token when a concurrent reset rotates it', async () => {
     mockPrisma.formInvitation.findUnique
       .mockResolvedValueOnce({
         id: 'inv_reset',
-        token: 'old-token',
+        tokenHash: hashToken('old-token'),
         formType: 'fellow-memorandum-v3',
         status: 'pending',
         expiresAt: new Date('2099-01-01T00:00:00.000Z'),
@@ -386,7 +488,7 @@ describe('public invitation lifetime', () => {
     async (status, expiresAt, statusCode, message) => {
       const initial = {
         id: 'inv_raced',
-        token: 'raced-token',
+        tokenHash: hashToken('raced-token'),
         formType: 'fellow-memorandum-v3',
         status: 'pending',
         expiresAt: new Date('2099-01-01T00:00:00.000Z'),
@@ -407,10 +509,10 @@ describe('public invitation lifetime', () => {
 });
 
 describe('resetInvitation', () => {
-  it('deletes any response and rotates the observed token in one transaction', async () => {
+  it('deletes any response and rotates the observed token hash in one transaction', async () => {
     mockPrisma.formInvitation.findUnique.mockResolvedValue({
       id: 'inv_reset',
-      token: 'old-token',
+      tokenHash: hashToken('old-token'),
     } as any);
     mockPrisma.formResponse.deleteMany.mockResolvedValue({ count: 1 });
     mockPrisma.formInvitation.update.mockResolvedValue({ id: 'inv_reset' } as any);
@@ -422,15 +524,19 @@ describe('resetInvitation', () => {
       where: { invitationId: 'inv_reset' },
     });
     expect(mockPrisma.formInvitation.update).toHaveBeenCalledWith({
-      where: { id: 'inv_reset', token: 'old-token' },
+      where: { id: 'inv_reset', tokenHash: hashToken('old-token') },
       data: {
-        token: expect.any(String),
+        tokenHash: expect.any(String),
         status: 'pending',
         submittedAt: null,
         expiresAt: expect.any(Date),
       },
     });
+    // Caller gets the raw token; the row stores only its hash.
     expect(result.token).not.toBe('old-token');
+    expect(mockPrisma.formInvitation.update.mock.calls[0]![0]!.data.tokenHash).toBe(
+      hashToken(result.token)
+    );
     expect(mockPrisma.formInvitation.update.mock.invocationCallOrder[0]).toBeLessThan(
       mockPrisma.formResponse.deleteMany.mock.invocationCallOrder[0]
     );
@@ -479,11 +585,6 @@ describe('markNominationSent', () => {
       message: 'Form invitation is not pending or does not exist',
       details: {
         code: 'nomination_sent_not_allowed',
-        prismaCode: 'P2025',
-        originalError: {
-          name: 'PrismaClientKnownRequestError',
-          message: 'Record not found',
-        },
       },
     });
 
@@ -493,34 +594,33 @@ describe('markNominationSent', () => {
     });
   });
 
-  it('wraps other known Prisma errors when saving nomination sent dates', async () => {
-    mockPrisma.formInvitation.update.mockRejectedValue(
-      new Prisma.PrismaClientKnownRequestError('Database constraint failed', {
-        code: 'P2003',
-        clientVersion: 'test',
-      })
-    );
+  it('keeps Prisma internals out of the error for other known Prisma failures', async () => {
+    // The error middleware renders ServiceError.details into the HTTP body, so
+    // Prisma code/name/message must go to the log, never into details.
+    const prismaError = new Prisma.PrismaClientKnownRequestError('Database constraint failed', {
+      code: 'P2003',
+      clientVersion: 'test',
+    });
+    mockPrisma.formInvitation.update.mockRejectedValue(prismaError);
 
     await expect(markNominationSent('inv_1', '2026-05-04')).rejects.toMatchObject({
       name: 'ServiceError',
       statusCode: 500,
       message: 'Could not mark nomination as sent',
-      details: {
-        code: 'prisma_error',
-        prismaCode: 'P2003',
-        originalError: {
-          name: 'PrismaClientKnownRequestError',
-          message: 'Database constraint failed',
-        },
-      },
+      details: undefined,
     });
+
+    expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
+      { err: prismaError, invitationId: 'inv_1', prismaCode: 'P2003' },
+      'mark_nomination_sent_failed'
+    );
   });
 });
 
 describe('listInvitations', () => {
   const baseRow = {
     id: 'inv_1',
-    token: 'tok_1',
+    tokenHash: hashToken('tok_1'),
     fellowshipId: 10,
     contactId: 100,
     academicYear: '2026-2027',
@@ -567,6 +667,7 @@ describe('listInvitations', () => {
     expect(result.items[0]).toHaveProperty('hasResponse', true);
     expect(result.items[0]).not.toHaveProperty('response');
     expect(result.items[0]).not.toHaveProperty('data');
+    expect(result.items[0]).not.toHaveProperty('tokenHash');
   });
 
   it('returns { items, facets } with contactName/formTitle joined onto each row', async () => {

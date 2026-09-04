@@ -99,7 +99,7 @@ describe('ClaimLogPage — loading state', () => {
 });
 
 describe('ClaimLogPage — error state', () => {
-  it('shows the failure title and the error message', () => {
+  it('shows the failure title and a user-safe message, never the raw error text', () => {
     mockUseClaims.mockReturnValue(
       infiniteResult(undefined, { error: new Error('Network exploded') })
     );
@@ -107,7 +107,8 @@ describe('ClaimLogPage — error state', () => {
     render(<ClaimLogPage />);
 
     expect(screen.getByText('Failed to load claims')).toBeInTheDocument();
-    expect(screen.getByText('Network exploded')).toBeInTheDocument();
+    expect(screen.queryByText('Network exploded')).not.toBeInTheDocument();
+    expect(screen.getByText('An unexpected error occurred. Please try again.')).toBeInTheDocument();
   });
 
   it('falls back to a generic message for non-Error rejections', () => {
@@ -115,7 +116,7 @@ describe('ClaimLogPage — error state', () => {
 
     render(<ClaimLogPage />);
 
-    expect(screen.getByText('An unexpected error occurred')).toBeInTheDocument();
+    expect(screen.getByText('An unexpected error occurred. Please try again.')).toBeInTheDocument();
   });
 });
 

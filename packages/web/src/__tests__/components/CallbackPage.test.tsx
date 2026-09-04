@@ -29,7 +29,8 @@ beforeEach(() => {
 });
 
 describe('CallbackPage', () => {
-  it('shows the Auth0 error description with a way back to sign in', async () => {
+  it('shows a generic failure with a way back to sign in, keeping the Auth0 detail off screen', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     const error = Object.assign(new Error('access_denied'), {
       error: 'access_denied',
       error_description: 'You are not allowed to access this application.',
@@ -44,15 +45,29 @@ describe('CallbackPage', () => {
     renderCallback();
 
     expect(screen.getByRole('heading', { name: 'Sign-in could not be completed' })).toBeInTheDocument();
-    expect(screen.getByText('You are not allowed to access this application.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Try signing in again. If the problem continues, contact IT.')
+    ).toBeInTheDocument();
+    // The raw Auth0 detail goes to the console for IT, never on screen.
+    expect(
+      screen.queryByText('You are not allowed to access this application.')
+    ).not.toBeInTheDocument();
+    expect(consoleError).toHaveBeenCalledWith(
+      '[auth] Auth0 callback error',
+      'You are not allowed to access this application.',
+      error
+    );
 
     await userEvent.setup().click(screen.getByRole('button', { name: 'Return to sign in' }));
     expect(mockLoginWithRedirect).toHaveBeenCalledOnce();
+    consoleError.mockRestore();
   });
 
-  it('falls back to the error message when no description is supplied', () => {
+  it('logs the raw message when no description is supplied and still shows the generic copy', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const error = new Error('Invalid state');
     mockUseAuth0.mockReturnValue({
-      error: new Error('Invalid state'),
+      error,
       isLoading: false,
       isAuthenticated: false,
       loginWithRedirect: mockLoginWithRedirect,
@@ -60,7 +75,12 @@ describe('CallbackPage', () => {
 
     renderCallback();
 
-    expect(screen.getByText('Invalid state')).toBeInTheDocument();
+    expect(screen.queryByText('Invalid state')).not.toBeInTheDocument();
+    expect(
+      screen.getByText('Try signing in again. If the problem continues, contact IT.')
+    ).toBeInTheDocument();
+    expect(consoleError).toHaveBeenCalledWith('[auth] Auth0 callback error', 'Invalid state', error);
+    consoleError.mockRestore();
   });
 
   it('holds the spinner while the SDK exchanges the code', () => {

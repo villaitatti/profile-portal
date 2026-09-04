@@ -14,8 +14,24 @@ const { prisma } = await import('./lib/prisma.js');
 logger.info({ mode: env.NODE_ENV }, 'Starting server');
 
 // Register automation cron jobs (July 1 + July 2 at 04:00 UTC)
-const { registerCronJobs } = await import('./services/automation.service.js');
+const { registerCronJobs, checkMissedJulyAutomations } = await import(
+  './services/automation.service.js'
+);
 registerCronJobs();
+
+// Missed-fire detection: if the container was down at a July fire time (or a
+// run died mid-execution), the annual automation silently never happens and
+// node-cron will not replay it for a year. Deliberately NOT awaited — the
+// check must never delay listen — and checkMissedJulyAutomations never throws
+// (failures are logged inside; an alert failure only logs).
+void checkMissedJulyAutomations();
+
+// Prune uploads/trash/ entries past the 7-day retention (deferred image
+// deletion, see image-upload.service.ts). Runs at boot as well as on the daily
+// cron tick because that cron is gated behind APPOINTEE_EMAIL_CRON_ENABLED.
+// Never throws; deliberately not awaited — must not delay listen.
+const { pruneTrashedImages } = await import('./services/image-upload.service.js');
+void pruneTrashedImages();
 
 // Start pg-boss job queue and register workers BEFORE accepting HTTP
 // traffic. Any earlier ordering creates a boot race where a form submit
@@ -52,6 +68,11 @@ const server = app.listen(env.PORT, () => {
 // running job can finish and ack, then release the Postgres pool last because
 // both of the previous steps need it.
 const SHUTDOWN_TIMEOUT_MS = 25_000;
+
+// Budget for in-flight Atlassian sync tasks during shutdown. Arithmetic: this
+// 8s + server.close() + the 10s pg-boss stop + prisma disconnect must all fit
+// under the 25s SHUTDOWN_TIMEOUT_MS backstop, leaving ~7s of slack.
+const SYNC_DRAIN_BUDGET_MS = 8_000;
 let shuttingDown = false;
 
 async function shutdown(signal: string, exitCode = 0): Promise<void> {
@@ -71,6 +92,24 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
   forceExit.unref();
 
   try {
+    // Give in-flight Atlassian sync tasks a bounded window to finish BEFORE
+    // draining the SSE streams: runDrySync/executeSync run as detached tasks,
+    // so nothing else stops process.exit() from killing an execution after
+    // partial SCIM mutations (its run row then waits on the 30-min lease). A
+    // sync that finishes in budget emits 'done' to its still-open SSE stream,
+    // whose cleanup deregisters it — only genuinely unfinished runs get the
+    // 'restarting' event from closeAllSseStreams. awaitActiveSyncs never throws.
+    const { awaitActiveSyncs } = await import('./services/atlassian-sync.service.js');
+    await awaitActiveSyncs(SYNC_DRAIN_BUDGET_MS);
+
+    // Drain SSE streams BEFORE waiting on server.close(): an open SSE response
+    // (with its 25s heartbeat) counts as an active request forever, so close()
+    // would never resolve and the force-exit backstop would skip stopJobQueue,
+    // stranding in-flight pg-boss jobs as 'active' for up to 23h.
+    // closeAllSseStreams never throws.
+    const { closeAllSseStreams } = await import('./routes/sync-admin.routes.js');
+    closeAllSseStreams();
+
     await new Promise<void>((res) => {
       server.close(() => res());
     });

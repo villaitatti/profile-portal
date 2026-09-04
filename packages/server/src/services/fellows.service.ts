@@ -148,6 +148,33 @@ function buildVitIdInvitationSummary(args: {
   };
 }
 
+function toFormInvitationSummary(inv: {
+  id: string;
+  fellowshipId: number;
+  academicYear: string;
+  formType: string;
+  status: string;
+  nominationSentAt: Date | null;
+  submittedAt: Date | null;
+}): FormInvitationSummaryEntry {
+  return {
+    id: inv.id,
+    fellowshipId: inv.fellowshipId,
+    academicYear: inv.academicYear,
+    formType: inv.formType,
+    formTitle: getFormDef(inv.formType)?.title ?? inv.formType,
+    status: inv.status as 'pending' | 'submitted' | 'expired',
+    // Bearer tokens are stored only as sha256 hashes (lib/hash-token.ts), so
+    // the dashboard can no longer read a raw token back for the copy-link
+    // action. The field stays in the shared contract but is always empty;
+    // issuing a usable link goes through POST /api/admin/forms/generate,
+    // which rotates the token and returns the fresh one exactly once.
+    token: '',
+    nominationSentAt: inv.nominationSentAt?.toISOString() ?? null,
+    submittedAt: inv.submittedAt?.toISOString() ?? null,
+  };
+}
+
 // Academic-year label derivation lives in utils/eligibility.ts so the
 // dashboard and the bio/VIT-invitation eligibility layer agree. An older
 // local copy here used LOCAL getFullYear()/getMonth() and mis-labeled
@@ -449,17 +476,8 @@ export async function getFellowsDashboard(
         event: vitInvitationEvent,
       });
       const contactForms = allContactForms;
-      const formInvitations: FormInvitationSummaryEntry[] = contactForms.map((inv) => ({
-        id: inv.id,
-        fellowshipId: inv.fellowshipId,
-        academicYear: inv.academicYear,
-        formType: inv.formType,
-        formTitle: getFormDef(inv.formType)?.title ?? inv.formType,
-        status: inv.status as 'pending' | 'submitted' | 'expired',
-        token: inv.token,
-        nominationSentAt: inv.nominationSentAt?.toISOString() ?? null,
-        submittedAt: inv.submittedAt?.toISOString() ?? null,
-      }));
+      const formInvitations: FormInvitationSummaryEntry[] =
+        contactForms.map(toFormInvitationSummary);
       const base: FellowDashboardEntry = {
         ...entry,
         status: 'needs-review',
@@ -529,17 +547,8 @@ export async function getFellowsDashboard(
     });
 
     const contactForms = allContactForms;
-    const formInvitations: FormInvitationSummaryEntry[] = contactForms.map((inv) => ({
-      id: inv.id,
-      fellowshipId: inv.fellowshipId,
-      academicYear: inv.academicYear,
-      formType: inv.formType,
-      formTitle: getFormDef(inv.formType)?.title ?? inv.formType,
-      status: inv.status as 'pending' | 'submitted' | 'expired',
-      token: inv.token,
-      nominationSentAt: inv.nominationSentAt?.toISOString() ?? null,
-      submittedAt: inv.submittedAt?.toISOString() ?? null,
-    }));
+    const formInvitations: FormInvitationSummaryEntry[] =
+      contactForms.map(toFormInvitationSummary);
 
     const appointeeStatus = computeAppointeeStatus({
       fellowshipAccepted: displayFellowshipAccepted,

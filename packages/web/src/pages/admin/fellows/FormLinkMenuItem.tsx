@@ -8,7 +8,6 @@ import {
   Loader2,
   Repeat2,
   FileText,
-  Copy,
   Check,
 } from 'lucide-react';
 import type { FellowDashboardEntry } from '@itatti/shared';
@@ -18,7 +17,7 @@ import { useCopyFormLink } from './hooks';
 export function FormLinkMenuItem({ fellow }: { fellow: FellowDashboardEntry }) {
   const { t, i18n } = useTranslation();
   const generateMutation = useGenerateFormInvitation();
-  const { copied, copyFormLink } = useCopyFormLink(fellow);
+  const { copyFormLink } = useCopyFormLink(fellow);
   const configuredForm = getPrimaryConfiguredForm(fellow);
 
   const existingInvitation = getFormInvitation(fellow);
@@ -47,11 +46,6 @@ export function FormLinkMenuItem({ fellow }: { fellow: FellowDashboardEntry }) {
           })
         ),
     });
-  }
-
-  async function handleCopy() {
-    if (!existingInvitation) return;
-    await copyFormLink(existingInvitation.token);
   }
 
   if (!configuredForm) {
@@ -95,7 +89,11 @@ export function FormLinkMenuItem({ fellow }: { fellow: FellowDashboardEntry }) {
     );
   }
 
-  if (existingInvitation?.status === 'expired') {
+  // Any existing, non-submitted invitation (pending or expired) gets the same
+  // action. Tokens are stored hashed, so the raw link of an existing
+  // invitation cannot be re-copied — the only way to hand out a link is to
+  // mint a fresh one, which invalidates the previous link.
+  if (existingInvitation) {
     return (
       <DropdownMenuItem
         disabled={generateMutation.isPending}
@@ -111,25 +109,6 @@ export function FormLinkMenuItem({ fellow }: { fellow: FellowDashboardEntry }) {
           <Repeat2 className="h-4 w-4 text-progress" />
         )}
         <span>{t('fellows.form.generateNewLink')}</span>
-      </DropdownMenuItem>
-    );
-  }
-
-  if (existingInvitation) {
-    return (
-      <DropdownMenuItem
-        closeOnClick={false}
-        onClick={() => {
-          void handleCopy();
-        }}
-        className="px-3 font-medium text-foreground"
-      >
-        {copied ? (
-          <Check className="h-4 w-4 text-success" />
-        ) : (
-          <Copy className="h-4 w-4 text-progress" />
-        )}
-        <span>{copied ? t('fellows.form.copied') : t('fellows.form.copyLink')}</span>
       </DropdownMenuItem>
     );
   }

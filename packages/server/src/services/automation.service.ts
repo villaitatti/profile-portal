@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { Prisma } from '../generated/prisma/client.js';
 import { env, isDevMode } from '../env.js';
+import { hashEmail } from '../lib/hash-email.js';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { HttpError } from '../lib/http-error.js';
@@ -9,6 +10,7 @@ import * as civicrmService from './civicrm.service.js';
 import * as jsmService from './atlassian-jsm.service.js';
 import * as emailService from './email.service.js';
 import * as appointeeEmailService from './appointee-email.service.js';
+import { pruneTrashedImages } from './image-upload.service.js';
 import { classifyFellowship } from '../utils/eligibility.js';
 import { getCurrentAcademicYear } from '../utils/academic-year.js';
 
@@ -31,9 +33,10 @@ interface DryRunAction {
 /**
  * Names the JSM sites a two-site operation failed on, or '' when both succeeded.
  *
- * The JSM helpers swallow per-site errors and communicate through these booleans,
- * so every caller must consult them — otherwise a total JSM outage is
- * indistinguishable from a clean run.
+ * The JSM helpers swallow per-site errors and communicate through per-site
+ * results (booleans for the add helpers, a tri-state for removal — callers map
+ * it to ok/failed booleans here), so every caller must consult them —
+ * otherwise a total JSM outage is indistinguishable from a clean run.
  */
 function describeFailedSites(result: { site1: boolean; site2: boolean }): string {
   const failed = [!result.site1 && 'site1', !result.site2 && 'site2'].filter(
@@ -60,6 +63,7 @@ async function reportAutomationFailure(type: AutomationType, err: unknown): Prom
       processed: 0,
       pending: 0,
       errors: 1,
+      outcome: 'failed',
       details: [
         `The scheduled ${type} automation FAILED before completing.`,
         '',
@@ -127,6 +131,38 @@ function registerJulyAutomationCrons(): void {
   logger.info('Automation: cron jobs registered (July 1 + July 2 at 04:00 UTC)');
 }
 
+// Consecutive-failure tracking for the daily bio-email dispatch. Unlike the
+// July automations (which email IT on any failure), a daily cron that alerts
+// on every failure would spam IT through a one-day upstream blip that the next
+// run heals anyway — pending rows stay PENDING and are retried. A failure day
+// is a dispatch that THREW or one that resolved with failed/deferred > 0
+// (dispatchPendingEmails catches per-message failures and resolves with
+// counts). Module state is safe here because the server is deliberately
+// single-instance (ARCHITECTURE.md); a restart resets the streak, which at
+// worst delays the alert by another N days.
+const BIO_DISPATCH_FAILURE_ALERT_EVERY = 3;
+let consecutiveBioDispatchFailures = 0;
+
+type BioDispatchCounts = Awaited<ReturnType<typeof appointeeEmailService.dispatchPendingEmails>>;
+
+async function reportBioDispatchFailure(
+  failures: number,
+  cause: { err?: unknown; counts?: BioDispatchCounts }
+): Promise<void> {
+  try {
+    await emailService.sendDailyDispatchFailureAlert({
+      consecutiveFailures: failures,
+      ...(cause.err !== undefined
+        ? { lastError: cause.err instanceof Error ? cause.err.message : String(cause.err) }
+        : {}),
+      ...(cause.counts ? { lastRunCounts: cause.counts } : {}),
+    });
+  } catch (reportErr) {
+    // An alert failure must only log — never throw back into the cron.
+    logger.error({ err: reportErr }, 'Automation: failed to send bio-email dispatch failure alert');
+  }
+}
+
 // Daily at 09:00 Europe/Rome — dispatch pending appointee bio emails.
 function registerAppointeeEmailCron(): void {
   if (env.APPOINTEE_EMAIL_CRON_ENABLED) {
@@ -137,9 +173,44 @@ function registerAppointeeEmailCron(): void {
         try {
           const result = await appointeeEmailService.dispatchPendingEmails();
           logger.info(result, 'Automation: bio-email dispatch finished');
+          // dispatchPendingEmails catches per-message failures and RESOLVES
+          // with counts, so a full SES/CiviCRM outage is a resolved run with
+          // failed/deferred > 0 — it must count toward the streak like a
+          // thrown error, or a daily reset here would keep the alert from
+          // ever firing for exactly the failures it exists to detect.
+          if (result.failed > 0 || result.deferred > 0) {
+            consecutiveBioDispatchFailures++;
+            logger.error(
+              { ...result, consecutiveFailures: consecutiveBioDispatchFailures },
+              'Automation: scheduled bio-email dispatch had failures'
+            );
+            if (consecutiveBioDispatchFailures % BIO_DISPATCH_FAILURE_ALERT_EVERY === 0) {
+              await reportBioDispatchFailure(consecutiveBioDispatchFailures, { counts: result });
+            }
+          } else if (result.processed > 0) {
+            consecutiveBioDispatchFailures = 0;
+          }
+          // processed === 0 with nothing failed is an idle day: no evidence
+          // the pipeline works or is broken, so the streak carries over.
         } catch (err) {
-          logger.error({ err }, 'Automation: scheduled bio-email dispatch failed');
+          consecutiveBioDispatchFailures++;
+          logger.error(
+            { err, consecutiveFailures: consecutiveBioDispatchFailures },
+            'Automation: scheduled bio-email dispatch failed'
+          );
+          // Alert on every Nth consecutive failure (3, 6, 9, …): a prolonged
+          // outage keeps nudging IT without a daily email per failure.
+          if (consecutiveBioDispatchFailures % BIO_DISPATCH_FAILURE_ALERT_EVERY === 0) {
+            await reportBioDispatchFailure(consecutiveBioDispatchFailures, { err });
+          }
         }
+        // Piggyback on the daily tick: catches a July automation that wedged
+        // mid-run while the process stayed alive (the boot check only runs on
+        // restart). Never throws — failures are logged inside.
+        await checkMissedJulyAutomations();
+        // Same tick: prune uploads/trash/ entries past the 7-day retention
+        // (deferred image deletion, image-upload.service.ts). Never throws.
+        await pruneTrashedImages();
       },
       { timezone: 'Europe/Rome' }
     );
@@ -148,6 +219,149 @@ function registerAppointeeEmailCron(): void {
     logger.info(
       'Automation: APPOINTEE_EMAIL_CRON_ENABLED is false, bio-email cron not registered'
     );
+  }
+}
+
+// --- Missed-fire detection ---
+
+// The July crons fire on a single minute, once per year. If the container is
+// down at fire time (deploy, crash, host outage) node-cron never replays the
+// tick, and the annual automation silently does not happen — outgoing fellows
+// keep fellows-current and JSM access for a year. This check runs at boot and
+// piggybacks on the daily bio-email cron: when the scheduled moment for the
+// current academic year has passed and no run of that type reached
+// completed/partial, alert IT. An alert is sufficient — the admin UI has a
+// manual re-run — and it repeats on each check until someone runs the
+// automation (deliberate: an unresolved missed July run must not fade away).
+//
+// Must match the cron expressions in registerJulyAutomationCrons: July 1 and
+// July 2 at 04:00 UTC. Month is 0-indexed (6 = July), consistent with the
+// UTC-only date math in utils/academic-year.ts.
+const JULY_AUTOMATION_SCHEDULE: {
+  type: AutomationType;
+  utcMonth: number;
+  utcDay: number;
+  utcHour: number;
+}[] = [
+  { type: 'end-of-year-cleanup', utcMonth: 6, utcDay: 1, utcHour: 4 },
+  { type: 'new-cohort-onboarding', utcMonth: 6, utcDay: 2, utcHour: 4 },
+];
+
+// A run stuck in `executing` has no lease reclaim, so beyond this generous TTL
+// it is treated as missed rather than in-progress (a real July run finishes in
+// minutes; 6h means the process died mid-run and nothing will finish it).
+const EXECUTING_STALE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+// Human-facing date for the alert email body: "01 July 2026" (never
+// ambiguous numeric formats). UTC accessors for the same reason as
+// utils/academic-year.ts.
+function formatUtcDateHuman(d: Date): string {
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  const month = d.toLocaleString('en-GB', { month: 'long', timeZone: 'UTC' });
+  return `${day} ${month} ${d.getUTCFullYear()}`;
+}
+
+async function reportMissedAutomation(
+  type: AutomationType,
+  academicYear: string,
+  scheduledAt: Date
+): Promise<void> {
+  try {
+    // Dedicated alert helper, not sendAutomationReport: its "… Complete"
+    // subject would deliver this incident under a success-sounding subject.
+    await emailService.sendMissedAutomationAlert({
+      type,
+      academicYear,
+      details: [
+        `The scheduled ${type} automation appears to have NEVER COMPLETED for academic year ${academicYear}.`,
+        '',
+        `It was scheduled for ${formatUtcDateHuman(scheduledAt)} at 04:00 UTC, that moment has passed, and no completed (or partially completed) run of this type exists for this academic year. The server was most likely down or restarting at fire time, or a run died mid-execution.`,
+        '',
+        'Action: review the run history on the Automations admin page, then run this automation manually (dry run + execute).',
+      ],
+    });
+  } catch (err) {
+    // An alert failure must only log — this runs from boot and cron paths.
+    logger.error({ err, type }, 'Automation: failed to send missed-automation alert email');
+  }
+}
+
+/**
+ * Alerts IT when a July automation's scheduled moment for the current academic
+ * year has passed without a completed/partial run. A zero-action dry run also
+ * satisfies the check — the cron deliberately skips execution when there is
+ * nothing to do, so that year legitimately produces no execution row. A run
+ * still `executing` within EXECUTING_STALE_TTL_MS counts as in-progress (no
+ * alert yet); older than that it is treated as missed.
+ *
+ * Never throws: callers are boot (must not delay listen) and the daily cron.
+ * Academic-year boundaries reuse getCurrentAcademicYear's UTC math — the AY
+ * starts July 1, so from July 1 onward the scheduled dates belong to the AY
+ * that just started.
+ */
+export async function checkMissedJulyAutomations(now: Date = new Date()): Promise<void> {
+  // Same gate as the July crons: where they are deliberately disabled
+  // (dev/staging), a missing run is not an incident.
+  if (!env.AUTOMATIONS_ENABLED) return;
+
+  const ay = getCurrentAcademicYear(now);
+  const startYear = ay.start.getUTCFullYear();
+
+  for (const sched of JULY_AUTOMATION_SCHEDULE) {
+    try {
+      const scheduledAt = new Date(
+        Date.UTC(startYear, sched.utcMonth, sched.utcDay, sched.utcHour)
+      );
+      if (now.getTime() <= scheduledAt.getTime()) continue; // not due yet this AY
+
+      const satisfied = await prisma.automationRun.findFirst({
+        where: {
+          type: sched.type,
+          academicYear: ay.label,
+          status: { in: ['completed', 'partial'] },
+        },
+        select: { id: true },
+      });
+      if (satisfied) continue;
+
+      // A cron tick whose dry run found zero actions deliberately skips
+      // executeAutomation (registerJulyAutomationCrons), leaving only a
+      // dry_run-status row — a legitimate no-op year, not a missed run. Any
+      // zero-action dry run of this type/AY counts, including one an admin
+      // triggered manually: it proves equally that there was nothing to do,
+      // and the academicYear filter already bounds the window to this AY.
+      // 'consumed' rows deliberately do NOT satisfy: consumed means an
+      // execution started, and that execution's own row must reach
+      // completed/partial — otherwise a crashed execution would go unalerted.
+      const dryRuns = await prisma.automationRun.findMany({
+        where: { type: sched.type, academicYear: ay.label, status: 'dry_run' },
+        select: { result: true },
+      });
+      const hasZeroActionDryRun = dryRuns.some((r) => {
+        const actions = (r.result as { actions?: unknown[] } | null)?.actions;
+        return Array.isArray(actions) && actions.length === 0;
+      });
+      if (hasZeroActionDryRun) continue;
+
+      const inFlight = await prisma.automationRun.findFirst({
+        where: {
+          type: sched.type,
+          academicYear: ay.label,
+          status: 'executing',
+          startedAt: { gt: new Date(now.getTime() - EXECUTING_STALE_TTL_MS) },
+        },
+        select: { id: true },
+      });
+      if (inFlight) continue;
+
+      logger.error(
+        { type: sched.type, academicYear: ay.label, scheduledAt },
+        'Automation: scheduled July automation appears to have been missed — alerting IT'
+      );
+      await reportMissedAutomation(sched.type, ay.label, scheduledAt);
+    } catch (err) {
+      logger.error({ err, type: sched.type }, 'Automation: missed-fire check failed');
+    }
   }
 }
 
@@ -299,6 +513,13 @@ export async function executeAutomation(
   // HttpError, not bare Error: these are caller mistakes (stale UI, wrong run
   // id), and a bare Error rendered as a 500 "Internal Server Error" while the
   // real message never reached the admin.
+  if (dryRun?.status === 'consumed') {
+    throw new HttpError(
+      409,
+      'This dry run has already been executed. Run a new dry run to execute again.',
+      'DRY_RUN_ALREADY_EXECUTED'
+    );
+  }
   if (!dryRun || dryRun.status !== 'dry_run') {
     throw new HttpError(409, 'Invalid dry run ID or not in dry_run status', 'DRY_RUN_INVALID');
   }
@@ -328,14 +549,34 @@ export async function executeAutomation(
     throw new Error('Execution is disabled in non-production environments. Use dry run to preview changes.');
   }
 
-  const run = await prisma.automationRun.create({
-    data: {
-      type: dryRun.type,
-      status: 'executing',
-      triggeredBy,
-      academicYear: dryRun.academicYear,
-      result: { operations: [] },
-    },
+  // Replay/concurrency guard: consume the dry run atomically before executing.
+  // The status flip dry_run → consumed can succeed for exactly one caller, so
+  // a double-click or replayed POST of the same runId cannot run the July
+  // automation twice concurrently against Auth0/JSM. The executing row is
+  // created in the same transaction so a failed create rolls the consumption
+  // back instead of burning a dry run nothing ever ran from. (Mirrors the
+  // sync service's transactional prior-execution check in executeSync.)
+  const run = await prisma.$transaction(async (tx) => {
+    const consumed = await tx.automationRun.updateMany({
+      where: { id: dryRunId, status: 'dry_run' },
+      data: { status: 'consumed' },
+    });
+    if (consumed.count !== 1) {
+      throw new HttpError(
+        409,
+        'This dry run has already been executed. Run a new dry run to execute again.',
+        'DRY_RUN_ALREADY_EXECUTED'
+      );
+    }
+    return tx.automationRun.create({
+      data: {
+        type: dryRun.type,
+        status: 'executing',
+        triggeredBy,
+        academicYear: dryRun.academicYear,
+        result: { operations: [] },
+      },
+    });
   });
 
   try {
@@ -384,6 +625,7 @@ export async function executeAutomation(
       processed: result.processed,
       pending: result.pending,
       errors: result.errors,
+      outcome: status,
       details: result.details,
     });
 
@@ -451,14 +693,20 @@ async function executeEndOfYearCleanup(dryRun: { result: unknown }): Promise<Exe
 
       // Remove from Current Appointees on both JSM sites.
       //
-      // The JSM helpers catch per-site failures internally and report them
-      // through the returned booleans, so ignoring the result meant an expired
-      // JSM token produced a report email claiming every fellow had been fully
-      // removed while they all kept their portal access.
+      // The JSM helper catches per-site errors internally and reports through
+      // the returned tri-state, so ignoring the result meant an expired JSM
+      // token produced a report email claiming every fellow had been fully
+      // removed while they all kept their portal access. Only 'failed' counts
+      // as an error: 'not-found' means the fellow was never provisioned in
+      // JSM — nothing to remove — and counting it used to produce a false
+      // PARTIAL July report.
       let jsmDetail = '';
       if (jsmService.isJsmConfigured()) {
         const jsmResult = await jsmService.removeUserFromCurrentAppointees(email);
-        const failedSites = describeFailedSites(jsmResult);
+        const failedSites = describeFailedSites({
+          site1: jsmResult.site1 !== 'failed',
+          site2: jsmResult.site2 !== 'failed',
+        });
         if (failedSites) {
           errors++;
           details.push(
@@ -466,7 +714,16 @@ async function executeEndOfYearCleanup(dryRun: { result: unknown }): Promise<Exe
           );
           continue;
         }
-        jsmDetail = ' + Current Appointees';
+        const notFoundSites = [
+          jsmResult.site1 === 'not-found' && 'site1',
+          jsmResult.site2 === 'not-found' && 'site2',
+        ].filter(Boolean) as string[];
+        jsmDetail =
+          notFoundSites.length === 2
+            ? ' (no JSM account — nothing to remove)'
+            : notFoundSites.length === 1
+              ? ` + Current Appointees (${notFoundSites[0]}: no JSM account — nothing to remove)`
+              : ' + Current Appointees';
       }
 
       processed++;
@@ -474,7 +731,7 @@ async function executeEndOfYearCleanup(dryRun: { result: unknown }): Promise<Exe
     } catch (err) {
       errors++;
       details.push(`ERROR: ${email} — ${err instanceof Error ? err.message : String(err)}`);
-      logger.error({ err, email }, 'End-of-year cleanup: failed for user');
+      logger.error({ err, emailHash: hashEmail(email) }, 'End-of-year cleanup: failed for user');
     }
   }
 
@@ -503,7 +760,10 @@ async function executeNewCohortOnboarding(dryRun: { result: unknown }): Promise<
       attempted++;
       errors++;
       details.push(`ERROR: ${email} — ${err instanceof Error ? err.message : String(err)}`);
-      logger.error({ err, email }, 'New cohort onboarding: Auth0 lookup failed for user');
+      logger.error(
+        { err, emailHash: hashEmail(email) },
+        'New cohort onboarding: Auth0 lookup failed for user'
+      );
       continue;
     }
     if (!user) {
@@ -545,7 +805,7 @@ async function executeNewCohortOnboarding(dryRun: { result: unknown }): Promise<
     } catch (err) {
       errors++;
       details.push(`ERROR: ${email} — ${err instanceof Error ? err.message : String(err)}`);
-      logger.error({ err, email }, 'New cohort onboarding: failed for user');
+      logger.error({ err, emailHash: hashEmail(email) }, 'New cohort onboarding: failed for user');
     }
   }
 
@@ -583,7 +843,7 @@ async function executeBackfill(dryRun: { result: unknown }): Promise<ExecutionRe
       attempted++;
       errors++;
       details.push(`ERROR: ${email} — ${err instanceof Error ? err.message : String(err)}`);
-      logger.error({ err, email }, 'Backfill: Auth0 lookup failed for user');
+      logger.error({ err, emailHash: hashEmail(email) }, 'Backfill: Auth0 lookup failed for user');
       continue;
     }
     if (!user) {
@@ -636,7 +896,7 @@ async function executeBackfill(dryRun: { result: unknown }): Promise<ExecutionRe
     } catch (err) {
       errors++;
       details.push(`ERROR: ${email} — ${err instanceof Error ? err.message : String(err)}`);
-      logger.error({ err, email }, 'Backfill: failed for user');
+      logger.error({ err, emailHash: hashEmail(email) }, 'Backfill: failed for user');
     }
   }
 

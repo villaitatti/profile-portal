@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Scheduled PostgreSQL backup for the Profile Portal.
+# Scheduled PostgreSQL + uploads backup for the Profile Portal.
 #
 # Runs ON THE APP VM (not on a GitHub runner) and is meant to be driven by cron
 # or a systemd timer — see the "Scheduled backups" section of DEPLOYMENT.md for
@@ -13,16 +13,27 @@
 #   * The dump is written to a `.partial` file and only renamed into place after
 #     pg_dump exits 0 and the completion marker is present, so a truncated dump
 #     can never be mistaken for a good recovery point.
-#   * Dumps older than BACKUP_RETENTION_DAYS are pruned, but the newest
-#     BACKUP_MIN_KEEP dumps are always retained regardless of age.
+#   * The uploads volume (admin-uploaded catalog tile images, served at
+#     /uploads/images) is archived to a tar.gz alongside the dump with the same
+#     `.partial` handling — the archive must pass a gzip integrity check before
+#     it is renamed into place. A restored database without the matching
+#     uploads restore references images that no longer exist.
+#   * Dumps and uploads archives older than BACKUP_RETENTION_DAYS are pruned,
+#     but the newest BACKUP_MIN_KEEP of *each* are always retained regardless
+#     of age.
 #   * Any failure exits non-zero and writes a clear message to stderr, so cron
 #     mails the operator. Informational output goes to stdout only when
 #     BACKUP_VERBOSE=true (keep stdout redirected to a log file in crontab so
 #     stderr stays the alerting channel).
-#   * OFFSITE COPY IS REQUIRED. Dumps land on the same VM disk as the pgdata
+#   * OFFSITE COPY IS REQUIRED. Backups land on the same VM disk as the pgdata
 #     volume, so a disk or VM loss takes both. Set BACKUP_OFFSITE_COMMAND to a
-#     command that ships the dump somewhere else; the script fails the run if
-#     that command fails.
+#     command that ships each finished artifact (the dump, then the uploads
+#     archive) somewhere else; the script fails the run if that command fails.
+#   * DEAD-MAN'S SWITCH. If BACKUP_PING_URL is set, the script pings it after a
+#     fully successful run and pings "$BACKUP_PING_URL/fail" on any failure
+#     (healthchecks.io semantics — the monitor then alerts on the *absence* of
+#     runs, which cron mail cannot). Ping delivery problems only warn; they
+#     never fail the backup itself.
 #
 # Environment variables (all optional, defaults shown):
 #   DEPLOY_PATH              /opt/profile-portal   directory holding docker-compose.yml
@@ -31,11 +42,13 @@
 #   DB_SERVICE               db                    compose service running PostgreSQL
 #   DB_USER                  portal                PostgreSQL role used for pg_dump
 #   DB_NAME                  profile_portal        database to dump
+#   UPLOADS_VOLUME           <project>_uploads_data  docker volume holding uploads
 #   BACKUP_DIR               $DEPLOY_PATH/backups  where dumps are written
-#   BACKUP_RETENTION_DAYS    14                    prune dumps older than this
-#   BACKUP_MIN_KEEP          7                     never prune below this many dumps
-#   BACKUP_GZIP              true                  gzip the dump
-#   BACKUP_OFFSITE_COMMAND   (unset)               shell command; "$1" is the dump path
+#   BACKUP_RETENTION_DAYS    14                    prune backups older than this
+#   BACKUP_MIN_KEEP          7                     never prune below this many of each
+#   BACKUP_GZIP              true                  gzip the dump (uploads are always .tar.gz)
+#   BACKUP_OFFSITE_COMMAND   (unset)               shell command; "$1" is the artifact path
+#   BACKUP_PING_URL          (unset)               dead-man's-switch URL (see DEPLOYMENT.md "Monitoring")
 #   BACKUP_VERBOSE           false                 print progress to stdout
 set -euo pipefail
 
@@ -45,11 +58,13 @@ COMPOSE_FILE_NAME="${COMPOSE_FILE_NAME:-docker-compose.yml}"
 DB_SERVICE="${DB_SERVICE:-db}"
 DB_USER="${DB_USER:-portal}"
 DB_NAME="${DB_NAME:-profile_portal}"
+UPLOADS_VOLUME="${UPLOADS_VOLUME:-${COMPOSE_PROJECT_NAME}_uploads_data}"
 BACKUP_DIR="${BACKUP_DIR:-$DEPLOY_PATH/backups}"
 BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-14}"
 BACKUP_MIN_KEEP="${BACKUP_MIN_KEEP:-7}"
 BACKUP_GZIP="${BACKUP_GZIP:-true}"
 BACKUP_OFFSITE_COMMAND="${BACKUP_OFFSITE_COMMAND:-}"
+BACKUP_PING_URL="${BACKUP_PING_URL:-}"
 BACKUP_VERBOSE="${BACKUP_VERBOSE:-false}"
 
 export COMPOSE_PROJECT_NAME
@@ -60,8 +75,24 @@ log() {
   fi
 }
 
+# Dead-man's-switch ping. Deliberately failure-safe: a monitoring hiccup must
+# never turn a good backup into a failed run, so problems only warn on stderr.
+ping_monitor() {
+  local url="$1"
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "profile-portal backup WARNING: BACKUP_PING_URL is set but curl is not on PATH; no ping was sent." >&2
+    return 0
+  fi
+  curl -fsS --max-time 10 --retry 3 -o /dev/null "$url" \
+    || echo "profile-portal backup WARNING: could not reach $url; the dead-man's-switch monitor was not pinged." >&2
+}
+
 die() {
   echo "profile-portal backup FAILED: $1" >&2
+  if [[ -n "$BACKUP_PING_URL" ]]; then
+    # healthchecks.io-style failure signal; harmless 404 on plain endpoints.
+    ping_monitor "$BACKUP_PING_URL/fail"
+  fi
   exit 1
 }
 
@@ -98,12 +129,30 @@ if [[ "$BACKUP_GZIP" == "true" ]]; then
   target="$target.gz"
 fi
 partial="$target.partial"
+# Same stamp as the dump so a restore can pair database and uploads trivially.
+uploads_target="$BACKUP_DIR/profile_portal_uploads_${stamp}.tar.gz"
+uploads_partial="$uploads_target.partial"
 
 cleanup() {
-  rm -f "$partial"
+  rm -f "$partial" "$uploads_partial"
   rmdir "$lock_dir" 2>/dev/null || true
 }
 trap cleanup EXIT
+
+# Ships one finished artifact offsite. Runs via `bash -c` with the artifact
+# path as "$1", e.g.
+#   BACKUP_OFFSITE_COMMAND='rclone copyto "$1" itatti-backups:profile-portal/"$(basename "$1")"'
+offsite_copy() {
+  local artifact="$1"
+  if [[ -z "$BACKUP_OFFSITE_COMMAND" ]]; then
+    return 0
+  fi
+  log "Copying $artifact offsite via BACKUP_OFFSITE_COMMAND"
+  if ! bash -c "$BACKUP_OFFSITE_COMMAND" offsite-copy "$artifact"; then
+    die "Offsite copy failed for $artifact. The local file was kept; fix the copy target."
+  fi
+  log "Offsite copy succeeded for $artifact"
+}
 
 container_id="$(compose ps -q "$DB_SERVICE" 2>/dev/null || true)"
 [[ -n "$container_id" ]] || die "Database service '$DB_SERVICE' is not running in $DEPLOY_PATH."
@@ -143,35 +192,72 @@ mv "$partial" "$target" || die "Could not move the completed dump into $target."
 size="$(wc -c < "$target" | tr -d ' ')"
 log "Backup complete: $target ($size bytes)"
 
-if [[ -n "$BACKUP_OFFSITE_COMMAND" ]]; then
-  log "Copying offsite via BACKUP_OFFSITE_COMMAND"
-  # The dump path is passed as "$1" to the configured command, e.g.
-  #   BACKUP_OFFSITE_COMMAND='rclone copyto "$1" itatti-backups:profile-portal/"$(basename "$1")"'
-  if ! bash -c "$BACKUP_OFFSITE_COMMAND" offsite-copy "$target"; then
-    die "Offsite copy failed for $target. The local dump was kept; fix the copy target."
-  fi
-  log "Offsite copy succeeded for $target"
-else
-  echo "profile-portal backup WARNING: BACKUP_OFFSITE_COMMAND is not set, so $target exists only on this VM's disk — the same disk as the pgdata volume. Configure an offsite copy (see DEPLOYMENT.md)." >&2
+offsite_copy "$target"
+
+# ── Uploads volume ──
+# Admin-uploaded images live in the named uploads volume, not in PostgreSQL. A
+# database dump restored without them leaves catalog rows pointing at images
+# that no longer exist, so the uploads archive is part of the same backup run.
+docker volume inspect "$UPLOADS_VOLUME" >/dev/null 2>&1 \
+  || die "Uploads volume '$UPLOADS_VOLUME' does not exist. Set UPLOADS_VOLUME if the compose project uses a different name."
+
+# tar runs in a throwaway container so the archive does not depend on the
+# portal container being up (it may be mid-deploy or crash-looping — exactly
+# when a backup matters). The db container's image is reused because it is
+# alpine-based (busybox tar + gzip) and guaranteed present locally, so nothing
+# is pulled. --log-driver none keeps the tar stream out of the Docker log;
+# --network none because archiving needs no network.
+tar_image="$(docker inspect --format '{{.Config.Image}}' "$container_id" 2>/dev/null || true)"
+[[ -n "$tar_image" ]] || die "Could not resolve the '$DB_SERVICE' container image to run tar for the uploads archive."
+
+log "Archiving uploads volume $UPLOADS_VOLUME to $uploads_target"
+if ! docker run --rm --log-driver none --network none \
+    -v "$UPLOADS_VOLUME:/uploads:ro" --entrypoint tar "$tar_image" \
+    -C /uploads -czf - . > "$uploads_partial"; then
+  die "Archiving the uploads volume failed. The database dump $target was kept."
+fi
+[[ -s "$uploads_partial" ]] || die "tar produced an empty archive for $UPLOADS_VOLUME."
+
+# gzip stores a CRC and stream trailer, so this catches a truncated archive the
+# same way the completion-marker check catches a truncated dump.
+gzip -t "$uploads_partial" 2>/dev/null \
+  || die "Uploads archive failed gzip integrity verification; treating it as truncated."
+
+mv "$uploads_partial" "$uploads_target" || die "Could not move the completed uploads archive into $uploads_target."
+uploads_size="$(wc -c < "$uploads_target" | tr -d ' ')"
+log "Uploads archive complete: $uploads_target ($uploads_size bytes)"
+
+offsite_copy "$uploads_target"
+
+if [[ -z "$BACKUP_OFFSITE_COMMAND" ]]; then
+  echo "profile-portal backup WARNING: BACKUP_OFFSITE_COMMAND is not set, so $target and $uploads_target exist only on this VM's disk — the same disk as the pgdata volume. Configure an offsite copy (see DEPLOYMENT.md)." >&2
 fi
 
-# Prune: delete dumps older than the retention window, but always keep the
+# Prune: delete backups older than the retention window, but always keep the
 # newest BACKUP_MIN_KEEP so a burst of failures can't leave us with nothing.
-mapfile -t dumps < <(ls -1t "$BACKUP_DIR"/profile_portal_*.sql "$BACKUP_DIR"/profile_portal_*.sql.gz 2>/dev/null || true)
-total="${#dumps[@]}"
-if (( total > BACKUP_MIN_KEEP )); then
-  index=0
-  for dump in "${dumps[@]}"; do
+# Database dumps and uploads archives are pruned as separate families so the
+# floor applies to each — a pile of dumps can never starve out the archives.
+prune_family() {
+  local -a family
+  local index=0 file
+  mapfile -t family < <(ls -1t "$@" 2>/dev/null || true)
+  if (( ${#family[@]} <= BACKUP_MIN_KEEP )); then
+    return 0
+  fi
+  for file in "${family[@]}"; do
     index=$((index + 1))
     if (( index <= BACKUP_MIN_KEEP )); then
       continue
     fi
-    if [[ -n "$(find "$dump" -maxdepth 0 -mtime "+$BACKUP_RETENTION_DAYS" 2>/dev/null)" ]]; then
-      log "Pruning $dump (older than ${BACKUP_RETENTION_DAYS}d)"
-      rm -f "$dump" || echo "profile-portal backup WARNING: could not prune $dump" >&2
+    if [[ -n "$(find "$file" -maxdepth 0 -mtime "+$BACKUP_RETENTION_DAYS" 2>/dev/null)" ]]; then
+      log "Pruning $file (older than ${BACKUP_RETENTION_DAYS}d)"
+      rm -f "$file" || echo "profile-portal backup WARNING: could not prune $file" >&2
     fi
   done
-fi
+}
+
+prune_family "$BACKUP_DIR"/profile_portal_*.sql "$BACKUP_DIR"/profile_portal_*.sql.gz
+prune_family "$BACKUP_DIR"/profile_portal_uploads_*.tar.gz
 
 # Leftover .partial files mean an earlier run died mid-dump; surface them.
 shopt -s nullglob
@@ -181,4 +267,11 @@ if (( ${#stale_partials[@]} > 0 )); then
   echo "profile-portal backup WARNING: stale partial dumps present in $BACKUP_DIR: ${stale_partials[*]}" >&2
 fi
 
-log "Retention: keeping dumps newer than ${BACKUP_RETENTION_DAYS}d plus the newest ${BACKUP_MIN_KEEP}"
+log "Retention: keeping backups newer than ${BACKUP_RETENTION_DAYS}d plus the newest ${BACKUP_MIN_KEEP} of each kind"
+
+if [[ -n "$BACKUP_PING_URL" ]]; then
+  ping_monitor "$BACKUP_PING_URL"
+  log "Pinged dead-man's-switch monitor"
+else
+  echo "profile-portal backup WARNING: BACKUP_PING_URL is not set, so nothing alerts on the ABSENCE of a backup run — cron mail only reports runs that start and fail, not a timer that silently stops firing. Configure a dead-man's switch (see the Monitoring section of DEPLOYMENT.md)." >&2
+fi

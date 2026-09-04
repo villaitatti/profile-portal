@@ -37,6 +37,19 @@ export const forms = {
       dateMin: 'Date must be on or after {{date}}',
       dateMax: 'Date must be on or before {{date}}',
       dateFuture: 'Date cannot be in the future',
+      summary_one: 'One answer needs your attention. Please review the highlighted field above.',
+      summary_other:
+        '{{count}} answers need your attention. Please review the highlighted fields above.',
+    },
+    submitError: {
+      generic:
+        'We could not submit your form right now. Your answers are still here — please check your connection and try again.',
+    },
+    leaveGuard: {
+      title: 'Leave this form?',
+      body: 'Your answers have not been submitted yet. If you leave this page, they will be lost.',
+      stay: 'Stay on this page',
+      leave: 'Leave page',
     },
     selectPlaceholder: 'Select...',
     noMatchingOptions: 'No matching options.',
@@ -82,6 +95,19 @@ export const forms = {
       dateMin: 'La data deve essere il {{date}} o successiva',
       dateMax: 'La data deve essere il {{date}} o precedente',
       dateFuture: 'La data non può essere nel futuro',
+      summary_one: 'Una risposta richiede la tua attenzione. Controlla il campo evidenziato qui sopra.',
+      summary_other:
+        '{{count}} risposte richiedono la tua attenzione. Controlla i campi evidenziati qui sopra.',
+    },
+    submitError: {
+      generic:
+        'Non è stato possibile inviare il modulo. Le tue risposte sono ancora qui: controlla la connessione e riprova.',
+    },
+    leaveGuard: {
+      title: 'Vuoi lasciare questo modulo?',
+      body: 'Le tue risposte non sono ancora state inviate. Se lasci questa pagina, andranno perse.',
+      stay: 'Rimani sulla pagina',
+      leave: 'Lascia la pagina',
     },
     selectPlaceholder: 'Seleziona…',
     noMatchingOptions: 'Nessuna opzione corrispondente.',

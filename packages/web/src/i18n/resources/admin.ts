@@ -65,6 +65,10 @@ export const admin = {
       backToCatalog: 'Back to catalog',
       editTitle: 'Edit Application',
       editDescription: 'Update the application details',
+      notFoundTitle: 'Application not found',
+      notFoundBody:
+        'It may have been deleted, or the link may be out of date. Go back to the catalog to see the current applications.',
+      loadFailedTitle: 'Failed to load the application',
       addDescription: 'Add a new internal application to the portal',
       updateSubmit: 'Update Application',
       createSubmit: 'Create Application',
@@ -228,6 +232,9 @@ export const admin = {
         startingExecution: 'Starting execution...',
         runFailed: 'Run failed',
         connectionLost: 'Connection lost',
+        serverRestartingTitle: 'The server is restarting',
+        serverRestartingBody:
+          'The sync run continues in the background and its result is recorded. Reload this page to check the run status.',
         confirmTitle: 'Execute Sync to Atlassian Cloud',
         confirmWithParts:
           'This will apply changes to Atlassian Cloud: {{parts}}. This action cannot be undone.',
@@ -266,9 +273,9 @@ export const admin = {
       scheduleJuly1: 'July 1, 04:00 UTC',
       scheduleJuly2: 'July 2, 04:00 UTC',
       auto: 'Auto: {{schedule}}',
-      previewFailed: 'Preview failed: {{message}}. Nothing was changed.',
+      previewFailed: 'Preview failed — nothing was changed. {{message}}',
       executionFailed:
-        'Execution failed: {{message}}. Some changes may already have been applied — check the history below.',
+        'Execution failed — some changes may already have been applied; check the history below. {{message}}',
       previewChanges: 'Preview Changes',
       execute: 'Execute',
       noChangesNeeded: 'No changes needed.',
@@ -276,9 +283,9 @@ export const admin = {
       previewActions_one: 'Preview: {{count}} action ({{year}})',
       previewActions_other: 'Preview: {{count}} actions ({{year}})',
       historyTitle: 'Automation History',
-      historyLoadError: "Couldn't load automation history: {{message}}",
-      unknownError: 'Unknown error',
+      historyLoadError: "Couldn't load the automation history. {{message}}",
       dryRun: 'Dry run',
+      dryRunExecuted: 'Dry run (executed)',
       byUser: 'by {{user}}',
       exportJson: 'Export JSON',
     },
@@ -286,7 +293,6 @@ export const admin = {
       title: 'Claim Log',
       description: 'Audit trail of all VIT ID claim attempts',
       loadFailedTitle: 'Failed to load claims',
-      unexpectedError: 'An unexpected error occurred',
       intro1:
         "This log records every successful VIT ID claim. Each entry shows the fellow's name, email, CiviCRM record, fellowship status at the time of claim, and which Auth0 roles were assigned.",
       intro2:
@@ -373,6 +379,10 @@ export const admin = {
       backToCatalog: 'Torna al catalogo',
       editTitle: 'Modifica applicazione',
       editDescription: 'Aggiorna i dettagli dell’applicazione',
+      notFoundTitle: 'Applicazione non trovata',
+      notFoundBody:
+        'Potrebbe essere stata eliminata, oppure il link non è più valido. Torna al catalogo per vedere le applicazioni attuali.',
+      loadFailedTitle: 'Impossibile caricare l’applicazione',
       addDescription: 'Aggiungi una nuova applicazione interna al portale',
       updateSubmit: 'Aggiorna applicazione',
       createSubmit: 'Crea applicazione',
@@ -537,6 +547,9 @@ export const admin = {
         startingExecution: 'Avvio dell’esecuzione...',
         runFailed: 'Esecuzione non riuscita',
         connectionLost: 'Connessione persa',
+        serverRestartingTitle: 'Il server si sta riavviando',
+        serverRestartingBody:
+          'La sincronizzazione continua in background e il suo risultato viene registrato. Ricarica questa pagina per verificarne lo stato.',
         confirmTitle: 'Esegui sincronizzazione su Atlassian Cloud',
         confirmWithParts:
           'Verranno applicate queste modifiche ad Atlassian Cloud: {{parts}}. L’operazione non può essere annullata.',
@@ -577,9 +590,9 @@ export const admin = {
       scheduleJuly1: '1 luglio, 04:00 UTC',
       scheduleJuly2: '2 luglio, 04:00 UTC',
       auto: 'Automatica: {{schedule}}',
-      previewFailed: 'Anteprima non riuscita: {{message}}. Nulla è stato modificato.',
+      previewFailed: 'Anteprima non riuscita — nulla è stato modificato. {{message}}',
       executionFailed:
-        'Esecuzione non riuscita: {{message}}. Alcune modifiche potrebbero essere già state applicate — controlla la cronologia qui sotto.',
+        'Esecuzione non riuscita — alcune modifiche potrebbero essere già state applicate; controlla la cronologia qui sotto. {{message}}',
       previewChanges: 'Anteprima modifiche',
       execute: 'Esegui',
       noChangesNeeded: 'Nessuna modifica necessaria.',
@@ -587,9 +600,9 @@ export const admin = {
       previewActions_one: 'Anteprima: {{count}} azione ({{year}})',
       previewActions_other: 'Anteprima: {{count}} azioni ({{year}})',
       historyTitle: 'Cronologia automazioni',
-      historyLoadError: 'Impossibile caricare la cronologia delle automazioni: {{message}}',
-      unknownError: 'Errore sconosciuto',
+      historyLoadError: 'Impossibile caricare la cronologia delle automazioni. {{message}}',
       dryRun: 'Simulazione',
+      dryRunExecuted: 'Simulazione (eseguita)',
       byUser: 'da {{user}}',
       exportJson: 'Esporta JSON',
     },
@@ -597,7 +610,6 @@ export const admin = {
       title: 'Registro attivazioni',
       description: 'Registro di controllo di tutte le attivazioni di VIT ID',
       loadFailedTitle: 'Impossibile caricare le attivazioni',
-      unexpectedError: 'Si è verificato un errore imprevisto',
       intro1:
         'Questo registro riporta ogni attivazione di VIT ID andata a buon fine. Ogni voce mostra nome, email e scheda CiviCRM del borsista, lo stato della borsa al momento dell’attivazione e quali ruoli Auth0 sono stati assegnati.',
       intro2:

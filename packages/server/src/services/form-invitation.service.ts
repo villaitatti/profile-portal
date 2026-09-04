@@ -9,6 +9,7 @@ import {
   isActiveFormDef,
 } from '@itatti/shared';
 import { buildFormSchema } from '../lib/form-schema.js';
+import { hashToken } from '../lib/hash-token.js';
 import { HttpError } from '../lib/http-error.js';
 import { enqueueFormNotification } from '../workers/form-notification.worker.js';
 import { logger } from '../lib/logger.js';
@@ -50,6 +51,11 @@ export interface GenerateInvitationArgs {
 
 export interface GenerateInvitationResult {
   id: string;
+  /**
+   * Raw bearer token, returned exactly once — only its sha256 hash is stored
+   * (lib/hash-token.ts), so it cannot be read back later. Empty string for a
+   * submitted invitation, which has no live link to hand out.
+   */
   token: string;
   formType: string;
   status: string;
@@ -97,39 +103,49 @@ export async function generateInvitation(
   });
 
   if (existing) {
-    if (existing.status === 'expired' || isPendingInvitationExpired(existing)) {
-      const token = crypto.randomBytes(32).toString('base64url');
-      const rotated = await prisma.formInvitation.updateMany({
-        where: {
-          id: existing.id,
-          token: existing.token,
-          status: existing.status,
-        },
-        data: {
-          token,
-          status: 'pending',
-          submittedAt: null,
-          expiresAt: nextInvitationExpiry(),
-        },
-      });
-      const current = await prisma.formInvitation.findUnique({ where: { id: existing.id } });
-      if (!current) throw new ServiceError('Invitation not found after rotation', 409);
-      if (rotated.count === 0 && current.status === 'expired') {
-        throw new ServiceError('Invitation was regenerated concurrently', 409);
-      }
+    // Submitted invitations are terminal for this endpoint — resetInvitation
+    // is the explicit admin path that reopens one. There is no live link to
+    // return (the token was revoked on submit and only hashes are stored).
+    if (existing.status === 'submitted') {
       return {
-        id: current.id,
-        token: current.token,
-        formType: current.formType,
-        status: current.status,
+        id: existing.id,
+        token: '',
+        formType: existing.formType,
+        status: existing.status,
         created: false,
       };
     }
+
+    // Pending or expired: rotate. Only the token's hash is stored, so "hand
+    // back the existing link" is impossible — every generate call on a live
+    // invitation mints a fresh token and invalidates the previous link.
+    // Generate is an explicit admin action asking for a link to send out, so
+    // the newest link winning is the intended semantics.
+    const token = crypto.randomBytes(32).toString('base64url');
+    const rotated = await prisma.formInvitation.updateMany({
+      where: {
+        id: existing.id,
+        tokenHash: existing.tokenHash,
+        status: existing.status,
+      },
+      data: {
+        tokenHash: hashToken(token),
+        status: 'pending',
+        submittedAt: null,
+        expiresAt: nextInvitationExpiry(),
+      },
+    });
+    // A concurrent generate/reset/submit won the compare-and-swap. The winner
+    // already received its raw token; the loser cannot recover it from the
+    // hash, so surface the conflict and let the admin retry.
+    if (rotated.count === 0) {
+      throw new ServiceError('Invitation was regenerated concurrently', 409);
+    }
     return {
       id: existing.id,
-      token: existing.token,
+      token,
       formType: existing.formType,
-      status: existing.status,
+      status: 'pending',
       created: false,
     };
   }
@@ -138,7 +154,7 @@ export async function generateInvitation(
 
   const invitation = await prisma.formInvitation.create({
     data: {
-      token,
+      tokenHash: hashToken(token),
       fellowshipId: args.fellowshipId,
       contactId: args.contactId,
       academicYear: args.academicYear,
@@ -154,7 +170,7 @@ export async function generateInvitation(
 
   return {
     id: invitation.id,
-    token: invitation.token,
+    token,
     formType: invitation.formType,
     status: invitation.status,
     created: true,
@@ -170,7 +186,8 @@ export async function submitForm(
   token: string,
   rawData: Record<string, unknown>
 ): Promise<SubmitFormResult> {
-  const invitation = await prisma.formInvitation.findUnique({ where: { token } });
+  const tokenHash = hashToken(token);
+  const invitation = await prisma.formInvitation.findUnique({ where: { tokenHash } });
   if (!invitation) {
     throw new ServiceError('Invalid form link', 404);
   }
@@ -186,7 +203,7 @@ export async function submitForm(
         data: { status: 'expired' },
       });
       if (result.count === 0) {
-        const current = await prisma.formInvitation.findUnique({ where: { token } });
+        const current = await prisma.formInvitation.findUnique({ where: { tokenHash } });
         if (!current) throw new ServiceError('Invalid form link', 404);
         if (current.status === 'submitted') {
           throw new ServiceError('This form has already been submitted', 409);
@@ -214,18 +231,20 @@ export async function submitForm(
   const data = parsed.data as FormResponseData;
 
   let response;
-  const revokedToken = crypto.randomBytes(32).toString('base64url');
+  // The raw revoked token is discarded immediately — only its hash lands in
+  // the row, purely to invalidate the submitted link.
+  const revokedTokenHash = hashToken(crypto.randomBytes(32).toString('base64url'));
   try {
     response = await prisma.$transaction(async (tx) => {
       const submittedAt = new Date();
       const claimed = await tx.formInvitation.updateMany({
         where: {
           id: invitation.id,
-          token,
+          tokenHash,
           status: 'pending',
           expiresAt: { gt: submittedAt },
         },
-        data: { status: 'submitted', submittedAt, token: revokedToken },
+        data: { status: 'submitted', submittedAt, tokenHash: revokedTokenHash },
       });
       if (claimed.count !== 1) throw new InvitationClaimConflict();
 
@@ -239,7 +258,7 @@ export async function submitForm(
     // A concurrent submit, expiry, or token rotation won after the first
     // read. Resolve the current state only after the failed transaction has
     // rolled back so an old token cannot claim a freshly reset invitation.
-    const current = await prisma.formInvitation.findUnique({ where: { token } });
+    const current = await prisma.formInvitation.findUnique({ where: { tokenHash } });
     if (!current) throw new ServiceError('Invalid form link', 404);
     if (current.status === 'submitted') {
       throw new ServiceError('This form has already been submitted', 409);
@@ -263,7 +282,8 @@ export async function submitForm(
 }
 
 export async function getInvitationByToken(token: string) {
-  let invitation = await prisma.formInvitation.findUnique({ where: { token } });
+  const tokenHash = hashToken(token);
+  let invitation = await prisma.formInvitation.findUnique({ where: { tokenHash } });
   if (!invitation) return null;
 
   if (invitation.status === 'expired' || invitation.expiresAt.getTime() <= Date.now()) {
@@ -279,7 +299,7 @@ export async function getInvitationByToken(token: string) {
       if (result.count === 0) {
         // A concurrent submit or reset won the race. Re-read by bearer token so
         // an old link can never observe the replacement invitation.
-        invitation = await prisma.formInvitation.findUnique({ where: { token } });
+        invitation = await prisma.formInvitation.findUnique({ where: { tokenHash } });
         if (!invitation) return null;
       }
     }
@@ -306,20 +326,15 @@ export async function markNominationSent(invitationId: string, nominationSentOn?
     });
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError) {
-      throw new ServiceError(
-        err.code === 'P2025'
-          ? 'Form invitation is not pending or does not exist'
-          : 'Could not mark nomination as sent',
-        err.code === 'P2025' ? 409 : 500,
-        {
-          code: err.code === 'P2025' ? 'nomination_sent_not_allowed' : 'prisma_error',
-          prismaCode: err.code,
-          originalError: {
-            name: err.name,
-            message: err.message,
-          },
-        }
-      );
+      if (err.code === 'P2025') {
+        throw new ServiceError('Form invitation is not pending or does not exist', 409, {
+          code: 'nomination_sent_not_allowed',
+        });
+      }
+      // Prisma internals (error code, message) go to the log, never into the
+      // response — the error middleware renders ServiceError.details verbatim.
+      logger.error({ err, invitationId, prismaCode: err.code }, 'mark_nomination_sent_failed');
+      throw new ServiceError('Could not mark nomination as sent', 500);
     }
     throw err;
   }
@@ -351,9 +366,9 @@ export async function resetInvitation(invitationId: string, triggeredBy: string)
     // old-token compare-and-swap fails and cannot create a response.
     try {
       await tx.formInvitation.update({
-        where: { id: invitationId, token: invitation.token },
+        where: { id: invitationId, tokenHash: invitation.tokenHash },
         data: {
-          token: newToken,
+          tokenHash: hashToken(newToken),
           status: 'pending',
           submittedAt: null,
           expiresAt: nextInvitationExpiry(),
@@ -397,12 +412,12 @@ export async function getInvitationsForFellowship(fellowshipId: number, academic
 
 export interface InvitationListItem {
   id: string;
-  // NOTE: token is deliberately NOT exposed here. Tokens are the key to the
-  // unauthenticated GET /api/forms/:token public endpoint. Even though that
-  // endpoint no longer returns response data, the bearer URL still grants
-  // access to the form lifecycle. Archive callers do not need it. Callers that
-  // genuinely need the token (for example the fellows dashboard copy-link
-  // action) use getInvitationsForContacts instead.
+  // NOTE: neither the token nor its stored hash is exposed here. Tokens are
+  // the key to the unauthenticated GET /api/forms/:token public endpoint, and
+  // since only sha256 hashes are stored (lib/hash-token.ts) there is no raw
+  // token to read back anyway. Archive callers do not need it; issuing a
+  // usable link goes through generateInvitation, which returns the fresh raw
+  // token exactly once.
   fellowshipId: number;
   contactId: number;
   contactName: string | null;
@@ -505,8 +520,8 @@ export async function listInvitations(
 
   const items: InvitationListItem[] = rows.map((inv) => {
     const formDef = getFormDef(inv.formType);
-    // Explicit field list (no `...inv` spread) so the sensitive `token`
-    // field on the Prisma row never makes it into the archive contract.
+    // Explicit field list (no `...inv` spread) so the `tokenHash` field on
+    // the Prisma row never makes it into the archive contract.
     return {
       id: inv.id,
       fellowshipId: inv.fellowshipId,

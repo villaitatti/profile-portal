@@ -44,7 +44,14 @@ app.use(helmet({
 app.use(
   pinoHttp({
     logger,
-    autoLogging: { ignore: (req) => req.url === '/api/health' },
+    autoLogging: {
+      // Covers /api/health and every sub-path: the production compose
+      // healthcheck polls /api/health/ready every 15s, which alone is ~6k
+      // info lines/day of zero-signal noise. The prefix requires the '/'
+      // separator so genuine routes like /api/healthsomething still log.
+      ignore: (req) =>
+        req.url === '/api/health' || req.url?.startsWith('/api/health/') === true,
+    },
     customProps: (req) => ({ safePath: sanitizeRequestUrl(req.url) }),
   })
 );
