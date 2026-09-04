@@ -11,7 +11,7 @@ vi.mock('@auth0/auth0-react', () => ({ useAuth0: mockUseAuth0 }));
 vi.mock('@/config/auth0', () => ({ auth0Config: { audience: 'https://api.itatti' } }));
 vi.mock('@/config/runtime', () => ({ getApiBaseUrl: () => '' }));
 
-import { useApiToken } from '@/api/client';
+import { parseErrorBody, useApiToken } from '@/api/client';
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -58,5 +58,24 @@ describe('useApiToken', () => {
 
     await expect(result.current()).rejects.toThrow('network down');
     expect(mockLoginWithRedirect).not.toHaveBeenCalled();
+  });
+});
+
+// Both fetch wrappers (client.ts, uploads.ts) read `.error`/`.code` off the
+// result, so it must be an object for every body a server could return.
+describe('parseErrorBody', () => {
+  it.each([
+    ['null', 'null'],
+    ['a string', '"Service Unavailable"'],
+    ['a number', '503'],
+    ['non-JSON', '<html>Bad Gateway</html>'],
+    ['empty', ''],
+  ])('returns an empty object for a %s body', async (_label, raw) => {
+    await expect(parseErrorBody(new Response(raw, { status: 503 }))).resolves.toEqual({});
+  });
+
+  it('returns the object body as-is', async () => {
+    const body = { error: 'Dry run expired', code: 'DRY_RUN_EXPIRED', details: { minutes: 61 } };
+    await expect(parseErrorBody(new Response(JSON.stringify(body), { status: 400 }))).resolves.toEqual(body);
   });
 });

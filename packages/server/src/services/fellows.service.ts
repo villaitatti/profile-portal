@@ -164,12 +164,6 @@ function toFormInvitationSummary(inv: {
     formType: inv.formType,
     formTitle: getFormDef(inv.formType)?.title ?? inv.formType,
     status: inv.status as 'pending' | 'submitted' | 'expired',
-    // Bearer tokens are stored only as sha256 hashes (lib/hash-token.ts), so
-    // the dashboard can no longer read a raw token back for the copy-link
-    // action. The field stays in the shared contract but is always empty;
-    // issuing a usable link goes through POST /api/admin/forms/generate,
-    // which rotates the token and returns the fresh one exactly once.
-    token: '',
     nominationSentAt: inv.nominationSentAt?.toISOString() ?? null,
     submittedAt: inv.submittedAt?.toISOString() ?? null,
   };

@@ -351,7 +351,7 @@ describe('AtlassianSyncPage — server restart mid-run', () => {
     expect(screen.getByRole('button', { name: /Preview Changes/ })).toBeEnabled();
   });
 
-  it('keeps the previewed diff on screen when the server restarts during an execute', async () => {
+  it('withdraws the Execute action when the server restarts during an execute', async () => {
     mockUseSyncRunDetail.mockImplementation((runId: string | null) =>
       runId
         ? {
@@ -410,10 +410,14 @@ describe('AtlassianSyncPage — server restart mid-run', () => {
     emit!(restartingEvent);
 
     expect(await screen.findByRole('status')).toHaveTextContent('The server is restarting');
-    // Unlike a failure, the restart does NOT invalidate the previewed diff.
-    expect(screen.getByText(/Users to Create/)).toBeInTheDocument();
+    // The dry run is being executed server-side: offering to execute it again
+    // would be stale (the server would answer 409), so the button and its diff
+    // go away with the running state. Informational, not a failure.
+    expect(screen.queryByRole('button', { name: /Execute Sync/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Users to Create/)).not.toBeInTheDocument();
     expect(screen.queryByText('Sync failed')).not.toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Preview Changes/ })).toBeEnabled();
   });
 
   it('clears the restart notice when a new preview starts', async () => {

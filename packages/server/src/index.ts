@@ -99,7 +99,11 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
     // sync that finishes in budget emits 'done' to its still-open SSE stream,
     // whose cleanup deregisters it — only genuinely unfinished runs get the
     // 'restarting' event from closeAllSseStreams. awaitActiveSyncs never throws.
-    const { awaitActiveSyncs } = await import('./services/atlassian-sync.service.js');
+    // The server is still accepting requests during the drain, so new sync
+    // starts are refused (503) first — otherwise one could slip in after the
+    // drain snapshot and be killed mid-run.
+    const { beginSyncShutdown, awaitActiveSyncs } = await import('./services/atlassian-sync.service.js');
+    beginSyncShutdown();
     await awaitActiveSyncs(SYNC_DRAIN_BUDGET_MS);
 
     // Drain SSE streams BEFORE waiting on server.close(): an open SSE response

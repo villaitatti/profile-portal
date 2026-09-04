@@ -495,11 +495,14 @@ export function AtlassianSyncPage() {
           if (p.phase === 'restarting') {
             // Graceful server shutdown mid-run. The helper has already closed
             // the stream (no reconnect), but the run continues server-side and
-            // its result is recorded — so no failRun: keep the previewed diff
-            // on screen and tell the admin to reload for the outcome.
+            // its result is recorded — so no failRun (not an error). The
+            // previewed dry run is dropped too: it is either being executed
+            // right now or superseded by the interrupted preview, so an
+            // Execute button for it would be stale either way.
             activeUnsubRef.current = null;
             setActiveRunId(null);
             setProgress(null);
+            setLastDryRunId(null);
             setRestartNotice(true);
             return;
           }

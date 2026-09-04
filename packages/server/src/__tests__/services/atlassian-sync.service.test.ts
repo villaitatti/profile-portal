@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock env before importing anything that uses it
 vi.mock('../../env.js', () => ({
@@ -55,7 +55,14 @@ vi.mock('../../services/atlassian-scim.service.js', () => ({
   isScimConfigured: vi.fn().mockReturnValue(true),
 }));
 
-import { computeDiff, runDrySync, awaitActiveSyncs } from '../../services/atlassian-sync.service.js';
+import {
+  computeDiff,
+  runDrySync,
+  executeSync,
+  awaitActiveSyncs,
+  beginSyncShutdown,
+  resetSyncShutdownForTests,
+} from '../../services/atlassian-sync.service.js';
 import type { ScimUser, ScimGroup } from '../../services/atlassian-scim.service.js';
 import type { RoleGroupMapping } from '../../generated/prisma/client.js';
 import { prisma } from '../../lib/prisma.js';
@@ -421,5 +428,48 @@ describe('awaitActiveSyncs', () => {
     // Settled: returns well inside the (generous) budget — an erroneous wait
     // here would trip the test timeout.
     await expect(awaitActiveSyncs(10_000)).resolves.toBeUndefined();
+  });
+});
+
+// The HTTP server keeps accepting requests while shutdown drains in-flight
+// syncs, so admission must close as soon as shutdown begins — including for a
+// request whose admission transaction was already running at that moment.
+describe('sync admission during shutdown', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+  afterEach(() => {
+    resetSyncShutdownForTests();
+  });
+
+  it('refuses a dry run started after shutdown began', async () => {
+    beginSyncShutdown();
+    await expect(runDrySync('late-admin')).rejects.toMatchObject({ status: 503, code: 'SERVER_RESTARTING' });
+    expect(vi.mocked(prisma, true).syncRun.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses an execution started after shutdown began', async () => {
+    beginSyncShutdown();
+    await expect(executeSync('dry-1', 'late-admin')).rejects.toMatchObject({ status: 503, code: 'SERVER_RESTARTING' });
+    expect(vi.mocked(prisma, true).syncRun.create).not.toHaveBeenCalled();
+  });
+
+  it('fails the run row and refuses when shutdown begins during the admission transaction', async () => {
+    const mockedPrisma = vi.mocked(prisma, true);
+    mockedPrisma.syncRun.findFirst.mockResolvedValue(null as never);
+    // Shutdown lands while the row is being created — before the detached
+    // task could be registered with the drain.
+    mockedPrisma.syncRun.create.mockImplementation((async () => {
+      beginSyncShutdown();
+      return { id: 'run-mid-shutdown' };
+    }) as never);
+    mockedPrisma.syncRun.update.mockResolvedValue({} as never);
+
+    await expect(runDrySync('unlucky-admin')).rejects.toMatchObject({ status: 503, code: 'SERVER_RESTARTING' });
+    expect(mockedPrisma.syncRun.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'run-mid-shutdown' }, data: expect.objectContaining({ status: 'failed' }) })
+    );
+    // Nothing was registered, so the drain has nothing to wait for.
+    expect(mockedPrisma.roleGroupMapping.findMany).not.toHaveBeenCalled();
   });
 });

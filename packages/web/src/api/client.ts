@@ -33,10 +33,7 @@ export async function apiFetch(
   }
 
   if (!response.ok) {
-    // An empty body (rather than a placeholder `error` string) keeps
-    // lib/errors.ts from mistaking a parse failure for a server-authored,
-    // user-appropriate message.
-    const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    const body = await parseErrorBody(response);
     console.error(
       `[api] ${fetchOptions.method ?? 'GET'} ${path} failed with status ${response.status}`,
       body
@@ -50,6 +47,19 @@ export async function apiFetch(
   }
 
   return response;
+}
+
+/**
+ * Parses a failed response's JSON body for ApiError. Always an object: an
+ * unparseable, `null` or primitive body becomes `{}` so property reads never
+ * throw (a thrown TypeError here would be misreported by lib/errors.ts as a
+ * network failure), and an empty body — rather than a placeholder `error`
+ * string — keeps lib/errors.ts from mistaking a parse failure for a
+ * server-authored, user-appropriate message.
+ */
+export async function parseErrorBody(response: Response): Promise<Record<string, unknown>> {
+  const parsed: unknown = await response.json().catch(() => ({}));
+  return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {};
 }
 
 /**

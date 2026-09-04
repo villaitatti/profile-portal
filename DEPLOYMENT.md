@@ -642,7 +642,7 @@ docker run --rm --log-driver none \
   -v profile-portal_uploads_data:/uploads \
   -v /opt/profile-portal/backups:/backups:ro \
   --entrypoint sh postgres:17-alpine \
-  -c 'rm -rf /uploads/* && tar -C /uploads -xzf /backups/profile_portal_uploads_20260731-021500.tar.gz'
+  -c 'find /uploads -mindepth 1 -delete && tar -C /uploads -xzf /backups/profile_portal_uploads_20260731-021500.tar.gz'
 
 docker compose start portal
 docker compose logs -f portal   # confirm `prisma migrate deploy` reports no pending work

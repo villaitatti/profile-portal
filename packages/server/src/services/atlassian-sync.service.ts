@@ -698,6 +698,39 @@ const LEASE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 // via awaitActiveSyncs. In-memory Set is fine: single-instance design.
 const activeSyncTasks = new Set<Promise<void>>();
 
+// Set by graceful shutdown before it awaits the in-flight tasks. The HTTP
+// server keeps accepting requests during that drain window, so without this a
+// sync started meanwhile would register after awaitActiveSyncs took its
+// snapshot and get killed by process.exit() mid-run.
+let syncShutdownRequested = false;
+
+export function beginSyncShutdown(): void {
+  syncShutdownRequested = true;
+}
+
+/** Test-only: module state persists across tests in one file. */
+export function resetSyncShutdownForTests(): void {
+  syncShutdownRequested = false;
+}
+
+function assertSyncsAccepted(): void {
+  if (syncShutdownRequested) {
+    throw new HttpError(503, 'The server is restarting. Try again in a moment.', 'SERVER_RESTARTING');
+  }
+}
+
+// Second admission check, after the run row exists: shutdown may have begun
+// while the admission transaction was in flight. The row is closed out here
+// rather than left to the 30-minute lease.
+async function abortRunIfShuttingDown(runId: string): Promise<void> {
+  if (!syncShutdownRequested) return;
+  await prisma.syncRun.update({
+    where: { id: runId },
+    data: { status: 'failed', completedAt: new Date() },
+  });
+  assertSyncsAccepted();
+}
+
 function trackSyncTask(task: Promise<void>): void {
   activeSyncTasks.add(task);
   // .then(onSettled, onSettled) rather than .finally: a .finally chain would
@@ -766,6 +799,7 @@ async function failRunAndNotify(
 }
 
 export async function runDrySync(triggeredBy: string): Promise<{ runId: string; emitter: EventEmitter }> {
+  assertSyncsAccepted();
   // Atomic check-and-create inside a serializable transaction to prevent TOCTOU race
   const run = await prisma.$transaction(async (tx) => {
     const active = await tx.syncRun.findFirst({
@@ -789,11 +823,14 @@ export async function runDrySync(triggeredBy: string): Promise<{ runId: string; 
       data: { status: 'dry_run', triggeredBy, diff: {} },
     });
   }, { isolationLevel: 'Serializable' });
+  await abortRunIfShuttingDown(run.id);
 
   const emitter = new EventEmitter();
 
   // Run async (explicitly not awaited — caller consumes progress via SSE).
   // Tracked so graceful shutdown can await in-flight work (awaitActiveSyncs).
+  // No await between the shutdown check above and trackSyncTask: the task is
+  // in the set before any shutdown snapshot taken after that check.
   trackSyncTask((async () => {
     try {
       const mappings = await prisma.roleGroupMapping.findMany();
@@ -851,6 +888,7 @@ export async function executeSync(
   dryRunId: string,
   triggeredBy: string
 ): Promise<{ runId: string; emitter: EventEmitter }> {
+  assertSyncsAccepted();
   // Atomic check-validate-create inside a serializable transaction
   const { run, dryRun } = await prisma.$transaction(async (tx) => {
     const active = await tx.syncRun.findFirst({
@@ -894,11 +932,13 @@ export async function executeSync(
 
     return { run: created, dryRun: dr };
   }, { isolationLevel: 'Serializable' });
+  await abortRunIfShuttingDown(run.id);
 
   const emitter = new EventEmitter();
 
   // Explicitly not awaited — caller consumes progress via SSE. Tracked so
-  // graceful shutdown can await in-flight work (awaitActiveSyncs).
+  // graceful shutdown can await in-flight work (awaitActiveSyncs). No await
+  // between the shutdown check above and trackSyncTask (see runDrySync).
   trackSyncTask((async () => {
     try {
       const startTime = Date.now();
