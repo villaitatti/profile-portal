@@ -21,13 +21,15 @@ export function PublicLayout() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="flex h-16 items-center gap-4 border-b bg-card px-6">
-        <ItattiLogo className="h-7 w-auto shrink-0 text-foreground" />
-        <span aria-hidden className="h-6 w-px bg-border" />
-        <span className="font-heading text-[1.15rem] text-foreground">
+      <header className="flex h-16 items-center gap-3 border-b bg-card px-4 sm:gap-4 sm:px-6">
+        <ItattiLogo className="h-6 w-auto shrink-0 text-foreground sm:h-7" />
+        <span aria-hidden className="h-6 w-px shrink-0 bg-border" />
+        {/* min-w-0 + truncate: on a phone the wordmark, title and controls
+            share ~375px, so the title is the part allowed to give way. */}
+        <span className="min-w-0 truncate font-heading text-[1.15rem] text-foreground">
           {t('common.appName')}
         </span>
-        <div className="ml-auto flex items-center gap-1.5">
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
           <Button variant="ghost" size="sm" type="button" onClick={toggleLanguage}>
             <Languages />
             <span>{i18n.language.toUpperCase()}</span>
