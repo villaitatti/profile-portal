@@ -52,6 +52,13 @@ jobs:
               echo "::error::pnpm audit reported vulnerabilities at or above moderate severity."
               exit "$status"
             fi
+            # Only a confirmed registry/network failure earns a retry. Anything
+            # else (a pnpm crash, a lockfile problem, an unexpected exit) fails
+            # here rather than being waved through as "registry unavailable".
+            if ! printf '%s' "$output" | grep -qiE 'TimeoutError|aborted due to timeout|ETIMEDOUT|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|fetch failed|advisories/bulk .*(error|5[0-9][0-9])'; then
+              echo "::error::pnpm audit failed for a reason other than registry availability (exit $status)."
+              exit "$status"
+            fi
             echo "Audit attempt $attempt could not reach the advisories registry; retrying in 30s."
             sleep 30
           done
