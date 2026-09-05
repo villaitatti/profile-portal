@@ -144,7 +144,8 @@ export interface FormInvitationSummaryEntry {
   formType: string;
   formTitle: string;
   status: 'pending' | 'submitted' | 'expired';
-  token: string;
+  // No token: bearer tokens are stored hashed, so a usable link can only be
+  // obtained from POST /api/admin/forms/generate, which returns a fresh one once.
   nominationSentAt: string | null;
   submittedAt: string | null;
 }

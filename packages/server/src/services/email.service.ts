@@ -1,4 +1,5 @@
 import { env, isDevMode } from '../env.js';
+import { hashEmail } from '../lib/hash-email.js';
 import { logger } from '../lib/logger.js';
 import {
   renderVitIdInvitation,
@@ -23,6 +24,9 @@ interface AutomationReportInput {
   pending: number;
   errors: number;
   details: string[];
+  // Subject suffix. Without it a FAILED or partial run arrives under a
+  // "… Complete" subject — a success-sounding inbox line for an incident.
+  outcome?: 'completed' | 'partial' | 'failed';
 }
 
 /**
@@ -95,6 +99,13 @@ interface SendEmailOptions {
    * reports go to internal staff and keep the no-reply Source.
    */
   replyTo?: string;
+  /**
+   * Stable email-type label for logs. Subjects can embed personal names (e.g.
+   * the claim notification), so log lines identify the send by this kind plus
+   * the hashed recipient instead of subject/address — same hashEmail
+   * discipline as the claim flow.
+   */
+  kind?: string;
 }
 
 function buildSesSource(fromName?: string): string {
@@ -118,16 +129,18 @@ async function sendEmail(
   if (isDevMode) {
     logger.info(
       {
-        to,
-        subject,
-        bccAddresses: options?.bccAddresses,
+        kind: options?.kind,
+        toHash: hashEmail(to),
+        bccCount: options?.bccAddresses?.length ?? 0,
         fromName: options?.fromName,
         hasHtml: !!options?.html,
         bodyLength: body.length,
       },
       'Email (dev mode): would send'
     );
-    logger.debug({ body }, 'Email body');
+    // Dev-only, debug-level: the full content (recipient, subject, body) for
+    // template work. Never reaches a production log aggregator.
+    logger.debug({ to, subject, body }, 'Email body');
     return undefined;
   }
 
@@ -172,11 +185,13 @@ async function sendEmail(
   });
 
   const result = await client.send(command);
+  // No raw address and no subject: subjects can carry personal names (claim
+  // notification), and recipients correlate across services via hashEmail.
   logger.info(
     {
-      to,
-      subject,
-      bccAddresses: options?.bccAddresses,
+      kind: options?.kind,
+      toHash: hashEmail(to),
+      bccCount: options?.bccAddresses?.length ?? 0,
       fromName: options?.fromName,
       hasHtml: !!options?.html,
       messageId: result?.MessageId,
@@ -296,14 +311,16 @@ export async function sendClaimNeedsReconciliationNotification(
 
   if (!isAdminNotificationEmailConfigured()) {
     logger.warn(
-      { subject, reason: input.reason },
+      { reason: input.reason },
       'Skipping claim-needs-reconciliation email: ADMIN_NOTIFICATION_EMAIL (or SES) not configured'
     );
     return;
   }
 
   try {
-    await sendEmail(env.ADMIN_NOTIFICATION_EMAIL!, subject, body);
+    await sendEmail(env.ADMIN_NOTIFICATION_EMAIL!, subject, body, {
+      kind: 'claim-needs-reconciliation',
+    });
   } catch (err) {
     logger.error({ err, reason: input.reason }, 'Failed to send claim-needs-reconciliation email');
   }
@@ -323,15 +340,17 @@ export async function sendClaimNotification(input: ClaimNotificationInput): Prom
   ].join('\n');
 
   if (!isAdminNotificationEmailConfigured()) {
+    // No subject here — it embeds the fellow's full name.
     logger.warn(
-      { subject },
       'Skipping claim notification email: ADMIN_NOTIFICATION_EMAIL (or SES) not configured'
     );
     return;
   }
 
   try {
-    await sendEmail(env.ADMIN_NOTIFICATION_EMAIL!, subject, body);
+    await sendEmail(env.ADMIN_NOTIFICATION_EMAIL!, subject, body, {
+      kind: 'claim-notification',
+    });
   } catch (err) {
     logger.error({ err }, 'Failed to send claim notification email');
   }
@@ -364,8 +383,8 @@ function buildAppointeeEnvelope(
   if (isRedirected) {
     logger.info(
       {
-        intended: to,
-        redirectedTo: actualTo,
+        intendedHash: hashEmail(to),
+        redirectedToHash: hashEmail(actualTo),
         droppedBcc: parseBccList(env.APPOINTEE_EMAIL_BCC).length,
       },
       `${label} email redirected via APPOINTEE_EMAIL_REDIRECT_TO (BCC list dropped)`
@@ -401,6 +420,7 @@ export async function sendBioProjectDescriptionEmail(args: {
     fromName: env.APPOINTEE_EMAIL_FROM_NAME_BIO,
     html: rendered.html,
     replyTo: env.APPOINTEE_EMAIL_REPLY_TO || undefined,
+    kind: 'bio-project-description',
   });
 
   return { messageId };
@@ -434,6 +454,7 @@ export async function sendVitIdInvitationEmail(args: {
     fromName: env.APPOINTEE_EMAIL_FROM_NAME_VIT_ID,
     html: rendered.html,
     replyTo: env.APPOINTEE_EMAIL_REPLY_TO || undefined,
+    kind: 'vit-id-invitation',
   });
 
   return { messageId };
@@ -447,15 +468,24 @@ function parseBccList(raw: string | undefined): string[] {
     .filter((s) => s.length > 0);
 }
 
-export async function sendAutomationReport(input: AutomationReportInput): Promise<void> {
-  const typeLabels: Record<string, string> = {
-    'end-of-year-cleanup': 'July 1 Current Appointees Cleanup',
-    'new-cohort-onboarding': 'July 2 New Appointees Onboarding',
-    'backfill': 'Backfill Existing Fellows',
-  };
+// Shared by the completion report and the missed-run alert so both emails
+// name the automation identically.
+const AUTOMATION_TYPE_LABELS: Record<string, string> = {
+  'end-of-year-cleanup': 'July 1 Current Appointees Cleanup',
+  'new-cohort-onboarding': 'July 2 New Appointees Onboarding',
+  'backfill': 'Backfill Existing Fellows',
+};
 
-  const label = typeLabels[input.type] || input.type;
-  const subject = `I Tatti Profile Portal Automation — ${label} Complete`;
+const AUTOMATION_OUTCOME_SUBJECTS: Record<string, string> = {
+  completed: 'Complete',
+  partial: 'PARTIALLY Complete — action needed',
+  failed: 'FAILED — action needed',
+};
+
+export async function sendAutomationReport(input: AutomationReportInput): Promise<void> {
+  const label = AUTOMATION_TYPE_LABELS[input.type] || input.type;
+  const outcome = AUTOMATION_OUTCOME_SUBJECTS[input.outcome ?? 'completed'] ?? 'Complete';
+  const subject = `I Tatti Profile Portal Automation — ${label} ${outcome}`;
   const body = [
     `${label} — Academic Year ${input.academicYear}`,
     ``,
@@ -469,16 +499,113 @@ export async function sendAutomationReport(input: AutomationReportInput): Promis
 
   if (!isAdminNotificationEmailConfigured()) {
     logger.warn(
-      { subject },
+      { type: input.type, outcome: input.outcome ?? 'completed' },
       'Skipping automation report email: ADMIN_NOTIFICATION_EMAIL (or SES) not configured'
     );
     return;
   }
 
   try {
-    await sendEmail(env.ADMIN_NOTIFICATION_EMAIL!, subject, body);
+    await sendEmail(env.ADMIN_NOTIFICATION_EMAIL!, subject, body, {
+      kind: 'automation-report',
+    });
   } catch (err) {
     logger.error({ err }, 'Failed to send automation report email');
+  }
+}
+
+/**
+ * IT-facing alert for a July automation whose scheduled moment passed without
+ * a completed run. Deliberately NOT sendAutomationReport: that subject ends in
+ * "Complete", which delivered the NEVER-COMPLETED incident under a
+ * success-sounding subject. The caller (automation.service.ts) decides WHEN a
+ * run counts as missed; this function only formats and sends. Never throws —
+ * callers are boot and cron paths.
+ */
+export async function sendMissedAutomationAlert(input: {
+  type: AutomationReportInput['type'];
+  academicYear: string;
+  details: string[];
+}): Promise<void> {
+  const label = AUTOMATION_TYPE_LABELS[input.type] || input.type;
+  const subject = `I Tatti Profile Portal — ALERT: ${label} was NOT completed for ${input.academicYear}`;
+  const body = [`${label} — Academic Year ${input.academicYear}`, '', ...input.details].join('\n');
+
+  if (!isAdminNotificationEmailConfigured()) {
+    logger.warn(
+      { type: input.type, academicYear: input.academicYear },
+      'Skipping missed-automation alert email: ADMIN_NOTIFICATION_EMAIL (or SES) not configured'
+    );
+    return;
+  }
+
+  try {
+    await sendEmail(env.ADMIN_NOTIFICATION_EMAIL!, subject, body, {
+      kind: 'missed-automation-alert',
+    });
+  } catch (err) {
+    logger.error({ err, type: input.type }, 'Failed to send missed-automation alert email');
+  }
+}
+
+/**
+ * IT-facing alert for the daily 09:00 bio-email dispatch cron. The July
+ * automations already email IT on failure via sendAutomationReport; without
+ * this, a broken daily dispatch only ever produced a log line while bio-email
+ * rows sat PENDING indefinitely. The caller (automation.service.ts) decides
+ * WHEN to alert (consecutive-failure threshold, so a one-day blip stays
+ * quiet); this function only formats and sends. Never throws — an alert
+ * failure must not propagate into the cron.
+ */
+export async function sendDailyDispatchFailureAlert(input: {
+  consecutiveFailures: number;
+  /** Present when the dispatch run threw outright. */
+  lastError?: string;
+  /**
+   * Present when the dispatch resolved but reported per-message failures —
+   * dispatchPendingEmails catches those and resolves with counts, so a full
+   * SES/CiviCRM outage surfaces as a resolved run with failed/deferred > 0.
+   */
+  lastRunCounts?: {
+    processed: number;
+    sent: number;
+    skipped: number;
+    failed: number;
+    deferred: number;
+    reclaimed: number;
+  };
+}): Promise<void> {
+  const subject = 'I Tatti Profile Portal — Daily Bio-Email Dispatch Failing';
+  const counts = input.lastRunCounts;
+  const body = [
+    `The daily appointee bio-email dispatch (09:00 Europe/Rome) has failed ${input.consecutiveFailures} days in a row.`,
+    '',
+    ...(input.lastError ? [`Most recent error: ${input.lastError}`, ''] : []),
+    ...(counts
+      ? [
+          `Most recent run counts: processed ${counts.processed}, sent ${counts.sent}, skipped ${counts.skipped}, failed ${counts.failed}, deferred ${counts.deferred}, reclaimed ${counts.reclaimed}.`,
+          '',
+        ]
+      : []),
+    'Pending bio-email rows are NOT lost — they stay queued and every daily run retries them — but no appointee is receiving the bio & project description email until the dispatch succeeds again.',
+    '',
+    'Action: review the server logs around 09:00 Europe/Rome, fix the underlying issue (SES, CiviCRM, or database connectivity are the usual suspects), or trigger a manual send from the Manage Appointees page.',
+  ].join('\n');
+
+  if (!isAdminNotificationEmailConfigured()) {
+    logger.warn(
+      { consecutiveFailures: input.consecutiveFailures },
+      'Skipping bio-email dispatch failure alert: ADMIN_NOTIFICATION_EMAIL (or SES) not configured'
+    );
+    return;
+  }
+
+  try {
+    await sendEmail(env.ADMIN_NOTIFICATION_EMAIL!, subject, body, {
+      kind: 'daily-dispatch-failure-alert',
+    });
+  } catch (err) {
+    logger.error({ err }, 'Failed to send bio-email dispatch failure alert');
   }
 }
 
@@ -702,10 +829,10 @@ export async function sendFormNotificationEmail(input: FormNotificationEmailInpu
   await client.send(command);
   // Deliberately NOT logging `subject` here — the post-v0.14.2 subject
   // contains the appointee's full name, which is PII that doesn't belong
-  // in log aggregators. fellowshipId + recipient are enough to correlate
-  // with upstream worker logs.
+  // in log aggregators. fellowshipId + hashed recipient are enough to
+  // correlate with upstream worker logs.
   logger.info(
-    { fellowshipId: input.fellowshipId, to: recipient, overrideActive: !!overrideTo },
+    { fellowshipId: input.fellowshipId, toHash: hashEmail(recipient), overrideActive: !!overrideTo },
     'Form notification email sent'
   );
 }

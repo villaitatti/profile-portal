@@ -128,7 +128,7 @@ describe('FellowsManagementPage — page states', () => {
     expect(screen.queryByText('Manage Appointees')).not.toBeInTheDocument();
   });
 
-  it('shows the failure title and error message when loading fails', () => {
+  it('shows the failure title and a user-safe message, never the raw error text', () => {
     mockUseFellowsDashboard.mockReturnValue({
       data: undefined,
       isLoading: false,
@@ -143,7 +143,8 @@ describe('FellowsManagementPage — page states', () => {
     );
 
     expect(screen.getByText('Failed to load appointees')).toBeInTheDocument();
-    expect(screen.getByText('CiviCRM down')).toBeInTheDocument();
+    expect(screen.queryByText('CiviCRM down')).not.toBeInTheDocument();
+    expect(screen.getByText('An unexpected error occurred. Please try again.')).toBeInTheDocument();
   });
 
   it('shows the per-year empty state when the year has no appointees', () => {

@@ -7,6 +7,10 @@ x-logging: &default-logging
 services:
   portal:
     image: ${IMAGE_REF:-${IMAGE_NAME:?Set IMAGE_NAME}:${IMAGE_TAG:?Set IMAGE_TAG}}
+    # Fixed name so `docker compose up --scale portal=2` fails loudly instead of
+    # silently multiplying rate limits and double-firing cron jobs — see the
+    # "Single-instance constraint" section of DEPLOYMENT.md.
+    container_name: profile-portal-portal
     env_file: .env
     environment:
       DATABASE_URL: postgresql://portal:${DB_PASSWORD}@db:5432/profile_portal

@@ -6,7 +6,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { useAutomationRuns, useStartDryRun, useExecuteAutomation } from '@/api/automations';
 import type { AutomationRun, DryRunResult } from '@/api/automations';
-import { getErrorMessage } from '@/lib/errors';
+import { userErrorMessage } from '@/lib/errors';
 import {
   Info,
   Play,
@@ -104,7 +104,7 @@ export function AutomationsPage() {
           <AlertCircle className="h-4 w-4 flex-shrink-0" />
           <span className="flex-1">
             {t('admin.automations.historyLoadError', {
-              message: error instanceof Error ? error.message : t('admin.automations.unknownError'),
+              message: userErrorMessage(error, t),
             })}
           </span>
           <Button
@@ -160,7 +160,7 @@ function AutomationCard({
       const result = await dryRunMutation.mutateAsync();
       setDryRunResult(result);
     } catch (err) {
-      setActionError(t('admin.automations.previewFailed', { message: getErrorMessage(err) }));
+      setActionError(t('admin.automations.previewFailed', { message: userErrorMessage(err, t) }));
     }
   };
 
@@ -172,7 +172,7 @@ function AutomationCard({
       setDryRunResult(null);
     } catch (err) {
       // Keep the preview on screen: the admin needs to see what was attempted.
-      setActionError(t('admin.automations.executionFailed', { message: getErrorMessage(err) }));
+      setActionError(t('admin.automations.executionFailed', { message: userErrorMessage(err, t) }));
     }
   };
 
@@ -268,6 +268,9 @@ function HistoryRow({ run }: { run: AutomationRun }) {
 
   const statusIcon = () => {
     if (run.status === 'dry_run') return <Clock className="h-4 w-4 text-info" />;
+    // A consumed dry run is a preview that was executed: done (check), but in
+    // the preview family (info), matching the sync history's completed dry run.
+    if (run.status === 'consumed') return <CheckCircle2 className="h-4 w-4 text-info" />;
     if (run.status === 'completed') return <CheckCircle2 className="h-4 w-4 text-success" />;
     if (run.status === 'failed') return <XCircle className="h-4 w-4 text-destructive" />;
     if (run.status === 'partial') return <AlertCircle className="h-4 w-4 text-warning-foreground" />;
@@ -288,7 +291,9 @@ function HistoryRow({ run }: { run: AutomationRun }) {
         <span className="text-xs text-muted-foreground">
           {run.status === 'dry_run'
             ? t('admin.automations.dryRun')
-            : t(`admin.status.${run.status}`, run.status)}
+            : run.status === 'consumed'
+              ? t('admin.automations.dryRunExecuted')
+              : t(`admin.status.${run.status}`, run.status)}
         </span>
         <span className="text-xs text-muted-foreground">
           {formatHumanDateTime(run.startedAt, i18n.language)}

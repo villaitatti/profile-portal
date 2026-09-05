@@ -53,7 +53,11 @@ Two caveats on the limits:
 ### Single-instance constraint (do not scale the portal service)
 
 **The portal runs exactly one container. `docker compose up --scale portal=2` is
-not supported and will cause incorrect behaviour, not just extra load.** Several
+not supported and would cause incorrect behaviour, not just extra load.** The
+portal service in `deploy/docker-compose.yml` pins `container_name:
+profile-portal-portal` for exactly this reason: an attempt to scale fails
+loudly with a container-name conflict instead of silently starting a second
+instance. Do not remove the fixed name to work around that error — several
 subsystems keep state in the process rather than in PostgreSQL or Redis:
 
 | Subsystem | Where the state lives | What a second container breaks |
@@ -220,7 +224,7 @@ of the same variables and are kept in sync with it.
 
 | Variable | Purpose |
 |----------|---------|
-| `NODE_ENV` | `production` on both the dev VM and real production. Defaults to `development`, which relaxes several fail-closed guards — always set it explicitly in a deployed container. |
+| `NODE_ENV` | `production` on both the dev VM and real production. Defaults to `development`, which relaxes several fail-closed guards — always set it explicitly in a deployed container. `docker-entrypoint.sh` refuses to start with any other value (the compose `env_file: .env` overrides the image's own `NODE_ENV=production`, so a copied dev `.env` fails loudly instead of silently disabling the guards). |
 | `DB_PASSWORD` | Postgres user password for the `portal` database user in Docker Compose. Required before deploying; use a long random password with no spaces. |
 | `DATABASE_URL` | PostgreSQL connection string |
 | `AUTH0_DOMAIN` | Auth0 tenant domain |
@@ -423,17 +427,26 @@ is genuinely required, restore the database from a pre-migration backup
 
 ### Backup
 
-Three separate things produce a dump. Know which one you are relying on:
+Three separate things produce a dump. Know which one you are relying on — only
+the scheduled script also backs up the uploads volume:
 
 | Source | When it runs | Retention | Offsite |
 |--------|--------------|-----------|---------|
-| `scripts/backup-database.sh` (cron / systemd timer on the VM) | daily, unattended | pruned by `BACKUP_RETENTION_DAYS`, floor of `BACKUP_MIN_KEEP` | yes, if `BACKUP_OFFSITE_COMMAND` is configured — **do configure it** |
+| `scripts/backup-database.sh` (cron / systemd timer on the VM) — DB dump **and** uploads archive | daily, unattended | pruned by `BACKUP_RETENTION_DAYS`, floor of `BACKUP_MIN_KEEP` | yes, if `BACKUP_OFFSITE_COMMAND` is configured — **do configure it** |
 | `scripts/deploy-image.sh` pre-deploy dump (`CREATE_BACKUP=true`, set by `Deploy production`) | only when production is deployed | none — grows forever | no |
 | Manual `pg_dump` (below) | when you run it | none | no |
 
 The pre-deploy dump is a per-release safety net, **not** a backup regime: it only
 exists on days a release ships. The scheduled timer is what gives us a recovery
 point objective.
+
+**Accepted RPO: 24 hours.** The daily dump at 02:15 with no WAL archiving means a
+restore can lose up to a day of claims, form submissions, and email-event state.
+This is a deliberate decision for a portal of this size, not an oversight: the
+data lost is recoverable by re-running the affected workflows (re-sending an
+invitation, re-claiming), and continuous archiving would add an operational
+dependency disproportionate to that risk. Revisit if the portal ever takes on
+data that cannot be reconstructed from CiviCRM, Auth0, or a re-run.
 
 #### Scheduled backups
 
@@ -444,8 +457,25 @@ the `-- PostgreSQL database dump complete` marker is present, so a truncated dum
 can never be mistaken for a good recovery point. Any failure exits non-zero with a
 `profile-portal backup FAILED:` line on stderr.
 
+The same run then archives the **uploads volume**
+(`profile-portal_uploads_data`) — the admin-uploaded catalog tile images served
+at `/uploads/images`. Those files live outside PostgreSQL, so a database-only
+regime would restore rows that reference images which no longer exist. The
+archive gets the same treatment as the dump: written to `.partial`, verified
+(gzip integrity check in place of the pg_dump marker), renamed only on success,
+shipped by `BACKUP_OFFSITE_COMMAND`, and pruned by the same retention rules.
+`tar` runs in a throwaway container that mounts the volume read-only, so the
+archive is produced even when the portal container is down or crash-looping —
+exactly when a backup matters most.
+
+If `BACKUP_PING_URL` is set, the script also pings a dead-man's-switch monitor
+after every fully successful run (and `<url>/fail` on failure) — see step 2 of
+the Monitoring checklist. Until it is set, the script nags on stderr on every
+run, same as the offsite warning.
+
 Install it on the VM (the repository is not checked out there, so copy the single
-script in — it has no dependencies beyond `docker` and `gzip`):
+script in — it has no dependencies beyond `docker` and `gzip`, plus `curl` if you
+set `BACKUP_PING_URL`):
 
 ```bash
 sudo install -o root -g root -m 750 backup-database.sh /opt/profile-portal/scripts/backup-database.sh
@@ -460,6 +490,8 @@ BACKUP_VERBOSE=true
 BACKUP_RETENTION_DAYS=14
 BACKUP_MIN_KEEP=7
 BACKUP_OFFSITE_COMMAND=rclone copyto "$1" itatti-backups:profile-portal/"$(basename "$1")"
+# Dead-man's-switch ping — see step 2 of the Monitoring checklist.
+BACKUP_PING_URL=https://hc-ping.com/<check-uuid>
 MAILTO=it@itatti.harvard.edu
 15 2 * * * /opt/profile-portal/scripts/backup-database.sh >> /var/log/profile-portal-backup.log
 ```
@@ -483,6 +515,8 @@ Environment=BACKUP_RETENTION_DAYS=14
 Environment=BACKUP_MIN_KEEP=7
 # Offsite copy — see "Offsite copy is required" below.
 Environment=BACKUP_OFFSITE_COMMAND=rclone copyto "$1" itatti-backups:profile-portal/"$(basename "$1")"
+# Dead-man's-switch ping — see step 2 of the Monitoring checklist.
+Environment=BACKUP_PING_URL=https://hc-ping.com/<check-uuid>
 ExecStart=/opt/profile-portal/scripts/backup-database.sh
 ```
 
@@ -511,26 +545,32 @@ sudo systemctl list-timers profile-portal-backup.timer
 #### Where dumps go and how long they are kept
 
 - Location: `BACKUP_DIR`, default `$DEPLOY_PATH/backups` (`/opt/profile-portal/backups`).
-- Filename: `profile_portal_<UTC-YYYYmmdd-HHMMSS>.sql.gz`. The pre-deploy dumps
-  from `deploy-image.sh` use `profile_portal_<image-tag>_<stamp>.sql` and are
-  pruned by the same retention rules.
-- Retention: dumps older than `BACKUP_RETENTION_DAYS` (default 14) are deleted,
+- Filenames: `profile_portal_<UTC-YYYYmmdd-HHMMSS>.sql.gz` for the dump and
+  `profile_portal_uploads_<same-stamp>.tar.gz` for the uploads archive — the
+  stamp matches within a run so a restore can pair them trivially. The
+  pre-deploy dumps from `deploy-image.sh` use
+  `profile_portal_<image-tag>_<stamp>.sql` and are pruned by the same retention
+  rules (no uploads archive: an app deploy does not change the uploads volume).
+- Retention: backups older than `BACKUP_RETENTION_DAYS` (default 14) are deleted,
   **except** that the newest `BACKUP_MIN_KEEP` (default 7) are always kept
-  regardless of age. That floor means a week of failed runs can never leave the
-  directory empty.
+  regardless of age. Database dumps and uploads archives are pruned as separate
+  families, so the floor applies to each. It means a week of failed runs can
+  never leave the directory empty.
 - The script refuses to run concurrently (lock directory `backups/.backup.lock`).
   If a run is killed, remove that directory manually. Leftover `*.partial` files
   are reported on stderr on the next run.
 
 #### Offsite copy is required
 
-`BACKUP_DIR` lives on the **same VM disk as the `pgdata` volume**, so a disk
-failure, a botched VM operation, or ransomware takes the database and every
-backup together. Local dumps only protect against logical damage (a bad
-migration, a wrong `DELETE`) — not against losing the host.
+`BACKUP_DIR` lives on the **same VM disk as the `pgdata` and uploads volumes**,
+so a disk failure, a botched VM operation, or ransomware takes the database,
+the uploaded images, and every backup together. Local backups only protect
+against logical damage (a bad migration, a wrong `DELETE`) — not against losing
+the host.
 
-Set `BACKUP_OFFSITE_COMMAND` to a command that ships the finished dump somewhere
-else. It runs via `bash -c`, receives the dump path as `"$1"`, and a non-zero
+Set `BACKUP_OFFSITE_COMMAND` to a command that ships each finished artifact
+somewhere else. It runs once per artifact (first the dump, then the uploads
+archive) via `bash -c`, receives the artifact path as `"$1"`, and a non-zero
 exit fails the whole backup run (so it alerts). Examples:
 
 ```sh
@@ -544,11 +584,11 @@ BACKUP_OFFSITE_COMMAND='aws s3 cp "$1" s3://itatti-profile-portal-backups/'
 BACKUP_OFFSITE_COMMAND='scp -i /root/.ssh/backup_key "$1" backups@backup-host:/srv/profile-portal/'
 ```
 
-If it is unset the script still produces a local dump but writes a
-`BACKUP_OFFSITE_COMMAND is not set` warning to stderr on every run — which cron
-will mail you daily until it is configured. That noise is intentional.
+If it is unset the script still produces the local dump and uploads archive but
+writes a `BACKUP_OFFSITE_COMMAND is not set` warning to stderr on every run —
+which cron will mail you daily until it is configured. That noise is intentional.
 
-#### Restore from a scheduled dump
+#### Restore from a scheduled backup
 
 Dumps are plain-text `pg_dump` output (no `--clean`), gzipped by default, so they
 carry `CREATE`/`COPY` statements but no `DROP`. Loading one into the existing,
@@ -556,6 +596,13 @@ populated `profile_portal` therefore fails with "already exists" under
 `ON_ERROR_STOP=1`. Always restore into a **fresh** database, then promote it —
 this also means a bad dump never destroys your current data before you've
 verified it.
+
+A full restore is **two artifacts**: the database dump *and* the uploads
+archive with the matching timestamp (step 4 below). Restoring only the database
+leaves catalog rows pointing at tile images that no longer exist. Deleted
+images are moved to `uploads/trash/` and kept for 7 days, so if the restored
+database references an image deleted up to 7 days before the backup, it is
+recoverable from `uploads/trash/` inside the same archive.
 
 ```bash
 cd /opt/profile-portal
@@ -586,6 +633,17 @@ docker compose exec -T db psql -U portal postgres -v ON_ERROR_STOP=1 \
   -c 'ALTER DATABASE profile_portal RENAME TO profile_portal_old;' \
   -c 'ALTER DATABASE profile_portal_restore RENAME TO profile_portal;'
 
+# 4. Restore the uploads volume from the archive with the same timestamp as the
+#    dump. The volume content is replaced wholesale; the portal is still
+#    stopped, so nothing is reading or writing it. Any locally present image
+#    with tar works for the throwaway container — the db image is reused here
+#    because it is guaranteed present (see backup-database.sh for the same trick).
+docker run --rm --log-driver none \
+  -v profile-portal_uploads_data:/uploads \
+  -v /opt/profile-portal/backups:/backups:ro \
+  --entrypoint sh postgres:17-alpine \
+  -c 'find /uploads -mindepth 1 -delete && tar -C /uploads -xzf /backups/profile_portal_uploads_20260731-021500.tar.gz'
+
 docker compose start portal
 docker compose logs -f portal   # confirm `prisma migrate deploy` reports no pending work
 # Once the app is confirmed healthy, drop the retired copy:
@@ -602,6 +660,10 @@ image, deploy the matching image tag instead of downgrading the schema.
 # Backup
 docker compose exec db pg_dump -U portal profile_portal > backup_$(date +%Y%m%d).sql
 
+# Uploads volume backup (same throwaway-container trick as the scheduled script)
+docker run --rm --log-driver none -v profile-portal_uploads_data:/uploads:ro \
+  --entrypoint tar postgres:17-alpine -C /uploads -czf - . > uploads_$(date +%Y%m%d).tar.gz
+
 # Restore — replaces the current database. Plain dumps carry no DROP statements,
 # so drop and recreate the target first; otherwise the load fails on existing
 # objects. Stop the app so nothing is connected to profile_portal.
@@ -610,6 +672,8 @@ docker compose exec -T db psql -U portal postgres -v ON_ERROR_STOP=1 \
   -c 'DROP DATABASE IF EXISTS profile_portal;' \
   -c 'CREATE DATABASE profile_portal OWNER portal;'
 docker compose exec -T db psql -U portal -v ON_ERROR_STOP=1 profile_portal < backup_file.sql
+# If the uploads volume needs restoring too, run step 4 of "Restore from a
+# scheduled backup" before starting the portal.
 docker compose start portal
 ```
 
@@ -639,34 +703,55 @@ volume, planned as its own maintenance window.
 ### Restore drill
 
 At least quarterly, restore the latest production-format backup into an isolated
-PostgreSQL instance, run `prisma migrate deploy`, start the exact production
-image, and verify `/api/health/ready`. Record the backup timestamp, image digest,
-restore duration, and tester. Never test a restore against the live production
-database or reuse production credentials in the isolated environment.
+PostgreSQL instance, unpack the matching uploads archive into an isolated
+uploads volume, run `prisma migrate deploy`, start the exact production image,
+and verify:
 
-Restore the newest **scheduled** dump (and, if an offsite copy is configured, the
-copy pulled back *from offsite* rather than the local file) — restoring a
-pre-deploy dump only proves the deploy path works, not the daily one.
+- `/api/health/ready` returns 200 (this also proves the restored uploads
+  directory is mounted and writable);
+- a catalog tile image referenced by the restored database is actually served
+  from `/uploads/images/…` — this is the check that catches a database restored
+  without its uploads.
+
+Record the backup timestamp, uploads archive name, image digest, restore
+duration, and tester. Never test a restore against the live production database
+or reuse production credentials in the isolated environment.
+
+Restore the newest **scheduled** dump and its same-stamp uploads archive (and,
+if an offsite copy is configured, the copies pulled back *from offsite* rather
+than the local files) — restoring a pre-deploy dump only proves the deploy path
+works, not the daily one.
 
 ## Monitoring
 
-**There is no monitoring today.** No Sentry, no Prometheus, no uptime check, no
-alerting. The Docker healthcheck marks a container `unhealthy` and `restart:
-unless-stopped` restarts it on exit, but nothing notifies a human, and nothing
-notices a container that is up and serving errors. This section describes the
-minimum that should be in place for launch; none of it is provisioned yet.
+**Nothing external is provisioned yet.** No Sentry, no Prometheus, no uptime
+check, no alerting. The Docker healthcheck marks a container `unhealthy` and
+`restart: unless-stopped` restarts it on exit, but nothing notifies a human, and
+nothing notices a container that is up and serving errors. The code-side hooks
+are in place — `/api/health/ready` for uptime checks, `BACKUP_PING_URL` in
+`scripts/backup-database.sh` for backup freshness — but every step below marked
+**[manual]** needs a human to create an account on an external service or
+install a cron line on the VM; none of that can ship from this repository.
 
-### 1. External uptime check against `/api/health/ready`
+Work through the checklist in order. Steps 1 and 2 are the launch blockers.
 
-`/api/health/ready` already verifies PostgreSQL, writable upload storage, and the
-job queue, and returns the running version. Point an external checker at it
-(anything that can do an HTTPS GET on a schedule — Better Stack / Uptime Robot /
-Healthchecks.io / a Cloudflare Worker cron / an existing I Tatti monitoring host):
+### 1. External uptime check on `/api/health/ready` — [manual: external service]
 
-- URL: `https://<portal-host>/api/health/ready`
-- Expect HTTP 200; treat any non-200 or timeout as down
-- Interval 1–5 minutes, alert after 2 consecutive failures
-- Alert to the IT inbox and, ideally, a phone-reachable channel
+`/api/health/ready` verifies PostgreSQL, writable upload storage, and the job
+queue, and reports the running version. Create an HTTPS check on any external
+monitor (Better Stack / Uptime Robot / a Cloudflare Worker cron / an existing
+I Tatti monitoring host) with exactly:
+
+- **URL:** `https://dev-profile.itatti.net/api/health/ready` for the dev VM;
+  `https://<production-host>/api/health/ready` once production has a hostname.
+- **Success condition:** HTTP 200. The 200 body is
+  `{"status":"ready","version":"<x.y.z>"}` — if the monitor supports keyword
+  assertions, also require `"status":"ready"`. A failing check answers 503 with
+  `{"status":"not_ready"}`; treat any non-200 or timeout as down.
+- **Frequency and alerting:** every 1–5 minutes, alert after 2 consecutive
+  failures, to `it@itatti.harvard.edu` **and** a phone-reachable channel.
+- **Do not** point it at the shallow `/api/health`: that answers 200 with a
+  dead database.
 
 The check **must come from outside the VM.** Requests the VM sends to its own
 public hostname hairpin through the Cloudflare edge, where the WAF answers with a
@@ -675,18 +760,68 @@ in 0.17.13. If the WAF also challenges the monitoring service, add a WAF skip ru
 for the checker's user agent or source IPs scoped to the `/api/health/ready` path
 only.
 
-Do not point the uptime check at the shallow `/api/health`: it answers 200 with a
-dead database.
+This one check also covers tunnel and certificate health: the tunnel is the only
+ingress, so if `cloudflared` drops, the app is fine and unreachable — which is
+exactly why the check must be external.
 
-### 2. Log-based alerting on ERROR
+### 2. Backup dead-man's switch — [manual: external service + VM env]
+
+A backup regime nobody watches is not a backup regime, and cron mail
+structurally cannot alert on a timer that silently stops firing — a job that
+never starts mails nobody. `scripts/backup-database.sh` already supports a
+dead-man's switch; it only needs a URL:
+
+1. Create a check on a ping-based monitor (e.g. Healthchecks.io) with an
+   expected period of **1 day** and a grace time of **2 hours** (the timer fires
+   at 02:15 with up to 15 minutes of randomized delay, plus dump time).
+2. Set `BACKUP_PING_URL=https://hc-ping.com/<check-uuid>` in the backup crontab
+   or systemd unit (both examples under "Scheduled backups" include the line).
+3. Verify: `sudo systemctl start profile-portal-backup.service` and confirm the
+   check flips to "up".
+
+The script pings the URL after a fully successful run (dump, uploads archive,
+and offsite copies all done) and pings `<url>/fail` on any failure. Until the
+variable is set it nags on stderr on every run, same as the offsite-copy
+warning — that noise is intentional.
+
+### 3. Crash-loop / OOM / unhealthy watch — [manual: VM cron]
+
+With a memory limit set, a `sharp`/PDF spike shows up as an OOM kill and a
+restart, not a host outage — and `restart: unless-stopped` hides fast restarts
+from the uptime check. A container that is `unhealthy` but alive is never
+restarted at all and keeps taking traffic. The portal container has a fixed
+name (`profile-portal-portal`), so the probe needs no compose context:
+
+```cron
+MAILTO=it@itatti.harvard.edu
+# Prints — and therefore mails — only when the state differs from "0 false healthy".
+*/15 * * * * docker inspect --format '{{.RestartCount}} {{.State.OOMKilled}} {{.State.Health.Status}}' profile-portal-portal | grep -v '^0 false healthy$'
+```
+
+`RestartCount` resets when a deploy recreates the container, so any non-zero
+value means crashes since the last deploy. If `OOMKilled` shows up under real
+load, raise the portal's memory limit and reservation together (see "Container
+runtime settings").
+
+### 4. Disk space — [manual: VM cron]
+
+Database dumps, uploads archives, 7 × 50 MB of logs per container, the uploads
+volume, and `pgdata` all share one disk; a full disk stops PostgreSQL writing
+and truncates backups. Alert at 80%:
+
+```cron
+0 8 * * * df -P /opt/profile-portal /var/lib/docker | awk 'NR>1 && $5+0 >= 80 {print "profile-portal VM disk at " $5 ": " $0}' | sort -u
+```
+
+### 5. Log-based alerting on ERROR — [manual: choose a log shipper]
 
 Logs are structured JSON from pino (`level: 50` = error, `60` = fatal) on the
 container's stdout, captured by the `json-file` driver with `max-size: 50m` /
 `max-file: 7`. Whatever ships or scans them, the minimum useful alert is
-"any `level >= 50` record", deduplicated over a few minutes:
+"any `level >= 50` record", deduplicated over a few minutes. Until a shipper is
+chosen, ad-hoc triage on the VM:
 
 ```bash
-# ad-hoc triage on the VM
 docker compose logs --since 24h portal | grep -c '"level":50'
 docker compose logs --since 1h portal | grep '"level":5[05]' | tail -20
 ```
@@ -697,19 +832,19 @@ ceiling: 7 × 50 MB per container. A noisy incident can roll the window in well
 under a day, so anything that needs post-hoc investigation has to be shipped off
 the box, not read from the local log later.
 
-### 3. What to watch specifically
+### 6. Application-level checks — [manual: part of the deploy routine]
 
-| Signal | Why it matters | Where to look |
-|--------|----------------|---------------|
-| **Crash loops** | With a memory limit set, a `sharp`/PDF spike shows up as an OOM kill and restart, not as a host outage. `restart: unless-stopped` hides it from the uptime check if restarts are fast. | `docker inspect --format '{{.RestartCount}} {{.State.OOMKilled}}' $(docker compose ps -q portal)` — alert on a rising restart count or `OOMKilled=true`. |
-| **Container `unhealthy`** | Readiness is failing but the process is alive, so no restart happens and the app keeps taking traffic. | `docker inspect --format '{{.State.Health.Status}}' $(docker compose ps -q portal)` |
-| **SES send failures** | Appointee and form-notification emails fail per-message; SES throttling or a verification/sandbox problem is invisible unless the error log is watched. `FAILED` rows in `appointee_email_events` are the durable evidence. | error-level logs from the email service; `SELECT status, count(*) FROM appointee_email_events GROUP BY status;` |
-| **Cron non-execution** | The worst failure here is silent. If `APPOINTEE_EMAIL_CRON_ENABLED` is unset the dispatcher is never even registered (see the callout in Environment Variables) and rows pile up in `PENDING`; the July automations likewise just never run. | On startup the server logs whether each schedule was registered — check that after every deploy. Then alert on `PENDING` rows older than ~48h: `SELECT count(*) FROM appointee_email_events WHERE status = 'PENDING' AND created_at < now() - interval '48 hours';` |
-| **Backup freshness** | A backup regime nobody watches is not a backup regime. | Newest file in `/opt/profile-portal/backups` older than ~26h, or a failed `systemctl status profile-portal-backup.service`. A dead-man's-switch ping (e.g. Healthchecks.io) appended to `BACKUP_OFFSITE_COMMAND` alerts on *absence* of a run, which plain cron mail cannot. |
-| **Disk space** | Dumps, 7×50 MB of logs per container, and the uploads volume share one disk with `pgdata`. A full disk stops PostgreSQL writing. | `df -h`, alert at 80%. |
-| **Certificate / tunnel health** | The tunnel is the only ingress; if `cloudflared` drops, the app is fine and unreachable. | Covered by the external uptime check, which is exactly why it must be external. |
+The worst failures here are silent, so until log shipping exists these are a
+human routine after every deploy (and weekly in between), not an automated
+monitor:
 
-### 4. Explicitly out of scope for now
+| Signal | Why it matters | Command |
+|--------|----------------|---------|
+| **Cron registration** | If `APPOINTEE_EMAIL_CRON_ENABLED` is unset the dispatcher is never even registered (see the callout in Environment Variables) and rows pile up in `PENDING`; the July automations likewise just never run. | On startup the server logs whether each schedule was registered — check that after every deploy and after any `.env` change. |
+| **Stuck email queue** | `PENDING` rows older than ~48h mean the dispatcher is off or failing. | `docker compose exec -T db psql -U portal profile_portal -c "SELECT count(*) FROM appointee_email_events WHERE status = 'PENDING' AND created_at < now() - interval '48 hours';"` — anything above 0 needs investigation. |
+| **SES send failures** | Appointee and form-notification emails fail per-message; SES throttling or a verification/sandbox problem is invisible unless watched. `FAILED` rows in `appointee_email_events` are the durable evidence. | `docker compose exec -T db psql -U portal profile_portal -c "SELECT status, count(*) FROM appointee_email_events GROUP BY status;"` plus error-level logs from the email service. |
+
+### 7. Explicitly out of scope for now
 
 No APM, no distributed tracing, no error-grouping service, no metrics/dashboards.
 Adding a Sentry (or equivalent) DSN for the server and the browser bundle is the
@@ -743,6 +878,10 @@ The sync is operated from the admin UI at `/admin/atlassian/sync`.
 Check logs: `docker compose logs portal`
 
 Common causes:
+- `FATAL: NODE_ENV is '…' but a deployed container requires 'production'` —
+  `docker-entrypoint.sh` refuses to start otherwise, because the host `.env`
+  overrides the image's `NODE_ENV` and a copied dev `.env` would silently
+  disable the production fail-closed guards. Fix `.env` and redeploy.
 - Missing required env vars (Zod validation fails at startup with a clear error listing missing vars)
 - Database not reachable (check `DATABASE_URL` and that the db container is healthy)
 - Migration failure (check if the migration SQL is valid)
@@ -770,8 +909,14 @@ naming the cause. The usual ones:
 - `Dump is missing the pg_dump completion marker` — the dump was truncated
   (usually a full disk). Check `df -h`; the `.partial` file is discarded, so no
   bad dump is left behind.
-- `Offsite copy failed` — the local dump is intact and kept; fix the remote and
-  re-run the script by hand.
+- `Uploads volume '…' does not exist` — the compose project uses a different
+  name than `profile-portal`, so the volume isn't `profile-portal_uploads_data`.
+  Set `UPLOADS_VOLUME` explicitly in the cron/systemd environment.
+- `Archiving the uploads volume failed` / `Uploads archive failed gzip integrity
+  verification` — usually a full disk, same as a truncated dump. The database
+  dump from the same run completed first and is intact and kept.
+- `Offsite copy failed` — the local artifact is intact and kept; fix the remote
+  and re-run the script by hand.
 
 ### SCIM sync returns errors
 

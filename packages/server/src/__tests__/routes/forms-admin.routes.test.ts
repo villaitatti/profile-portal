@@ -145,7 +145,7 @@ describe('POST /api/admin/forms/generate — CiviCRM form matching', () => {
     mockPrisma.formInvitation.findUnique.mockResolvedValue(null);
     mockPrisma.formInvitation.create.mockResolvedValue({
       id: 'inv_term',
-      token: 'term-token',
+      tokenHash: 'b'.repeat(64),
       fellowshipId: 10,
       contactId: 100,
       academicYear: '2026-2027',
@@ -167,15 +167,18 @@ describe('POST /api/admin/forms/generate — CiviCRM form matching', () => {
 
     expect(res.body).toMatchObject({
       id: 'inv_term',
-      token: 'term-token',
+      // The raw token is minted server-side and returned once; only its hash
+      // is stored, so the response token can never equal a stored value.
+      token: expect.any(String),
       formType: 'dumbarton-oaks-fellow-memorandum-v1',
       status: 'pending',
       created: true,
     });
+    expect(res.body.token).not.toBe('b'.repeat(64));
     expect(mockCivicrm.getFellowWithContact).toHaveBeenCalledWith(10, 100);
     expect(mockPrisma.formInvitation.create).toHaveBeenCalledWith({
       data: {
-        token: expect.any(String),
+        tokenHash: expect.any(String),
         fellowshipId: 10,
         contactId: 100,
         academicYear: '2026-2027',
@@ -199,7 +202,7 @@ function makeApp() {
 
 const baseInvitation = {
   id: 'inv_1',
-  token: 'tok_1',
+  tokenHash: 'a'.repeat(64),
   fellowshipId: 10,
   contactId: 100,
   academicYear: '2026-2027',
@@ -267,6 +270,7 @@ describe('GET /api/admin/forms/invitations — bearer + route wiring', () => {
 
     for (const item of res.body.items) {
       expect(item).not.toHaveProperty('token');
+      expect(item).not.toHaveProperty('tokenHash');
     }
   });
 

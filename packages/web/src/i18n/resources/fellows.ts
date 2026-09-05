@@ -12,7 +12,6 @@ export const fellows = {
       title: 'Manage Appointees',
       description: 'Track the onboarding lifecycle of current and past appointees.',
       loadFailed: 'Failed to load appointees',
-      unexpectedError: 'An unexpected error occurred',
       yearAppointees: '{{year}} Appointees',
       academicYear: 'Academic year',
       searchPlaceholder: 'Search by name or email...',
@@ -109,15 +108,16 @@ export const fellows = {
       waitingDescription:
         'Angela marked the nomination email as sent. The portal is waiting for the appointee to submit the form.',
       linkGeneratedDescription:
-        'The private form link exists. Copy it into Angela’s nomination email, then mark Nomination sent from the Actions menu.',
+        'A private form link exists. Use the copy button to generate a fresh link (the previous one stops working), paste it into Angela’s nomination email, then mark Nomination sent from the Actions menu.',
       thisAppointmentType: 'This appointment type',
       onDate: 'on {{date}}',
       sentDate: 'sent {{date}}',
       statusPopoverAria: 'View form status details',
       statusPopoverTitle: 'Form Status',
       configuredForm: 'Configured form: {{title}}',
-      copyLink: 'Copy form link',
-      copyLinkAria: 'Copy form link for {{name}}',
+      copyNewLink: 'Generate a new form link and copy it (the previous link stops working)',
+      copyNewLinkAria:
+        'Generate a new form link for {{name}} and copy it. The previous link stops working.',
       linkCopied: 'Form link for Appointee {{name}} copied',
       copyFailed: 'Failed to copy link.',
       noFormConfigured: 'No form configured',
@@ -125,7 +125,6 @@ export const fellows = {
       formDone: 'Form done',
       submittedOn: 'Submitted {{date}}',
       generateNewLink: 'Generate new form link',
-      copied: 'Copied!',
       generateLink: 'Generate form link',
       generateFailed: 'Failed to generate form link.',
       generatedCopyManually: 'Form link generated for {{name}}. Copy it from the button.',
@@ -249,7 +248,7 @@ export const fellows = {
       recipientDeleted: 'Original recipient no longer in CiviCRM. Rendered with placeholder name.',
       recipientNoFirstName:
         'Original recipient has no first name on file. Rendered with placeholder name.',
-      previewLoadFailed: 'Failed to load preview: {{message}}',
+      previewLoadFailed: 'Failed to load the preview. {{message}}',
       previewIframeTitle: 'Email preview',
       openInManage: 'Open in Manage Appointees',
       templatesNote:
@@ -318,6 +317,11 @@ export const fellows = {
         emptyRetiredTitle: 'No retired templates',
         emptyActiveDescription: 'Active form templates will appear here once configured.',
         emptyRetiredDescription: 'Retired templates are kept for archived submissions. None yet.',
+        loadErrorTitle: "Couldn't load the templates",
+        loadErrorDescription:
+          'The template list is temporarily unavailable. No templates have been removed.',
+        tryAgain: 'Try again',
+        tryingAgain: 'Trying again…',
         statusNavAria: 'Template status',
         active: 'Active',
         retired: 'Retired',
@@ -448,7 +452,6 @@ export const fellows = {
       title: 'Gestione incaricati',
       description: 'Segui il percorso di onboarding degli incaricati attuali e passati.',
       loadFailed: 'Impossibile caricare gli incaricati',
-      unexpectedError: 'Si è verificato un errore imprevisto',
       yearAppointees: 'Incaricati {{year}}',
       academicYear: 'Anno accademico',
       searchPlaceholder: 'Cerca per nome o email...',
@@ -546,15 +549,16 @@ export const fellows = {
       waitingDescription:
         'Angela ha segnato l’email di nomina come inviata. Il portale è in attesa che l’incaricato invii il modulo.',
       linkGeneratedDescription:
-        'Il link privato al modulo esiste. Copialo nell’email di nomina di Angela, poi segna Nomina inviata dal menu Azioni.',
+        'Esiste un link privato al modulo. Usa il pulsante di copia per generare un nuovo link (il precedente smette di funzionare), incollalo nell’email di nomina di Angela, poi segna Nomina inviata dal menu Azioni.',
       thisAppointmentType: 'Questo tipo di incarico',
       onDate: 'il {{date}}',
       sentDate: 'inviato il {{date}}',
       statusPopoverAria: 'Mostra i dettagli dello stato del modulo',
       statusPopoverTitle: 'Stato del modulo',
       configuredForm: 'Modulo configurato: {{title}}',
-      copyLink: 'Copia link modulo',
-      copyLinkAria: 'Copia il link del modulo per {{name}}',
+      copyNewLink: 'Genera un nuovo link al modulo e copialo (il link precedente smette di funzionare)',
+      copyNewLinkAria:
+        'Genera un nuovo link al modulo per {{name}} e copialo. Il link precedente smette di funzionare.',
       linkCopied: 'Link del modulo per l’incaricato {{name}} copiato',
       copyFailed: 'Impossibile copiare il link.',
       noFormConfigured: 'Nessun modulo configurato',
@@ -562,7 +566,6 @@ export const fellows = {
       formDone: 'Modulo completato',
       submittedOn: 'Inviato il {{date}}',
       generateNewLink: 'Genera nuovo link modulo',
-      copied: 'Copiato!',
       generateLink: 'Genera link modulo',
       generateFailed: 'Impossibile generare il link del modulo.',
       generatedCopyManually: 'Link del modulo generato per {{name}}. Copialo dal pulsante.',
@@ -689,7 +692,7 @@ export const fellows = {
         'Il destinatario originale non è più in CiviCRM. Anteprima generata con un nome segnaposto.',
       recipientNoFirstName:
         'Il destinatario originale non ha un nome registrato. Anteprima generata con un nome segnaposto.',
-      previewLoadFailed: 'Impossibile caricare l’anteprima: {{message}}',
+      previewLoadFailed: 'Impossibile caricare l’anteprima. {{message}}',
       previewIframeTitle: 'Anteprima email',
       openInManage: 'Apri in Gestione incaricati',
       templatesNote:
@@ -760,6 +763,11 @@ export const fellows = {
         emptyActiveDescription: 'I template attivi compariranno qui una volta configurati.',
         emptyRetiredDescription:
           'I template ritirati sono conservati per gli invii archiviati. Nessuno finora.',
+        loadErrorTitle: 'Impossibile caricare i template',
+        loadErrorDescription:
+          'L’elenco dei template è temporaneamente non disponibile. Nessun template è stato rimosso.',
+        tryAgain: 'Riprova',
+        tryingAgain: 'Nuovo tentativo…',
         statusNavAria: 'Stato dei template',
         active: 'Attivi',
         retired: 'Ritirati',

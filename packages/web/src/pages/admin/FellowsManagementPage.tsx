@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { SelectDropdown } from '@/components/shared/SelectDropdown';
 import { useFellowsDashboard } from '@/api/fellows';
+import { userErrorMessage } from '@/lib/errors';
 import { getCurrentAcademicYear } from './utils/academic-year';
 import { Users, Search, AlertCircle, X } from 'lucide-react';
 import type {
@@ -237,9 +238,7 @@ export function FellowsManagementPage() {
         <div className="flex flex-col items-center justify-center py-16 text-destructive">
           <AlertCircle className="h-12 w-12 mb-4" />
           <h3 className="text-lg font-medium mb-1">{t('fellows.manage.loadFailed')}</h3>
-          <p className="text-sm text-muted-foreground">
-            {error instanceof Error ? error.message : t('fellows.manage.unexpectedError')}
-          </p>
+          <p className="text-sm text-muted-foreground">{userErrorMessage(error, t)}</p>
         </div>
       </div>
     );

@@ -46,7 +46,7 @@ function makeApp() {
 const invitationResult = {
   invitation: {
     id: 'inv_1',
-    token: 'secret-token',
+    tokenHash: 'c'.repeat(64),
     formType: 'fellow-memorandum-v3',
     status: 'submitted',
     submittedAt: new Date('2026-07-01T10:00:00.000Z'),
@@ -73,6 +73,7 @@ describe('public form routes', () => {
     });
     expect(response.body).not.toHaveProperty('response');
     expect(response.body).not.toHaveProperty('token');
+    expect(response.body).not.toHaveProperty('tokenHash');
   });
 
   it('prevents caches from retaining invalid bearer-link responses', async () => {

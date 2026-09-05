@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, Route, Routes, useNavigate } from 'react-router';
-import { useState, type ReactNode } from 'react';
+import { createMemoryRouter, RouterProvider, useNavigate } from 'react-router';
+import { useState } from 'react';
 
 const { mockUsePublicForm, mockUseSubmitForm, mockMutate } = vi.hoisted(() => ({
   mockUsePublicForm: vi.fn(),
@@ -46,19 +46,44 @@ const minimalForm: FormDef = {
   ],
 };
 
-function makeWrapper(initialToken = 'tok_abc') {
+// Inside the route element: a button that calls useNavigate() to push
+// /forms/tokB. No unmount, no router remount — React Router keeps the same
+// PublicFormPage instance alive and only useParams() changes.
+function NavButton() {
+  const navigate = useNavigate();
+  return <button onClick={() => void navigate('/forms/tokB')}>nav</button>;
+}
+
+/**
+ * PublicFormRenderer calls useBlocker, which only works under a data router,
+ * so the page mounts through createMemoryRouter. The route element is fixed at
+ * router creation, so plain rerender() can't reach the page — rerenderPage()
+ * bumps harness state instead (used after changing what the mocks return).
+ */
+function renderPage({ token = 'tok_abc', withNav = false } = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0, staleTime: 0 } },
   });
-  return ({ children }: { children: ReactNode }) => (
+  let bump: () => void = () => {};
+  function Harness() {
+    const [, setVersion] = useState(0);
+    bump = () => setVersion((v) => v + 1);
+    return (
+      <>
+        {withNav && <NavButton />}
+        <PublicFormPage />
+      </>
+    );
+  }
+  const router = createMemoryRouter([{ path: '/forms/:token', element: <Harness /> }], {
+    initialEntries: [`/forms/${token}`],
+  });
+  const utils = render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[`/forms/${initialToken}`]}>
-        <Routes>
-          <Route path="/forms/:token" element={children} />
-        </Routes>
-      </MemoryRouter>
+      <RouterProvider router={router} />
     </QueryClientProvider>
   );
+  return { ...utils, rerenderPage: () => act(() => bump()) };
 }
 
 beforeEach(() => {
@@ -92,7 +117,7 @@ describe('PublicFormPage — submission flow', () => {
       isSuccess: false,
     });
 
-    render(<PublicFormPage />, { wrapper: makeWrapper() });
+    renderPage();
 
     expect(screen.getByText(/Form Already Submitted/)).toBeInTheDocument();
     // Not the renderer's success screen — this is the re-visit message.
@@ -120,7 +145,7 @@ describe('PublicFormPage — submission flow', () => {
       isSuccess: false,
     });
 
-    render(<PublicFormPage />, { wrapper: makeWrapper() });
+    renderPage();
 
     expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Try again' }) !== null).toBe(canRetry);
@@ -150,7 +175,7 @@ describe('PublicFormPage — submission flow', () => {
       isSuccess: false,
     });
 
-    render(<PublicFormPage />, { wrapper: makeWrapper() });
+    renderPage();
 
     expect(screen.getByRole('heading', { name: 'Fellow Memorandum' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Submit/ })).toBeInTheDocument();
@@ -176,7 +201,7 @@ describe('PublicFormPage — submission flow', () => {
       isSuccess: false,
     });
 
-    render(<PublicFormPage />, { wrapper: makeWrapper() });
+    renderPage();
 
     expect(screen.getByRole('heading', { name: 'Form Link Expired' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Submit/ })).not.toBeInTheDocument();
@@ -204,7 +229,7 @@ describe('PublicFormPage — submission flow', () => {
       isSuccess: false,
     });
 
-    const { rerender } = render(<PublicFormPage />, { wrapper: makeWrapper() });
+    const { rerenderPage } = renderPage();
     expect(screen.getByRole('button', { name: /Submit/ })).toBeInTheDocument();
 
     mockUsePublicForm.mockReturnValue({
@@ -222,9 +247,81 @@ describe('PublicFormPage — submission flow', () => {
       refetch: vi.fn(),
     });
 
-    rerender(<PublicFormPage />);
+    rerenderPage();
     expect(screen.getByRole('heading', { name: 'Form Link Expired' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Submit/ })).not.toBeInTheDocument();
+  });
+
+  it('keeps a partially-filled form when a background refetch fails with stale data present', async () => {
+    // TanStack Query keeps stale `data` AND sets `error` when a background
+    // refetch fails (focus refetch on flaky wifi, or a 410 because the window
+    // expired mid-fill). The error screen must NOT replace the form: the
+    // renderer holds all typed values and unmounting it destroys them.
+    const pendingReturn = {
+      data: {
+        id: 'inv_1',
+        formType: 'fellow-memorandum',
+        status: 'pending',
+        submittedAt: null,
+        expiresAt: '2026-10-24T10:00:00.000Z',
+        formDef: minimalForm,
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: vi.fn(),
+    };
+    mockUsePublicForm.mockReturnValue(pendingReturn);
+    mockUseSubmitForm.mockReturnValue({
+      mutate: mockMutate,
+      isPending: false,
+      error: null,
+      isSuccess: false,
+    });
+
+    const { rerenderPage } = renderPage();
+
+    const user = userEvent.setup();
+    await user.type(screen.getAllByRole('textbox')[0], 'Maria Bianchi');
+
+    mockUsePublicForm.mockReturnValue({
+      ...pendingReturn,
+      error: new PublicFormRequestError('gone', 410),
+    });
+    rerenderPage();
+
+    // Still the form, with the typed value intact — not the expired screen.
+    expect(screen.getByRole('button', { name: /Submit/ })).toBeInTheDocument();
+    expect(screen.getAllByRole('textbox')[0]).toHaveValue('Maria Bianchi');
+    expect(screen.queryByRole('heading', { name: 'Form Link Expired' })).not.toBeInTheDocument();
+  });
+
+  it('stops refetching on window focus once the form data has loaded', () => {
+    // A mid-fill focus refetch that comes back changed (expired or submitted
+    // elsewhere) would unmount the renderer and destroy the typed values, so
+    // focus refetching ends as soon as the form has data to show.
+    mockUsePublicForm.mockReturnValue({
+      data: {
+        id: 'inv_1',
+        formType: 'fellow-memorandum',
+        status: 'pending',
+        submittedAt: null,
+        expiresAt: '2026-10-24T10:00:00.000Z',
+        formDef: minimalForm,
+      },
+      isLoading: false,
+      error: null,
+    });
+    mockUseSubmitForm.mockReturnValue({
+      mutate: mockMutate,
+      isPending: false,
+      error: null,
+      isSuccess: false,
+    });
+
+    renderPage();
+
+    expect(mockUsePublicForm).toHaveBeenLastCalledWith('tok_abc', { refetchOnWindowFocus: false });
   });
 
   it('shows the "Thank you!" success screen after a just-completed submit — NOT "Already Submitted"', async () => {
@@ -248,7 +345,7 @@ describe('PublicFormPage — submission flow', () => {
       isSuccess: false,
     });
 
-    const { rerender } = render(<PublicFormPage />, { wrapper: makeWrapper() });
+    const { rerenderPage } = renderPage();
 
     // Form is showing.
     expect(screen.getByRole('button', { name: /Submit/ })).toBeInTheDocument();
@@ -275,7 +372,7 @@ describe('PublicFormPage — submission flow', () => {
       isSuccess: true,
     });
 
-    rerender(<PublicFormPage />);
+    rerenderPage();
 
     await waitFor(() => {
       // MUST be the renderer's success screen, NOT the "Already Submitted" branch.
@@ -331,33 +428,7 @@ describe('PublicFormPage — submission flow', () => {
       isSuccess: false,
     });
 
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0, staleTime: 0 } },
-    });
-    // Inside the route element: a button that calls useNavigate() to push
-    // /forms/tokB. No unmount, no router remount — React Router keeps the
-    // same PublicFormPage instance alive and only useParams() changes.
-    const NavButton = () => {
-      const navigate = useNavigate();
-      return <button onClick={() => void navigate('/forms/tokB')}>nav</button>;
-    };
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={['/forms/tokA']}>
-          <Routes>
-            <Route
-              path="/forms/:token"
-              element={
-                <>
-                  <NavButton />
-                  <PublicFormPage />
-                </>
-              }
-            />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>
-    );
+    renderPage({ token: 'tokA', withNav: true });
 
     // tokA is submitted → expect the re-visit message.
     expect(screen.getByText(/Form Already Submitted/)).toBeInTheDocument();
@@ -389,7 +460,7 @@ describe('PublicFormPage — submission flow', () => {
       isSuccess: true,
     });
 
-    render(<PublicFormPage />, { wrapper: makeWrapper() });
+    renderPage();
 
     expect(screen.getByText(/Your form has been submitted successfully/)).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Form Not Found' })).not.toBeInTheDocument();
@@ -415,7 +486,7 @@ describe('PublicFormPage — submission flow', () => {
       isSuccess: true,
     });
 
-    render(<PublicFormPage />, { wrapper: makeWrapper() });
+    renderPage();
 
     expect(mockUsePublicForm).toHaveBeenCalledWith('tok_abc', { refetchOnWindowFocus: false });
   });
@@ -446,30 +517,7 @@ describe('PublicFormPage — submission flow', () => {
       };
     });
 
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0, staleTime: 0 } },
-    });
-    const NavButton = () => {
-      const navigate = useNavigate();
-      return <button onClick={() => void navigate('/forms/tokB')}>nav</button>;
-    };
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={['/forms/tokA']}>
-          <Routes>
-            <Route
-              path="/forms/:token"
-              element={
-                <>
-                  <NavButton />
-                  <PublicFormPage />
-                </>
-              }
-            />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>
-    );
+    renderPage({ token: 'tokA', withNav: true });
 
     const user = userEvent.setup();
     await user.type(screen.getAllByRole('textbox')[0], 'Maria Bianchi');
@@ -504,7 +552,7 @@ describe('PublicFormPage — submission flow', () => {
       isSuccess: false,
     });
 
-    render(<PublicFormPage />, { wrapper: makeWrapper() });
+    renderPage();
 
     expect(screen.getByText(/This form has already been submitted/)).toBeInTheDocument();
     expect(screen.queryByText(/Invalid Date/)).not.toBeInTheDocument();
@@ -532,13 +580,52 @@ describe('PublicFormPage — submission flow', () => {
       isSuccess: false,
     });
 
-    render(<PublicFormPage />, { wrapper: makeWrapper() });
+    renderPage();
 
     expect(screen.getByText('Validation failed')).toBeInTheDocument();
     expect(
       screen.getByText(/Full name: String must contain at most 200 character\(s\)/)
     ).toBeInTheDocument();
   });
+
+  it.each([
+    ['a network failure', new TypeError('Failed to fetch'), 'Failed to fetch'],
+    [
+      'a 5xx response',
+      new PublicFormSubmitError('Internal Server Error', 500),
+      'Internal Server Error',
+    ],
+  ])(
+    'shows the translated generic message — not the raw error — when the submit fails on %s',
+    (_label, error, rawMessage) => {
+      // Error contract: raw transport/server internals never reach the
+      // appointee. Only deliberate 4xx messages (validation, expiry) pass
+      // through; everything else gets the translated fallback.
+      mockUsePublicForm.mockReturnValue({
+        data: {
+          id: 'inv_1',
+          formType: 'fellow-memorandum',
+          status: 'pending',
+          submittedAt: null,
+          expiresAt: '2026-10-24T10:00:00.000Z',
+          formDef: minimalForm,
+        },
+        isLoading: false,
+        error: null,
+      });
+      mockUseSubmitForm.mockReturnValue({
+        mutate: mockMutate,
+        isPending: false,
+        error,
+        isSuccess: false,
+      });
+
+      renderPage();
+
+      expect(screen.getByRole('alert')).toHaveTextContent(/We could not submit your form/);
+      expect(screen.queryByText(rawMessage)).not.toBeInTheDocument();
+    }
+  );
 
   it('passes submitted values through useSubmitForm.mutate when the form is submitted', async () => {
     mockUsePublicForm.mockReturnValue({
@@ -560,7 +647,7 @@ describe('PublicFormPage — submission flow', () => {
       isSuccess: false,
     });
 
-    render(<PublicFormPage />, { wrapper: makeWrapper() });
+    renderPage();
 
     const user = userEvent.setup();
     // minimalForm has exactly one text field; PublicFormRenderer's labels

@@ -23,6 +23,7 @@ vi.mock('@/api/automations', () => ({
 }));
 
 import { AutomationsPage } from '@/pages/admin/AutomationsPage';
+import i18n from '@/i18n/config';
 
 /** The three automation cards are identical — scope queries to the first one. */
 function firstCard() {
@@ -48,9 +49,11 @@ describe('AutomationsPage — action failures', () => {
 
     await waitFor(() => {
       expect(within(firstCard() as HTMLElement).getByRole('alert')).toHaveTextContent(
-        /Preview failed: auth0 rate limited/
+        /Preview failed — nothing was changed/
       );
     });
+    // The raw exception text stays off screen.
+    expect(screen.getByRole('alert')).not.toHaveTextContent('auth0 rate limited');
     expect(screen.getAllByRole('alert')).toHaveLength(1);
   });
 
@@ -72,9 +75,11 @@ describe('AutomationsPage — action failures', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent(
-        /Execution failed: execution only works in production/
+        /Execution failed — some changes may already have been applied/
       );
     });
+    // The raw exception text stays off screen.
+    expect(screen.getByRole('alert')).not.toHaveTextContent('execution only works in production');
     expect(screen.getByText(/Preview: 1 action/)).toBeInTheDocument();
   });
 
@@ -97,5 +102,55 @@ describe('AutomationsPage — action failures', () => {
     await user.click(previewButton);
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
     expect(screen.getByText('No changes needed.')).toBeInTheDocument();
+  });
+});
+
+describe('AutomationsPage — history status labels', () => {
+  // The server marks every executed dry run as status 'consumed'
+  // (AutomationRunStatus). The history must translate it like the other
+  // statuses, not leak the raw API word.
+  const consumedRun = {
+    id: 'run_c1',
+    type: 'end-of-year-cleanup',
+    status: 'consumed',
+    triggeredBy: 'admin@itatti.harvard.edu',
+    academicYear: '2026-2027',
+    startedAt: '2026-07-01T04:00:00.000Z',
+    completedAt: '2026-07-01T04:00:05.000Z',
+    result: null,
+    stats: null,
+  };
+
+  it('labels a consumed run as an executed dry run — never the raw API word', () => {
+    mockUseAutomationRuns.mockReturnValue({
+      data: [consumedRun],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+
+    render(<AutomationsPage />);
+
+    expect(screen.getByText('Dry run (executed)')).toBeInTheDocument();
+    expect(screen.queryByText('consumed')).not.toBeInTheDocument();
+  });
+
+  it('labels a consumed run in Italian too', async () => {
+    mockUseAutomationRuns.mockReturnValue({
+      data: [consumedRun],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+
+    await i18n.changeLanguage('it');
+    try {
+      render(<AutomationsPage />);
+
+      expect(screen.getByText('Simulazione (eseguita)')).toBeInTheDocument();
+      expect(screen.queryByText('consumed')).not.toBeInTheDocument();
+    } finally {
+      await i18n.changeLanguage('en');
+    }
   });
 });

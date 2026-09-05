@@ -6,15 +6,16 @@ import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { FormsSectionNav } from '@/pages/admin/components/FormsSectionNav';
 import { cn } from '@/lib/utils';
+import { userErrorMessage } from '@/lib/errors';
 import { isActiveFormDef } from '@itatti/shared';
-import { FileText } from 'lucide-react';
+import { AlertCircle, FileText } from 'lucide-react';
 import type { FormDef, FormFieldDef, FormSectionDef } from '@itatti/shared';
 
 type TemplateTab = 'active' | 'retired';
 
 export function FormsTemplatesPage() {
   const { t } = useTranslation();
-  const { data: registry, isLoading } = useFormRegistry();
+  const { data: registry, isLoading, error, isFetching, refetch } = useFormRegistry();
   const [tab, setTab] = useState<TemplateTab>('active');
 
   // The registry appends each new form definition at the end (within a given
@@ -43,35 +44,67 @@ export function FormsTemplatesPage() {
       <FormsSectionNav />
 
       <div className="mt-6 space-y-6">
-        <TemplateTabs
-          tab={tab}
-          onTabChange={setTab}
-          activeCount={active.length}
-          retiredCount={retired.length}
-        />
-
-        {isLoading ? (
-          <LoadingSpinner />
-        ) : forms.length === 0 ? (
-          <EmptyState
-            icon={<FileText className="h-12 w-12 mb-4" />}
-            title={
-              tab === 'active'
-                ? t('fellows.forms.templates.emptyActiveTitle')
-                : t('fellows.forms.templates.emptyRetiredTitle')
-            }
-            description={
-              tab === 'active'
-                ? t('fellows.forms.templates.emptyActiveDescription')
-                : t('fellows.forms.templates.emptyRetiredDescription')
-            }
-          />
-        ) : (
-          <div className="space-y-6">
-            {forms.map((form) => (
-              <FormCard key={form.id} form={form} />
-            ))}
+        {error ? (
+          // Distinct from the empty state on purpose: a failed registry fetch
+          // must not read as "no active templates" — including the tabs' zero
+          // counts, which is why they are not rendered here. role="alert" so
+          // assistive tech announces the failure, not just a layout swap.
+          <div role="alert">
+            <EmptyState
+              icon={<AlertCircle className="h-12 w-12 mb-4 text-destructive" />}
+              title={t('fellows.forms.templates.loadErrorTitle')}
+              description={userErrorMessage(
+                error,
+                t,
+                t('fellows.forms.templates.loadErrorDescription')
+              )}
+              action={
+                <button
+                  type="button"
+                  onClick={() => void refetch()}
+                  disabled={isFetching}
+                  className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {isFetching
+                    ? t('fellows.forms.templates.tryingAgain')
+                    : t('fellows.forms.templates.tryAgain')}
+                </button>
+              }
+            />
           </div>
+        ) : (
+          <>
+            <TemplateTabs
+              tab={tab}
+              onTabChange={setTab}
+              activeCount={active.length}
+              retiredCount={retired.length}
+            />
+
+            {isLoading ? (
+              <LoadingSpinner />
+            ) : forms.length === 0 ? (
+              <EmptyState
+                icon={<FileText className="h-12 w-12 mb-4" />}
+                title={
+                  tab === 'active'
+                    ? t('fellows.forms.templates.emptyActiveTitle')
+                    : t('fellows.forms.templates.emptyRetiredTitle')
+                }
+                description={
+                  tab === 'active'
+                    ? t('fellows.forms.templates.emptyActiveDescription')
+                    : t('fellows.forms.templates.emptyRetiredDescription')
+                }
+              />
+            ) : (
+              <div className="space-y-6">
+                {forms.map((form) => (
+                  <FormCard key={form.id} form={form} />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

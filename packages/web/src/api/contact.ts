@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { apiFetch, useApiToken } from './client';
+import { userErrorMessage } from '@/lib/errors';
 import { toast } from 'sonner';
 import { LOCATION_TYPES } from '@itatti/shared';
 import type {
@@ -74,7 +75,7 @@ export function useCreateAddress() {
       if (context?.previous) {
         queryClient.setQueryData(['profile', 'addresses'], context.previous);
       }
-      toast.error(err instanceof Error ? err.message : t('profile.contact.toasts.addressSaveFailed'));
+      toast.error(userErrorMessage(err, t, t('profile.contact.toasts.addressSaveFailed')));
     },
   });
 }
@@ -116,7 +117,7 @@ export function useUpdateAddress() {
       if (context?.previous) {
         queryClient.setQueryData(['profile', 'addresses'], context.previous);
       }
-      toast.error(err instanceof Error ? err.message : t('profile.contact.toasts.addressUpdateFailed'));
+      toast.error(userErrorMessage(err, t, t('profile.contact.toasts.addressUpdateFailed')));
     },
   });
 }
@@ -150,7 +151,7 @@ export function useDeleteAddress() {
       if (context?.previous) {
         queryClient.setQueryData(['profile', 'addresses'], context.previous);
       }
-      toast.error(err instanceof Error ? err.message : t('profile.contact.toasts.addressDeleteFailed'));
+      toast.error(userErrorMessage(err, t, t('profile.contact.toasts.addressDeleteFailed')));
     },
   });
 }
@@ -273,7 +274,7 @@ export function useCreatePhone() {
       if (context?.previous) {
         queryClient.setQueryData(['profile', 'phones'], context.previous);
       }
-      toast.error(err instanceof Error ? err.message : t('profile.contact.toasts.phoneSaveFailed'));
+      toast.error(userErrorMessage(err, t, t('profile.contact.toasts.phoneSaveFailed')));
     },
   });
 }
@@ -308,7 +309,7 @@ export function useUpdatePhone() {
       if (context?.previous) {
         queryClient.setQueryData(['profile', 'phones'], context.previous);
       }
-      toast.error(err instanceof Error ? err.message : t('profile.contact.toasts.phoneUpdateFailed'));
+      toast.error(userErrorMessage(err, t, t('profile.contact.toasts.phoneUpdateFailed')));
     },
   });
 }
@@ -342,7 +343,7 @@ export function useDeletePhone() {
       if (context?.previous) {
         queryClient.setQueryData(['profile', 'phones'], context.previous);
       }
-      toast.error(err instanceof Error ? err.message : t('profile.contact.toasts.phoneDeleteFailed'));
+      toast.error(userErrorMessage(err, t, t('profile.contact.toasts.phoneDeleteFailed')));
     },
   });
 }

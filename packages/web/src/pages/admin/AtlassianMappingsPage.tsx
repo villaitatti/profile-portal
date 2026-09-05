@@ -16,6 +16,7 @@ import {
   useAtlassianGroups,
 } from '@/api/sync';
 import type { RoleGroupMapping } from '@/api/sync';
+import { userErrorMessage } from '@/lib/errors';
 import { Plus, ArrowRight, Trash2, Info, Link as LinkIcon, Search, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -143,7 +144,7 @@ export function AtlassianMappingsPage() {
         // A duplicate mapping comes back as 409 with a usable message; without
         // this the Add button just did nothing.
         onError: (err) =>
-          toast.error(err instanceof Error ? err.message : t('admin.atlassian.mappings.addFailed')),
+          toast.error(userErrorMessage(err, t, t('admin.atlassian.mappings.addFailed'))),
       }
     );
   };
@@ -155,7 +156,7 @@ export function AtlassianMappingsPage() {
       // Deliberately leaves the dialog open so the admin can retry or cancel
       // rather than being dropped back to a list that still shows the mapping.
       onError: (err) =>
-        toast.error(err instanceof Error ? err.message : t('admin.atlassian.mappings.deleteFailed')),
+        toast.error(userErrorMessage(err, t, t('admin.atlassian.mappings.deleteFailed'))),
     });
   };
 

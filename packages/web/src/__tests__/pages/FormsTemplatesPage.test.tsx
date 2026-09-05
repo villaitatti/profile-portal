@@ -139,6 +139,42 @@ describe('FormsTemplatesPage', () => {
     expect(screen.queryByText('fellow-memorandum-v3')).not.toBeInTheDocument();
   });
 
+  it('announces a failed registry fetch instead of showing the empty state', () => {
+    mockUseFormRegistry.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: new Error('500'),
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+
+    render(<FormsTemplatesPage />, { wrapper: makeWrapper() });
+
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load the templates");
+    // A failed request must not read as "no active templates" — neither the
+    // empty state nor the tabs' zero counts may render.
+    expect(screen.queryByText('No active templates')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('navigation', { name: 'Template status' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('wires "Try again" to refetch', async () => {
+    const refetch = vi.fn();
+    mockUseFormRegistry.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: new Error('500'),
+      isFetching: false,
+      refetch,
+    });
+
+    render(<FormsTemplatesPage />, { wrapper: makeWrapper() });
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Try again' }));
+
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
   it('renders the active empty state when the registry has no templates', () => {
     mockUseFormRegistry.mockReturnValue({ data: [], isLoading: false });
 

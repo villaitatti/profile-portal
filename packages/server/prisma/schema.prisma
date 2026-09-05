@@ -78,6 +78,13 @@ enum AutomationRunStatus {
   completed
   failed
   partial
+  // A dry_run row flips to consumed atomically when execution starts
+  // (migration 20260903090000). Exactly one caller can win that flip, so a
+  // double-click or replayed execute POST cannot run the same July automation
+  // twice against Auth0/JSM. The execution itself is recorded as a separate
+  // `executing` row, mirroring the SyncRun dry-run/execution split. Listed
+  // last to match ALTER TYPE ... ADD VALUE, which appends.
+  consumed
 
   @@map("automation_run_status")
 }
@@ -174,7 +181,10 @@ enum FormInvitationStatus {
 
 model FormInvitation {
   id               String    @id @default(cuid())
-  token            String    @unique
+  // sha256 hex of the bearer token (lib/hash-token.ts). The raw token is never
+  // stored — it exists only in the generated link/email — so a leaked backup
+  // cannot be replayed against the public form endpoints.
+  tokenHash        String    @unique @map("token_hash")
   fellowshipId     Int       @map("fellowship_id")
   contactId        Int       @map("contact_id")
   academicYear     String    @map("academic_year")

@@ -13,6 +13,7 @@ const { mockEnv } = vi.hoisted(() => ({
     PORTAL_PUBLIC_URL: 'https://portal.test.example',
     FORM_NOTIFICATION_EMAIL: 'forms@itatti.harvard.edu',
     FORM_NOTIFICATION_OVERRIDE_TO: '',
+    ADMIN_NOTIFICATION_EMAIL: '',
   },
 }));
 
@@ -49,6 +50,9 @@ import {
   sendVitIdInvitationEmail,
   sendBioProjectDescriptionEmail,
   sendFormNotificationEmail,
+  sendMissedAutomationAlert,
+  sendDailyDispatchFailureAlert,
+  sendAutomationReport,
 } from '../../services/email.service.js';
 
 beforeEach(() => {
@@ -66,6 +70,7 @@ beforeEach(() => {
     PORTAL_PUBLIC_URL: 'https://portal.test.example',
     FORM_NOTIFICATION_EMAIL: 'forms@itatti.harvard.edu',
     FORM_NOTIFICATION_OVERRIDE_TO: '',
+    ADMIN_NOTIFICATION_EMAIL: '',
   });
   sesSend.mockReset();
   SendEmailCommandMock.mockClear();
@@ -286,5 +291,102 @@ describe('sendFormNotificationEmail', () => {
     expect(rawMessage).toContain('Memorandum_I_Tatti_Fellowship_Grant_Information_Maria_Bianchi.pdf');
     expect(normalizedRawMessage).toContain(memorandumPdf.toString('base64'));
     expect(normalizedRawMessage).toContain(grantsPdf.toString('base64'));
+  });
+});
+
+describe('sendMissedAutomationAlert', () => {
+  it('sends under an alert subject — never the success-sounding "… Complete"', async () => {
+    // Regression: the missed-run incident used to reuse sendAutomationReport,
+    // whose subject hardcodes a "Complete" suffix, so a NEVER-COMPLETED
+    // automation arrived looking like a success.
+    mockEnv.ADMIN_NOTIFICATION_EMAIL = 'it@itatti.harvard.edu';
+
+    await sendMissedAutomationAlert({
+      type: 'end-of-year-cleanup',
+      academicYear: '2026-2027',
+      details: ['The scheduled end-of-year-cleanup automation appears to have NEVER COMPLETED.'],
+    });
+
+    expect(sesSend).toHaveBeenCalledOnce();
+    const cmd = SendEmailCommandMock.mock.calls[0][0];
+    expect(cmd.Message.Subject.Data).toBe(
+      'I Tatti Profile Portal — ALERT: July 1 Current Appointees Cleanup was NOT completed for 2026-2027'
+    );
+    expect(cmd.Destination.ToAddresses).toEqual(['it@itatti.harvard.edu']);
+  });
+
+  it('never throws — an unconfigured admin recipient only logs', async () => {
+    mockEnv.ADMIN_NOTIFICATION_EMAIL = '';
+
+    await expect(
+      sendMissedAutomationAlert({
+        type: 'new-cohort-onboarding',
+        academicYear: '2026-2027',
+        details: [],
+      })
+    ).resolves.toBeUndefined();
+    expect(sesSend).not.toHaveBeenCalled();
+  });
+});
+
+describe('sendAutomationReport outcome subjects', () => {
+  // Regression: the subject hardcoded a "Complete" suffix, so the July cron's
+  // failure report and a partial run both arrived looking like a success.
+  it.each([
+    [undefined, 'I Tatti Profile Portal Automation — July 1 Current Appointees Cleanup Complete'],
+    ['completed', 'I Tatti Profile Portal Automation — July 1 Current Appointees Cleanup Complete'],
+    [
+      'partial',
+      'I Tatti Profile Portal Automation — July 1 Current Appointees Cleanup PARTIALLY Complete — action needed',
+    ],
+    [
+      'failed',
+      'I Tatti Profile Portal Automation — July 1 Current Appointees Cleanup FAILED — action needed',
+    ],
+  ] as const)('outcome %s renders in the subject', async (outcome, expectedSubject) => {
+    mockEnv.ADMIN_NOTIFICATION_EMAIL = 'it@itatti.harvard.edu';
+
+    await sendAutomationReport({
+      type: 'end-of-year-cleanup',
+      academicYear: '2026-2027',
+      processed: 1,
+      pending: 0,
+      errors: outcome === 'completed' || outcome === undefined ? 0 : 1,
+      details: [],
+      ...(outcome ? { outcome } : {}),
+    });
+
+    const cmd = SendEmailCommandMock.mock.calls[0][0];
+    expect(cmd.Message.Subject.Data).toBe(expectedSubject);
+  });
+});
+
+describe('sendDailyDispatchFailureAlert', () => {
+  it('renders the last run counts when the dispatch resolved with failures', async () => {
+    mockEnv.ADMIN_NOTIFICATION_EMAIL = 'it@itatti.harvard.edu';
+
+    await sendDailyDispatchFailureAlert({
+      consecutiveFailures: 3,
+      lastRunCounts: { processed: 4, sent: 1, skipped: 0, failed: 2, deferred: 1, reclaimed: 0 },
+    });
+
+    const cmd = SendEmailCommandMock.mock.calls[0][0];
+    expect(cmd.Message.Body.Text.Data).toContain('failed 3 days in a row');
+    expect(cmd.Message.Body.Text.Data).toContain(
+      'processed 4, sent 1, skipped 0, failed 2, deferred 1, reclaimed 0'
+    );
+  });
+
+  it('renders the thrown error when the dispatch threw outright', async () => {
+    mockEnv.ADMIN_NOTIFICATION_EMAIL = 'it@itatti.harvard.edu';
+
+    await sendDailyDispatchFailureAlert({
+      consecutiveFailures: 6,
+      lastError: 'SES exploded',
+    });
+
+    const cmd = SendEmailCommandMock.mock.calls[0][0];
+    expect(cmd.Message.Body.Text.Data).toContain('Most recent error: SES exploded');
+    expect(cmd.Message.Body.Text.Data).not.toContain('Most recent run counts');
   });
 });

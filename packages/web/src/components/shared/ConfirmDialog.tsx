@@ -17,6 +17,7 @@ interface ConfirmDialogProps {
   title: string;
   description: string;
   confirmLabel?: string;
+  cancelLabel?: string;
   variant?: 'danger' | 'default';
 }
 
@@ -27,6 +28,7 @@ export function ConfirmDialog({
   title,
   description,
   confirmLabel,
+  cancelLabel,
   variant = 'default',
 }: ConfirmDialogProps) {
   const { t } = useTranslation();
@@ -45,7 +47,7 @@ export function ConfirmDialog({
         <AlertDialogFooter>
           {/* No onClick: closing routes through onOpenChange above, so an
               explicit handler here would call onCancel twice per click. */}
-          <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+          <AlertDialogCancel>{cancelLabel ?? t('common.cancel')}</AlertDialogCancel>
           <AlertDialogAction
             variant={variant === 'danger' ? 'destructive' : 'default'}
             onClick={onConfirm}

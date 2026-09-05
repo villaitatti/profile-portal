@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock env before importing anything that uses it
 vi.mock('../../env.js', () => ({
@@ -16,12 +16,23 @@ vi.mock('../../env.js', () => ({
   isDevMode: true,
 }));
 
-vi.mock('../../lib/prisma.js', () => ({
-  prisma: {
-    syncRun: { create: vi.fn(), update: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn() },
-    roleGroupMapping: { findMany: vi.fn(), updateMany: vi.fn(), create: vi.fn(), delete: vi.fn() },
-  },
-}));
+vi.mock('../../lib/prisma.js', () => {
+  const syncRun = { create: vi.fn(), update: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn() };
+  const roleGroupMapping = { findMany: vi.fn(), updateMany: vi.fn(), create: vi.fn(), delete: vi.fn() };
+  return {
+    prisma: {
+      syncRun,
+      roleGroupMapping,
+      // Runs the interactive-transaction callback against the same stubs,
+      // like helpers/mocks.ts prismaMock does.
+      $transaction: vi.fn(async (arg: unknown) =>
+        typeof arg === 'function'
+          ? (arg as (tx: unknown) => unknown)({ syncRun, roleGroupMapping })
+          : Promise.all(arg as Promise<unknown>[])
+      ),
+    },
+  };
+});
 
 vi.mock('../../lib/logger.js', () => ({
   logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn() },
@@ -44,9 +55,18 @@ vi.mock('../../services/atlassian-scim.service.js', () => ({
   isScimConfigured: vi.fn().mockReturnValue(true),
 }));
 
-import { computeDiff } from '../../services/atlassian-sync.service.js';
+import {
+  computeDiff,
+  runDrySync,
+  executeSync,
+  awaitActiveSyncs,
+  beginSyncShutdown,
+  resetSyncShutdownForTests,
+} from '../../services/atlassian-sync.service.js';
 import type { ScimUser, ScimGroup } from '../../services/atlassian-scim.service.js';
 import type { RoleGroupMapping } from '../../generated/prisma/client.js';
+import { prisma } from '../../lib/prisma.js';
+import { listUsersByRole } from '../../services/auth0.service.js';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -358,5 +378,98 @@ describe('computeDiff', () => {
     // Should match despite case difference — no create, no deactivate
     expect(diff.usersToCreate).toHaveLength(0);
     expect(diff.usersToDeactivate).toHaveLength(0);
+  });
+});
+
+// Graceful-shutdown contract: the detached dry-run/execute tasks are tracked
+// so shutdown can await them via awaitActiveSyncs — a sync killed mid-run
+// leaves partial SCIM mutations and a run row that only the 30-minute lease
+// reclaims. awaitActiveSyncs must never throw (it runs on the shutdown path).
+describe('awaitActiveSyncs', () => {
+  it('resolves immediately when no sync is in flight', async () => {
+    await expect(awaitActiveSyncs(10_000)).resolves.toBeUndefined();
+  });
+
+  it('returns after the budget while a sync hangs, then immediately once it settles', async () => {
+    const mockedPrisma = vi.mocked(prisma, true);
+    mockedPrisma.syncRun.findFirst.mockResolvedValue(null as never);
+    mockedPrisma.syncRun.create.mockResolvedValue({ id: 'run-shutdown-1' } as never);
+    mockedPrisma.syncRun.update.mockResolvedValue({} as never);
+    mockedPrisma.roleGroupMapping.findMany.mockResolvedValue([
+      {
+        id: 'm1',
+        auth0RoleId: 'role-1',
+        auth0RoleName: 'fellows',
+        atlassianGroupId: null,
+        atlassianGroupName: 'itatti-all',
+      },
+    ] as never);
+    // Park the detached task on the Auth0 fetch until the test releases it.
+    let release!: (users: never[]) => void;
+    vi.mocked(listUsersByRole).mockReturnValue(
+      new Promise<never[]>((res) => {
+        release = res;
+      })
+    );
+
+    const { emitter } = await runDrySync('shutdown-test');
+    const done = new Promise<void>((res) =>
+      emitter.on('progress', (p: { phase: string }) => {
+        if (p.phase === 'done' || p.phase === 'error') res();
+      })
+    );
+
+    // Task is stuck upstream: the budget elapses and the call returns
+    // without throwing instead of hanging shutdown.
+    await expect(awaitActiveSyncs(25)).resolves.toBeUndefined();
+
+    release([]);
+    await done;
+    // Settled: returns well inside the (generous) budget — an erroneous wait
+    // here would trip the test timeout.
+    await expect(awaitActiveSyncs(10_000)).resolves.toBeUndefined();
+  });
+});
+
+// The HTTP server keeps accepting requests while shutdown drains in-flight
+// syncs, so admission must close as soon as shutdown begins — including for a
+// request whose admission transaction was already running at that moment.
+describe('sync admission during shutdown', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+  afterEach(() => {
+    resetSyncShutdownForTests();
+  });
+
+  it('refuses a dry run started after shutdown began', async () => {
+    beginSyncShutdown();
+    await expect(runDrySync('late-admin')).rejects.toMatchObject({ status: 503, code: 'SERVER_RESTARTING' });
+    expect(vi.mocked(prisma, true).syncRun.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses an execution started after shutdown began', async () => {
+    beginSyncShutdown();
+    await expect(executeSync('dry-1', 'late-admin')).rejects.toMatchObject({ status: 503, code: 'SERVER_RESTARTING' });
+    expect(vi.mocked(prisma, true).syncRun.create).not.toHaveBeenCalled();
+  });
+
+  it('fails the run row and refuses when shutdown begins during the admission transaction', async () => {
+    const mockedPrisma = vi.mocked(prisma, true);
+    mockedPrisma.syncRun.findFirst.mockResolvedValue(null as never);
+    // Shutdown lands while the row is being created — before the detached
+    // task could be registered with the drain.
+    mockedPrisma.syncRun.create.mockImplementation((async () => {
+      beginSyncShutdown();
+      return { id: 'run-mid-shutdown' };
+    }) as never);
+    mockedPrisma.syncRun.update.mockResolvedValue({} as never);
+
+    await expect(runDrySync('unlucky-admin')).rejects.toMatchObject({ status: 503, code: 'SERVER_RESTARTING' });
+    expect(mockedPrisma.syncRun.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'run-mid-shutdown' }, data: expect.objectContaining({ status: 'failed' }) })
+    );
+    // Nothing was registered, so the drain has nothing to wait for.
+    expect(mockedPrisma.roleGroupMapping.findMany).not.toHaveBeenCalled();
   });
 });

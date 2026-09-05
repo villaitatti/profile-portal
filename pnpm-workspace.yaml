@@ -9,9 +9,14 @@ overrides:
   form-data: "4.0.6"
   js-yaml: "4.2.0"
   lodash: "4.18.1"
+  # mysql2 reaches us only as a dependency of the Prisma CLI (`prisma` pins
+  # 3.15.3). Our datasource is PostgreSQL, so the MySQL driver is never loaded —
+  # but GHSA-3f6p-5ww8-9rcr (high) and GHSA-rgwj-5xj2-c3m3 (moderate) trip the
+  # CI `pnpm audit --prod` gate. Same-major bump of an unexercised driver is
+  # safer than a standing suppression. Drop once Prisma bumps its own pin.
+  mysql2: "3.24.3"
   picomatch: "4.0.4"
   postcss: "8.5.10"
-  mysql2: "3.24.3"
   qs: "6.16.0"
   "cheerio>undici": "6.27.0"
   "jsdom>undici": "7.28.0"

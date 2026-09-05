@@ -30,6 +30,7 @@ vi.mock('@/api/roles', () => ({ useRoles: mockUseRoles }));
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
 import { AtlassianMappingsPage } from '@/pages/admin/AtlassianMappingsPage';
+import { ApiError } from '@/api/client';
 
 const mapping = {
   id: 'map_1',
@@ -130,9 +131,14 @@ describe('AtlassianMappingsPage — load failures', () => {
 
 describe('AtlassianMappingsPage — mutation failures', () => {
   it('surfaces a duplicate-mapping rejection from Add Mapping', async () => {
+    // A 409 body is server-authored for the user, so its message passes through.
     mockCreateMutate.mockImplementation(
       (_vars: unknown, opts: { onError: (err: Error) => void }) => {
-        opts.onError(new Error('Mapping already exists'));
+        opts.onError(
+          new ApiError(409, 'Mapping already exists', 'CONFLICT', {
+            error: 'Mapping already exists',
+          })
+        );
       }
     );
 
@@ -153,7 +159,9 @@ describe('AtlassianMappingsPage — mutation failures', () => {
 
   it('surfaces a delete rejection and leaves the confirm dialog open', async () => {
     mockDeleteMutate.mockImplementation((_id: string, opts: { onError: (err: Error) => void }) => {
-      opts.onError(new Error('Mapping is in use'));
+      opts.onError(
+        new ApiError(409, 'Mapping is in use', 'CONFLICT', { error: 'Mapping is in use' })
+      );
     });
 
     const user = userEvent.setup();

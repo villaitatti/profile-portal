@@ -3,7 +3,7 @@
 ## Forms — Follow-ups from ship adversarial review (2026-05-07)
 
 ### Paginate /api/admin/forms/invitations when archive grows
-- **Priority:** P2
+- **Priority:** P3 (downgraded from P2 on 03 September 2026: the endpoint now caps the response at `INVITATION_LIST_MAX = 1000` rows with a visible `truncated` flag, so the unbounded-growth risk is gone; what remains is the UX of cursor pagination + server-side search once a cohort actually hits the cap)
 - **What:** Add cursor-based pagination + server-side search/filter to the submissions archive endpoint. Today the endpoint returns every submitted invitation unbounded and filters client-side.
 - **Why:** Current volume (~100s of submissions/year) fits comfortably, but at 500+ submissions per cohort the full list becomes slow to render and annoying to scroll.
 - **How:** (a) Add `cursor` + `limit` query params, mirror the pattern in `emails-admin.routes.ts`. (b) Add `q` param for server-side substring match on contactName/formTitle. (c) Push the academicYear + formType filters into the query where-clause (they're already server-supported, just not used by the archive page yet).
@@ -26,21 +26,11 @@
 - **Context:** This advisory surfaced spontaneously mid-review (the advisory DB updates continuously) and was blocking the CI `pnpm audit` gate. Exactly the "new upstream advisory blocks deploys" dynamic flagged as L8 in the original readiness review.
 - **Blocked by:** A Prisma release that bumps the pin.
 
-### Bind SSE tokens to a specific sync run
-- **Priority:** P3
-- **What:** `createSseToken(userId)` mints a 5-minute token that authorises the progress stream for *any* run id, and `sync-admin.routes.ts` discards the `userId` that `verifySseToken` returns.
-- **Why:** Low impact — the mint endpoint is behind `requireRole(STAFF_IT)`, so both minter and consumer are already inside the same trust boundary, and the only thing leaked is sync progress. It is still broader than it needs to be.
-- **How:** Requires reordering the client flow: the frontend currently fetches the token *before* it knows the run id (`fetchSseToken` → `mutate` → `startSseSubscription`). Either return the token from the dry-run/execute response, or mint it in a second call after the run id is known, then include `runId` in the signed payload and check it on connect.
-- **Context:** Not done in the v0.17.15 pass because it needs a coordinated server + frontend change and the security review rated it low.
-- **Blocked by:** Nothing.
+### ~~Bind SSE tokens to a specific sync run~~ (RESOLVED)
+- **Resolved:** v0.20.0. `lib/sse-token.ts` signs `runId` into the token payload and `sync-admin.routes.ts` rejects a run-id mismatch on connect with the same 401 body as an invalid token (no run-id oracle). Verified during the 03 September 2026 production-readiness review.
 
-### Stampede protection + timeout on CiviCRM name lookup
-- **Priority:** P3
-- **What:** The fellows cache in `forms-admin.routes.ts` (and `emails-admin.routes.ts`) has no in-flight request coalescing. On cache expiry, concurrent admin opens all call `civicrmService.getFellowsWithContacts()` in parallel. If CiviCRM hangs, every concurrent archive open hangs too.
-- **Why:** Low impact today (few concurrent admin users), but admin experience degrades hard if CiviCRM slows down.
-- **How:** Add a `pendingFellowsPromise` alongside `cachedFellows` — first caller populates, others await the same promise. Add a 5s timeout on the CiviCRM call; on timeout, fall through to graceful degrade (empty name map) just like the existing try/catch.
-- **Context:** Flagged by Codex during `/ship` of the submissions archive. The existing try/catch handles "CiviCRM throws" but not "CiviCRM hangs forever." Applies equally to `emails-admin.routes.ts` which uses the same pattern.
-- **Blocked by:** Nothing. Ideal candidate for the existing shared-cache refactor (both routes use identical code).
+### ~~Stampede protection + timeout on CiviCRM name lookup~~ (RESOLVED)
+- **Resolved:** verified during the 03 September 2026 production-readiness review. The shared `services/fellows-cache.service.ts` implements in-flight coalescing, a 30s overall deadline, and an empty-roster no-cache guard; both `forms-admin.routes.ts` and `emails-admin.routes.ts` use it (the shared-cache refactor this entry hoped for).
 
 ### ~~Worker unit-test infrastructure (pg-boss queues)~~ (RESOLVED)
 - **Resolved:** v0.17.15 (31 July 2026). This entry was already partly stale — `packages/server/src/__tests__/workers/form-notification.worker.test.ts` existed and covered the happy path (PDF generation + email dispatch) via the option (a) `vi.mock` approach. Added the two silent-failure cases the entry was actually worried about: `enqueueFormNotification` logging an ERROR when `boss.send()` returns null (the createQueue regression shape), and a handler failure being logged before it is rethrown. The handler previously swallowed its own failure into pg-boss with no application log, so a deterministic failure exhausted its retries and vanished.
@@ -106,14 +96,8 @@
 - **Context:** The observability log in the dashboard (`byMatchedVia` + `byNeedsReviewReason`) will tell you how often this is firing. If "name" or "secondary-email" matchedVia counts stay high after 2-3 months, build this. If they trend to zero (because claim flow now handles new cases correctly), skip.
 - **Depends on:** feat/vit-id-match-ladder landing first (for the reconciliation logic to reuse).
 
-### dispatchPendingEmails: cache Auth0 maps per dispatch run
-- **What:** `evaluateBioEmailEligibility` calls `checkHasVitIdViaLadder`, which calls `listUsersByRole` once per PENDING event. For N events per cron tick, this is N full Auth0 list fetches.
-- **Why:** At current scale (a few bio emails per dispatch) the cost is negligible. If dispatch volume grows, this becomes an N+1 pattern inside the cron and can burn Auth0 Management API quota or add real latency.
-- **How:** Pre-build the Auth0 maps once at the top of `dispatchPendingEmails`, pass them down to `dispatchOne` and into `evaluateBioEmailEligibility` (optional param — falls back to fresh fetch if not supplied, so single-shot callers like `sendBioEmailManually` keep working). Short in-memory TTL (60s) is an acceptable alternative.
-- **Pros:** Makes the cron O(1) on Auth0 list fetches. Matches the dashboard pattern.
-- **Cons:** Adds an optional param that ripples through 2-3 functions. Ergonomic cost.
-- **Context:** Caught by /ship pre-landing review on feat/vit-id-match-ladder (PR #12). Flagged as P2 — ship as-is and revisit if dispatch volume grows.
-- **Depends on:** Nothing.
+### ~~dispatchPendingEmails: cache Auth0 maps per dispatch run~~ (RESOLVED)
+- **Resolved:** verified during the 03 September 2026 production-readiness review. `dispatchPendingEmails` prefetches `buildLadderContext()` once per run and passes it down, exactly the shape this entry proposed; single-shot callers still fetch fresh.
 
 ### Dashboard staleTime + manual refresh button
 - **What:** Set `staleTime: 60_000` on `useFellowsDashboard` React Query + add a "Refresh" button in the dashboard header to force a refetch.
@@ -143,19 +127,11 @@
 
 ## Appointee Email Pipeline — Follow-ups from /ship review
 
-### Harmonize bio-email route error surface with VIT invitation (503 for civicrm_unavailable)
-- **What:** `POST /api/admin/fellows/:contactId/send-bio-email` currently wraps upstream CiviCRM failures as a 500 `internal_error`. The new `/send-vit-id-email` returns 503 `{reason: "civicrm_unavailable"}` for the same transient failure mode so the modal can surface "CiviCRM is temporarily unavailable. Try again." The UIs therefore interpret identical server state differently.
-- **Why:** Angela will hit this drift the first time CiviCRM has a blip during a manual bio send — she'll get a generic server error instead of the actionable retry message.
-- **How:** Wrap `evaluateBioEmailEligibility` / `sendBioEmailManually` the same way the VIT route does: catch CiviCRM errors, return `{eligible: false, reason: 'civicrm_unavailable'}`, and emit 503 from the route. Factor the envelope helper so both paths share it.
-- **Context:** Flagged by /ship pre-landing review on feat/manage-appointees-html-email 2026-04-23. Priority: P2 — cosmetic UX drift, no correctness bug.
-- **Depends on:** Manage Appointees PR landing.
+### ~~Harmonize bio-email route error surface with VIT invitation (503 for civicrm_unavailable)~~ (RESOLVED)
+- **Resolved:** verified during the 03 September 2026 production-readiness review. `send-bio-email` now returns 503 `civicrm_unavailable` / 502 `email_send_failed` identically to the VIT route.
 
-### Close the delete+create race in manual-send retry paths
-- **What:** `sendBioEmailManually` and `sendVitIdInvitationManually` handle a FAILED/SKIPPED row by `prisma.appointeeEmailEvent.delete` → `enqueueAppointeeEmail`. Between the two statements a concurrent worker (cron, a second admin click) could insert its own row; the enqueue then returns `created: false` and the outer caller's eventId corresponds to a send it didn't trigger. The unique index prevents duplicates; the race surfaces as a misleading toast.
-- **Why:** Rare in practice (one admin, one click at a time), but the window is real and flagging in a log.
-- **How:** Wrap the delete + enqueue in a single `prisma.$transaction([…])`, or replace with `upsert` on `(fellowshipId, emailType)` that resets status to PENDING.
-- **Context:** Flagged by /ship pre-landing review on feat/manage-appointees-html-email 2026-04-23. Priority: P3 — rare race, no data integrity impact.
-- **Depends on:** Nothing.
+### ~~Close the delete+create race in manual-send retry paths~~ (OBSOLETE)
+- **Obsolete:** verified during the 03 September 2026 production-readiness review. The delete+create pattern no longer exists — `manualSendCore` enqueues with `allowHistoricalDuplicate` under the partial unique index, so there is no window to close.
 
 ## Appointee Forms — Follow-ups
 

@@ -1,37 +1,68 @@
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { useGenerateFormInvitation } from '@/api/forms';
 import { formatHumanDate } from '@/lib/dates';
-import { Copy, Check, Info } from 'lucide-react';
-import type {
-  FellowDashboardEntry,
-  FormInvitationSummaryEntry,
-} from '@itatti/shared';
+import { Copy, Check, Info, Loader2 } from 'lucide-react';
+import type { FellowDashboardEntry } from '@itatti/shared';
 import { formatLabel, getPrimaryConfiguredForm, getFormInvitation } from './helpers';
 import { useCopyFormLink } from './hooks';
 
+// Tokens are stored hashed on the server, so an existing invitation's raw
+// link cannot be re-copied. This button mints a fresh link (invalidating the
+// previous one — the title/aria say so) and copies it.
 function CopyFormLinkButton({
   fellow,
-  invitation,
+  formType,
 }: {
   fellow: FellowDashboardEntry;
-  invitation: FormInvitationSummaryEntry;
+  formType: string;
 }) {
   const { t } = useTranslation();
+  const generateMutation = useGenerateFormInvitation();
   const { copied, copyFormLink } = useCopyFormLink(fellow);
+
+  async function handleClick() {
+    let token: string;
+    try {
+      const result = await generateMutation.mutateAsync({
+        fellowshipId: fellow.fellowshipId,
+        contactId: fellow.civicrmId,
+        academicYear: fellow.fellowshipYear,
+        formType,
+      });
+      token = result.token;
+    } catch {
+      toast.error(t('fellows.form.generateFailed'));
+      return;
+    }
+
+    await copyFormLink(token, {
+      onCopyFailure: () =>
+        toast.success(
+          t('fellows.form.generatedCopyManually', {
+            name: `${fellow.firstName} ${fellow.lastName}`,
+          })
+        ),
+    });
+  }
 
   return (
     <button
       type="button"
+      disabled={generateMutation.isPending}
       onClick={() => {
-        void copyFormLink(invitation.token);
+        void handleClick();
       }}
-      title={t('fellows.form.copyLink')}
-      aria-label={t('fellows.form.copyLinkAria', {
+      title={t('fellows.form.copyNewLink')}
+      aria-label={t('fellows.form.copyNewLinkAria', {
         name: `${fellow.firstName} ${fellow.lastName}`,
       })}
-      className="inline-flex h-7 w-7 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+      className="inline-flex h-7 w-7 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-50"
     >
-      {copied ? (
+      {generateMutation.isPending ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+      ) : copied ? (
         <Check className="h-3.5 w-3.5 text-success" aria-hidden="true" />
       ) : (
         <Copy className="h-3.5 w-3.5" aria-hidden="true" />
@@ -92,8 +123,8 @@ export function FormStatusCell({ fellow }: { fellow: FellowDashboardEntry }) {
           <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[0.8rem] font-medium ${tone}`}>
             {label}
           </span>
-          {canCopy && invitation && (
-            <CopyFormLinkButton fellow={fellow} invitation={invitation} />
+          {canCopy && configuredForm && (
+            <CopyFormLinkButton fellow={fellow} formType={configuredForm.id} />
           )}
         </div>
         {subLabel && (

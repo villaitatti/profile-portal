@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useParams } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from 'react-i18next';
@@ -18,9 +19,17 @@ export function PublicFormPage() {
 function PublicFormView({ token }: { token: string }) {
   const { t, i18n } = useTranslation();
   const submitMutation = useSubmitForm(token);
+  // Once the form data has loaded, stop refetching on window focus: the
+  // appointee may spend a long time filling the form in, and a mid-fill
+  // refetch that comes back changed (expired or submitted elsewhere) would
+  // unmount the renderer and destroy everything they typed.
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const { data, isLoading, isFetching, error, refetch } = usePublicForm(token, {
-    refetchOnWindowFocus: !submitMutation.isSuccess,
+    refetchOnWindowFocus: !submitMutation.isSuccess && !hasLoadedOnce,
   });
+  useEffect(() => {
+    if (data) setHasLoadedOnce(true);
+  }, [data]);
 
   if (isLoading) {
     return (
@@ -42,7 +51,13 @@ function PublicFormView({ token }: { token: string }) {
     );
   }
 
-  if (error || !data) {
+  // Take over the screen only when there is nothing to show. TanStack Query
+  // keeps stale `data` AND sets `error` when a background refetch fails, so an
+  // `error || !data` check here would replace a partially-filled form (state
+  // lives in PublicFormRenderer, which unmounts) with an error screen over a
+  // transient network blip. With data present, a refetch error is ignored: the
+  // appointee keeps their answers and any real problem surfaces on submit.
+  if (!data) {
     const status = error instanceof PublicFormRequestError ? error.status : undefined;
     const isExpired = status === 410;
     const isInvalid = status === 404;
@@ -99,6 +114,16 @@ function PublicFormView({ token }: { token: string }) {
     );
   }
 
+  // Error contract: show the server's message only for a 4xx submit failure it
+  // deliberately produced (validation, expiry, rate limit). Anything else —
+  // network failures ("Failed to fetch") or 5xx bodies ("Internal Server
+  // Error") — falls back to a translated message written for the appointee.
+  const submitErrorMessage = submitMutation.error
+    ? submitMutation.error instanceof PublicFormSubmitError && submitMutation.error.status < 500
+      ? submitMutation.error.message
+      : t('forms.submitError.generic')
+    : undefined;
+
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-8 border-b border-primary/15 pb-6">
@@ -117,7 +142,7 @@ function PublicFormView({ token }: { token: string }) {
         formDef={data.formDef}
         onSubmit={(formData) => submitMutation.mutate(formData)}
         isSubmitting={submitMutation.isPending}
-        submitError={submitMutation.error?.message}
+        submitError={submitErrorMessage}
         submitIssues={
           submitMutation.error instanceof PublicFormSubmitError
             ? submitMutation.error.issues

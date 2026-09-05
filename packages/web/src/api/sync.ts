@@ -225,11 +225,20 @@ export function subscribeSyncProgress(
     try {
       const progress = JSON.parse(event.data) as SyncProgress;
       onProgress(progress);
-      if (progress.phase === 'done' || progress.phase === 'error') {
+      // Terminal phases close the source before the browser can auto-reconnect
+      // to a stream that will never resume. 'restarting' (graceful server
+      // shutdown mid-run) is terminal for the STREAM only: the run itself
+      // continues server-side, so it is neither done nor an error — the
+      // consumer sees it via onProgress and decides what to show.
+      if (
+        progress.phase === 'done' ||
+        progress.phase === 'error' ||
+        progress.phase === 'restarting'
+      ) {
         source.close();
         if (progress.phase === 'error') {
           onError(progress.description);
-        } else {
+        } else if (progress.phase === 'done') {
           onDone();
         }
       }

@@ -7,7 +7,7 @@ import { formatHumanDateTime } from '@/lib/dates';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { LoadingSpinner, SkeletonBlock } from '@/components/shared/LoadingSpinner';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
-import { getErrorMessage } from '@/lib/errors';
+import { userErrorMessage } from '@/lib/errors';
 import { useApiToken } from '@/api/client';
 import {
   useMappings,
@@ -26,6 +26,7 @@ import {
   Play,
   AlertCircle,
   CheckCircle2,
+  Info,
   XCircle,
   Clock,
   ChevronDown,
@@ -438,6 +439,9 @@ export function AtlassianSyncPage() {
   // failure happens after the run began server-side (failRun refreshes
   // history and drops the stale preview accordingly).
   const [runError, setRunError] = useState<{ kind: RunKind; message: string } | null>(null);
+  // Graceful server restart mid-run: the SSE stream ended but the run itself
+  // continues server-side — informational, deliberately NOT a runError.
+  const [restartNotice, setRestartNotice] = useState(false);
   const [lastDryRunId, setLastDryRunId] = useState<string | null>(null);
   const [showExecuteConfirm, setShowExecuteConfirm] = useState(false);
   const [startTime, setStartTime] = useState(0);
@@ -487,7 +491,23 @@ export function AtlassianSyncPage() {
       const unsub = subscribeSyncProgress(
         runId,
         sseToken,
-        (p) => setProgress(p),
+        (p) => {
+          if (p.phase === 'restarting') {
+            // Graceful server shutdown mid-run. The helper has already closed
+            // the stream (no reconnect), but the run continues server-side and
+            // its result is recorded — so no failRun (not an error). The
+            // previewed dry run is dropped too: it is either being executed
+            // right now or superseded by the interrupted preview, so an
+            // Execute button for it would be stale either way.
+            activeUnsubRef.current = null;
+            setActiveRunId(null);
+            setProgress(null);
+            setLastDryRunId(null);
+            setRestartNotice(true);
+            return;
+          }
+          setProgress(p);
+        },
         () => { activeUnsubRef.current = null; onDone(); },
         (err) => {
           activeUnsubRef.current = null;
@@ -510,6 +530,7 @@ export function AtlassianSyncPage() {
 
   const handleDryRun = useCallback(async () => {
     setRunError(null);
+    setRestartNotice(false);
     setProgress(null);
     startDryRun.mutate(undefined, {
       onSuccess: ({ runId }) => {
@@ -528,7 +549,7 @@ export function AtlassianSyncPage() {
           } catch (err) {
             setActiveRunId(null);
             setProgress(null);
-            failRun('dry-run', getErrorMessage(err));
+            failRun('dry-run', userErrorMessage(err, t));
             return;
           }
           startSseSubscription(runId, sseToken, 'dry-run', () => {
@@ -539,7 +560,7 @@ export function AtlassianSyncPage() {
           });
         })();
       },
-      onError: (err) => failRun('dry-run', getErrorMessage(err)),
+      onError: (err) => failRun('dry-run', userErrorMessage(err, t)),
     });
   }, [startDryRun, queryClient, getToken, startSseSubscription, failRun, t]);
 
@@ -547,6 +568,7 @@ export function AtlassianSyncPage() {
     if (!lastDryRunId) return;
     const dryRunId = lastDryRunId;
     setRunError(null);
+    setRestartNotice(false);
     setProgress(null);
     executeSyncMutation.mutate(dryRunId, {
       onSuccess: ({ runId }) => {
@@ -562,7 +584,7 @@ export function AtlassianSyncPage() {
           } catch (err) {
             setActiveRunId(null);
             setProgress(null);
-            failRun('execute', getErrorMessage(err));
+            failRun('execute', userErrorMessage(err, t));
             return;
           }
           startSseSubscription(runId, sseToken, 'execute', () => {
@@ -572,7 +594,7 @@ export function AtlassianSyncPage() {
           });
         })();
       },
-      onError: (err) => failRun('execute', getErrorMessage(err)),
+      onError: (err) => failRun('execute', userErrorMessage(err, t)),
     });
   }, [lastDryRunId, executeSyncMutation, queryClient, getToken, startSseSubscription, failRun, t]);
 
@@ -698,6 +720,30 @@ export function AtlassianSyncPage() {
             silently revert the page to its pre-run state. */}
         {(isRunning || progress?.phase === 'error') && (
           <ProgressPanel progress={progress} startTime={startTime} />
+        )}
+
+        {/* Server restart mid-run: informational, not a failure — the run
+            continues server-side and its result is recorded. */}
+        {restartNotice && (
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-4" role="status">
+            <div className="flex items-start gap-2">
+              <Info className="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-600" />
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-blue-900">
+                  {t('admin.atlassian.sync.serverRestartingTitle')}
+                </p>
+                <p className="mt-1 text-sm text-blue-900/90">
+                  {t('admin.atlassian.sync.serverRestartingBody')}
+                </p>
+              </div>
+              <button
+                onClick={() => setRestartNotice(false)}
+                className="rounded-md border border-blue-300 px-3 py-1.5 text-xs font-medium text-blue-900 transition-colors hover:bg-blue-100"
+              >
+                {t('admin.atlassian.sync.dismiss')}
+              </button>
+            </div>
+          </div>
         )}
 
         {runError && (

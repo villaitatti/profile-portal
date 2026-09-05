@@ -135,8 +135,12 @@ describe('AtlassianSyncPage — run failures stay visible', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: /Preview Changes/ }));
 
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('sse-token 401');
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'An unexpected error occurred. Please try again.'
+      );
     });
+    // The raw token failure stays off screen.
+    expect(screen.getByRole('alert')).not.toHaveTextContent('sse-token 401');
     expect(mockStartDryRunMutate).toHaveBeenCalled();
     expect(mockFetchSseToken).toHaveBeenCalledWith(expect.any(Function), 'dry_token_fail');
     expect(mockSubscribeSyncProgress).not.toHaveBeenCalled();
@@ -146,7 +150,7 @@ describe('AtlassianSyncPage — run failures stay visible', () => {
     expect(screen.getByRole('button', { name: /Preview Changes/ })).toBeEnabled();
   });
 
-  it('surfaces a dry-run mutation failure', async () => {
+  it('surfaces a dry-run mutation failure with a user-safe message', async () => {
     mockStartDryRunMutate.mockImplementation(
       (_vars: undefined, opts: { onError: (err: Error) => void }) => {
         opts.onError(new Error('dry run rejected'));
@@ -158,8 +162,11 @@ describe('AtlassianSyncPage — run failures stay visible', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: /Preview Changes/ }));
 
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('dry run rejected');
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'An unexpected error occurred. Please try again.'
+      );
     });
+    expect(screen.getByRole('alert')).not.toHaveTextContent('dry run rejected');
   });
 
   it('hides the stale preview diff after a failed execute', async () => {
@@ -280,10 +287,13 @@ describe('AtlassianSyncPage — run failures stay visible', () => {
     await user.click(screen.getByRole('button', { name: 'Execute Sync' }));
 
     // The run started server-side without a progress view: surface a run
-    // error with the underlying message and refresh history.
+    // error (user-safe copy, not the raw token failure) and refresh history.
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('sse-token 401');
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'An unexpected error occurred. Please try again.'
+      );
     });
+    expect(screen.getByRole('alert')).not.toHaveTextContent('sse-token 401');
     expect(mockExecuteMutate).toHaveBeenCalled();
     expect(mockFetchSseToken).toHaveBeenLastCalledWith(expect.any(Function), 'exec_1');
     // The previewed diff described pre-run state — it must not stay on
@@ -291,6 +301,150 @@ describe('AtlassianSyncPage — run failures stay visible', () => {
     expect(screen.queryByText(/Users to Create/)).not.toBeInTheDocument();
     // And the page must not stay locked running.
     expect(screen.getByRole('button', { name: /Preview Changes/ })).toBeEnabled();
+  });
+});
+
+describe('AtlassianSyncPage — server restart mid-run', () => {
+  // Contract with the server's graceful shutdown: the SSE stream ends with
+  // { phase: 'restarting', ... }. The run itself continues server-side and its
+  // result is recorded — the page must inform, not fail.
+  const restartingEvent: SyncProgress = {
+    phase: 'restarting',
+    step: 0,
+    totalSteps: 0,
+    percentage: 0,
+    description:
+      'The connection was closed because the server is restarting. Reload the page to check the run status.',
+  };
+
+  it('shows an informational notice — not a failure — when the server restarts during a preview', async () => {
+    let emit: ((p: SyncProgress) => void) | undefined;
+    mockSubscribeSyncProgress.mockImplementation(
+      (_runId: string, _token: string, onProgress: (p: SyncProgress) => void) => {
+        emit = onProgress;
+        return () => {};
+      }
+    );
+    mockStartDryRunMutate.mockImplementation(
+      (_vars: undefined, opts: { onSuccess: (data: { runId: string }) => void }) => {
+        opts.onSuccess({ runId: 'run_1' });
+      }
+    );
+
+    render(<AtlassianSyncPage />, { wrapper: makeWrapper() });
+
+    await userEvent.setup().click(screen.getByRole('button', { name: /Preview Changes/ }));
+    await waitFor(() => expect(emit).toBeDefined());
+
+    emit!(restartingEvent);
+
+    // Info notice with the reload guidance.
+    expect(await screen.findByRole('status')).toHaveTextContent('The server is restarting');
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Reload this page to check the run status'
+    );
+    // No failure banner: nothing failed.
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText('Preview failed')).not.toBeInTheDocument();
+    expect(screen.queryByText('Sync failed')).not.toBeInTheDocument();
+    // And the page is not left locked in the running state.
+    expect(screen.getByRole('button', { name: /Preview Changes/ })).toBeEnabled();
+  });
+
+  it('withdraws the Execute action when the server restarts during an execute', async () => {
+    mockUseSyncRunDetail.mockImplementation((runId: string | null) =>
+      runId
+        ? {
+            data: {
+              id: runId,
+              status: 'completed',
+              completedAt: new Date().toISOString(),
+              diff: {
+                usersToCreate: [{ email: 'a@itatti.harvard.edu', name: 'A' }],
+                usersToUpdate: [],
+                usersToDeactivate: [],
+                groupsToCreate: [],
+                membershipChanges: [],
+              },
+              result: null,
+              stats: null,
+            },
+          }
+        : { data: undefined }
+    );
+    let emit: ((p: SyncProgress) => void) | undefined;
+    mockSubscribeSyncProgress.mockImplementation(
+      (
+        _runId: string,
+        _token: string,
+        onProgress: (p: SyncProgress) => void,
+        onDone: () => void
+      ) => {
+        emit = onProgress;
+        // Dry run completes; the execute run is the one interrupted.
+        if (_runId === 'dry_1') onDone();
+        return () => {};
+      }
+    );
+    mockStartDryRunMutate.mockImplementation(
+      (_vars: undefined, opts: { onSuccess: (data: { runId: string }) => void }) => {
+        opts.onSuccess({ runId: 'dry_1' });
+      }
+    );
+    mockExecuteMutate.mockImplementation(
+      (_id: string, opts: { onSuccess: (data: { runId: string }) => void }) => {
+        opts.onSuccess({ runId: 'exec_1' });
+      }
+    );
+
+    const user = userEvent.setup();
+    render(<AtlassianSyncPage />, { wrapper: makeWrapper() });
+
+    await user.click(screen.getByRole('button', { name: /Preview Changes/ }));
+    await waitFor(() => expect(screen.getByText(/Users to Create/)).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: /Execute Sync/ }));
+    await user.click(screen.getByRole('button', { name: 'Execute Sync' }));
+    await waitFor(() => expect(mockExecuteMutate).toHaveBeenCalled());
+
+    emit!(restartingEvent);
+
+    expect(await screen.findByRole('status')).toHaveTextContent('The server is restarting');
+    // The dry run is being executed server-side: offering to execute it again
+    // would be stale (the server would answer 409), so the button and its diff
+    // go away with the running state. Informational, not a failure.
+    expect(screen.queryByRole('button', { name: /Execute Sync/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Users to Create/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Sync failed')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Preview Changes/ })).toBeEnabled();
+  });
+
+  it('clears the restart notice when a new preview starts', async () => {
+    let emit: ((p: SyncProgress) => void) | undefined;
+    mockSubscribeSyncProgress.mockImplementation(
+      (_runId: string, _token: string, onProgress: (p: SyncProgress) => void) => {
+        emit = onProgress;
+        return () => {};
+      }
+    );
+    mockStartDryRunMutate.mockImplementation(
+      (_vars: undefined, opts: { onSuccess: (data: { runId: string }) => void }) => {
+        opts.onSuccess({ runId: 'run_1' });
+      }
+    );
+
+    const user = userEvent.setup();
+    render(<AtlassianSyncPage />, { wrapper: makeWrapper() });
+
+    await user.click(screen.getByRole('button', { name: /Preview Changes/ }));
+    await waitFor(() => expect(emit).toBeDefined());
+    emit!(restartingEvent);
+    expect(await screen.findByRole('status')).toHaveTextContent('The server is restarting');
+
+    await user.click(screen.getByRole('button', { name: /Preview Changes/ }));
+
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
   });
 });
 

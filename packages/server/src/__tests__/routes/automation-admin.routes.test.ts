@@ -3,6 +3,9 @@ import express from 'express';
 import request from 'supertest';
 import { AUTH0_NAMESPACE } from '@itatti/shared';
 
+vi.mock('../../env.js', async () => (await import('../helpers/mocks.js')).envMock());
+vi.mock('../../lib/logger.js', async () => (await import('../helpers/mocks.js')).loggerMock());
+
 vi.mock('../../lib/prisma.js', () => ({
   prisma: { automationRun: { findMany: vi.fn(), findUnique: vi.fn() } },
 }));
@@ -15,6 +18,8 @@ vi.mock('../../services/automation.service.js', () => ({
 }));
 
 import { automationAdminRoutes } from '../../routes/automation-admin.routes.js';
+import { errorHandler } from '../../middleware/error.js';
+import { HttpError } from '../../lib/http-error.js';
 import * as automationService from '../../services/automation.service.js';
 
 const mockAutomation = vi.mocked(automationService);
@@ -28,6 +33,7 @@ function makeApp(auth: Record<string, unknown>, userId = '') {
     next();
   });
   app.use('/api/admin/automations', automationAdminRoutes);
+  app.use(errorHandler);
   return app;
 }
 
@@ -79,5 +85,25 @@ describe('automation admin audit identity', () => {
   it('returns 401 only when authentication produced no stable identity', async () => {
     await request(makeApp({})).post('/api/admin/automations/end-of-year/dry-run').expect(401);
     expect(mockAutomation.runEndOfYearDryRun).not.toHaveBeenCalled();
+  });
+
+  it('renders a replayed execute (dry run already consumed) as a 409 conflict', async () => {
+    // The service throws HttpError when the atomic dry_run → consumed flip
+    // finds nothing to consume; the route must forward it to the error
+    // middleware (Express 5 async forwarding), not surface a 500.
+    mockAutomation.executeAutomation.mockRejectedValue(
+      new HttpError(
+        409,
+        'This dry run has already been executed. Run a new dry run to execute again.',
+        'DRY_RUN_ALREADY_EXECUTED'
+      )
+    );
+
+    const res = await request(makeApp({ sub: 'auth0|123' }, 'auth0|123'))
+      .post('/api/admin/automations/end-of-year/execute/run-1')
+      .expect(409);
+
+    expect(res.body.code).toBe('DRY_RUN_ALREADY_EXECUTED');
+    expect(res.body.error).toMatch(/already been executed/i);
   });
 });
